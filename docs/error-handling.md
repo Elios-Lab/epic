@@ -105,7 +105,7 @@ class InsufficientPermissionsError(AuthError):
 
 # --- Validation errors ---
 
-class ValidationError(EPICError):
+class EPICValidationError(EPICError):
     """Raised when request data fails business-rule validation."""
     pass
 ```
@@ -157,7 +157,7 @@ Unhandled Python exceptions (i.e. bugs in the Core itself) return `500 Internal 
 | `SessionStateError` | 409 | `SESSION_STATE_ERROR` |
 | `RegistrationError` | 409 | `REGISTRATION_ERROR` |
 | `SubmissionError` | 422 | `SUBMISSION_ERROR` |
-| `ValidationError` | 422 | `VALIDATION_ERROR` |
+| `EPICValidationError` | 422 | `VALIDATION_ERROR` |
 | `InvalidCredentialsError` | 401 | `INVALID_CREDENTIALS` |
 | `InsufficientPermissionsError` | 403 | `FORBIDDEN` |
 | `PluginValidationError` | 500 | `PLUGIN_VALIDATION_ERROR` |
