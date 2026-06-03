@@ -1,5 +1,7 @@
 # Sensor Framework
 
+> Related: [Plugin System](plugin-system.md) — canonical `Sensor` interface · [Faults](faults.md) — `SensorFault` · [Digital Twins](digital-twins.md)
+
 The Sensor Framework is responsible for transforming latent state variables into observable measurements.
 
 Sensors represent the interface between the digital twin and the participant.
@@ -53,36 +55,9 @@ A sensor is not responsible for:
 
 # Sensor Interface
 
-Every sensor must implement:
+Every sensor must implement the `Sensor` abstract class defined in [Plugin System](plugin-system.md).
 
-```python
-from abc import ABC, abstractmethod
-
-class Sensor(ABC):
-
-    @property
-    @abstractmethod
-    def sensor_id(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def unit(self) -> str:
-        pass
-
-    @abstractmethod
-    def observe(self, state):
-        pass
-
-    @abstractmethod
-    def metadata(self):
-        pass
-```
+The interface requires implementing: `sensor_id`, `name`, `unit`, `observe()`, and `metadata()`.
 
 ---
 
@@ -358,16 +333,11 @@ Examples:
 
 # Sensor Fault Interface
 
-Sensor faults should implement:
+Sensor faults extend `SensorFault`, which is a specialised subclass of `Fault` defined in [Plugin System](plugin-system.md).
 
-```python
-class SensorFault:
+Implementations override `apply_to_measurement(measurement: float) -> float` to corrupt the observable value. The simulation engine calls this method after `sensor.observe(state)`, so sensor faults never modify the latent state.
 
-    def apply(self, measurement):
-        pass
-```
-
-This allows sensor faults to remain independent from physical faults.
+This keeps sensor faults part of the same `Fault` registry and lifecycle as state and parameter faults, while clearly separating where in the pipeline they act.
 
 ---
 
@@ -501,9 +471,9 @@ Sensors should be discoverable through a registry.
 Example:
 
 ```python
-sensor_registry.register(PositionSensor)
+sensor_registry.register(PositionSensor())
 
-sensor_registry.register(TemperatureSensor)
+sensor_registry.register(TemperatureSensor())
 ```
 
 The registry should provide:

@@ -1,5 +1,7 @@
 # EPIC Architecture
 
+> Related: [Plugin System](plugin-system.md) · [Plugin Registry](plugin-registry.md) · [Simulation Engine](simulation-engine.md) · [Domain Model](domain-model.md)
+
 The platform is designed around a central principle:
 
 > The competition infrastructure must be independent from the simulated domain.
@@ -150,48 +152,54 @@ Examples:
 
 The EPIC Core discovers plugins through registries.
 
-Each plugin type has its own registry.
+Each plugin type has its own registry. Registries are module-level singletons in `epic_core/registry.py`, populated at application startup.
 
 ```python
-registry.register(MyTwin())
-sensor_registry.register(TemperatureSensor)
-fault_registry.register(BiasFault)
+twin_registry.register(MechanicalTwin())
+sensor_registry.register(TemperatureSensor())
+fault_registry.register(SensorBiasFault())
 ```
 
-The API automatically exposes registered components.
+The API automatically exposes all registered components. No modification to the Core is required when new plugins are added.
 
-No modification to the Core should be required.
+See [Plugin Registry](plugin-registry.md) for the full specification of registration, auto-discovery, versioning, and lookup.
 
 ---
 
 # Simulation Flow
 
-A simulation session follows these steps:
+A simulation session is executed by the `SimulationEngine`, an asyncio-based component in the EPIC Core.
 
-1. Load digital twin
-2. Load scenario
-3. Initialize latent state
-4. Advance simulation
-5. Apply faults
-6. Generate sensor observations
-7. Stream observations
-8. Store history
+Each session runs as an independent `asyncio.Task`, allowing concurrent sessions.
+
+High-level flow:
+
+1. Load twin and scenario from registries
+2. Initialise latent state
+3. Parse fault schedule
+4. Loop: advance state → apply faults → observe sensors → stream/persist
+5. Transition session to COMPLETED or FAILED
 
 ```text
 Latent State
       |
       v
- State Evolution
+ twin.step()         ← state evolution (returns new state)
       |
       v
- Fault Injection
+ fault.apply()       ← StateFault and ParameterFault (modify state in place)
       |
       v
- Sensor Observation
+ sensor.observe()    ← produces raw measurement
       |
       v
- API Stream
+ sensor_fault.apply_to_measurement()   ← SensorFault (corrupts measurement)
+      |
+      v
+ SensorObservation   ← persisted + streamed
 ```
+
+See [Simulation Engine](simulation-engine.md) for the full engine specification including concurrency, WebSocket streaming, label generation, and dataset generation mode.
 
 ---
 

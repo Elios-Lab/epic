@@ -1,5 +1,7 @@
 # Fault Framework
 
+> Related: [Plugin System](plugin-system.md) — canonical `Fault` and `SensorFault` interfaces · [Sensors](sensors.md) · [Digital Twins](digital-twins.md)
+
 The Fault Framework provides a generic mechanism for introducing abnormal conditions into a digital twin.
 
 Faults are one of the primary sources of machine learning challenges in EPIC.
@@ -53,31 +55,11 @@ The same fault should be reusable across multiple digital twins whenever possibl
 
 # Fault Interface
 
-All faults must implement a common interface.
+All faults must implement the `Fault` abstract class defined in [Plugin System](plugin-system.md).
 
-```python
-from abc import ABC, abstractmethod
+The interface requires implementing: `fault_id`, `name`, `current_severity`, `activate(initial_severity)`, `deactivate()`, `apply(state, dt)`, and `metadata()`.
 
-class Fault(ABC):
-
-    @property
-    @abstractmethod
-    def fault_id(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @abstractmethod
-    def apply(self, state, dt):
-        pass
-
-    @abstractmethod
-    def metadata(self):
-        pass
-```
+Faults that corrupt sensor measurements rather than the latent state must extend `SensorFault` instead of `Fault` directly, and implement `target_sensor_ids` and `apply_to_measurement(measurement)`. See [Plugin System](plugin-system.md) for the full interface definitions and the simulation engine's application order.
 
 ---
 
@@ -412,9 +394,9 @@ Faults should be discoverable.
 Example:
 
 ```python
-fault_registry.register(IncreasedDampingFault)
+fault_registry.register(IncreasedDampingFault())
 
-fault_registry.register(SensorBiasFault)
+fault_registry.register(SensorBiasFault())
 ```
 
 The registry enables:
@@ -556,18 +538,21 @@ Expected observations:
 
 # Fault Hierarchy
 
-Suggested implementation:
+Recommended implementation:
 
 ```python
-Fault
-
-├── StateFault
-├── ParameterFault
-├── SensorFault
-└── EnvironmentalFault
+Fault                        # apply(state, dt) — modifies latent state or parameters
+├── StateFault               # e.g. temperature increase, accelerated wear
+├── ParameterFault           # e.g. increased damping, reduced stiffness
+├── SensorFault              # apply_to_measurement(measurement) — corrupts observations
+│   ├── BiasFault
+│   ├── DriftFault
+│   ├── StuckSensorFault
+│   └── IncreasedNoiseFault
+└── EnvironmentalFault       # e.g. external disturbances, ambient changes
 ```
 
-This hierarchy is optional but recommended.
+`SensorFault` overrides `apply(state, dt)` as a no-op and adds `apply_to_measurement()`. All subclasses are registered in the same fault registry and participate in the same lifecycle. The simulation engine distinguishes the application point using `isinstance(fault, SensorFault)` — no other Core change is required when new fault types are added.
 
 ---
 

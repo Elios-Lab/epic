@@ -113,12 +113,48 @@ Administrator only.
 POST /api/v1/users
 ```
 
+Request:
+
+```json
+{
+  "username": "student1",
+  "email": "student@example.com",
+  "password": "..."
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "user_id": "u_abc123",
+  "username": "student1",
+  "email": "student@example.com",
+  "role": "PARTICIPANT",
+  "is_active": true,
+  "created_at": "2027-01-01T10:00:00Z"
+}
+```
+
 ---
 
 ## Get User
 
 ```http
 GET /api/v1/users/{user_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "user_id": "u_abc123",
+  "username": "student1",
+  "email": "student@example.com",
+  "role": "PARTICIPANT",
+  "is_active": true,
+  "created_at": "2027-01-01T10:00:00Z"
+}
 ```
 
 ---
@@ -129,6 +165,14 @@ GET /api/v1/users/{user_id}
 PATCH /api/v1/users/{user_id}
 ```
 
+Example request:
+
+```json
+{
+  "email": "new_email@example.com"
+}
+```
+
 ---
 
 ## Delete User
@@ -136,6 +180,8 @@ PATCH /api/v1/users/{user_id}
 ```http
 DELETE /api/v1/users/{user_id}
 ```
+
+Response `204 No Content`.
 
 ---
 
@@ -172,12 +218,52 @@ POST /api/v1/contests
 
 Administrator only.
 
+Request:
+
+```json
+{
+  "name": "EPIC Forecasting Challenge 2027",
+  "description": "Introductory forecasting competition",
+  "start_date": "2027-01-10T00:00:00Z",
+  "end_date": "2027-03-01T23:59:59Z",
+  "visibility": "PUBLIC"
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "contest_id": "forecast_2027",
+  "name": "EPIC Forecasting Challenge 2027",
+  "status": "DRAFT",
+  "visibility": "PUBLIC",
+  "start_date": "2027-01-10T00:00:00Z",
+  "end_date": "2027-03-01T23:59:59Z",
+  "created_by": "u_admin",
+  "created_at": "2027-01-01T12:00:00Z"
+}
+```
+
 ---
 
 ## Get Contest
 
 ```http
 GET /api/v1/contests/{contest_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "contest_id": "forecast_2027",
+  "name": "EPIC Forecasting Challenge 2027",
+  "status": "ACTIVE",
+  "visibility": "PUBLIC",
+  "start_date": "2027-01-10T00:00:00Z",
+  "end_date": "2027-03-01T23:59:59Z"
+}
 ```
 
 ---
@@ -353,6 +439,18 @@ The user is inferred from the JWT token.
 GET /api/v1/contest-registrations/{registration_id}
 ```
 
+Response `200 OK`:
+
+```json
+{
+  "registration_id": "reg_xyz",
+  "contest_id": "forecast_2027",
+  "user_id": "u_abc123",
+  "registered_at": "2027-01-05T08:00:00Z",
+  "status": "REGISTERED"
+}
+```
+
 ---
 
 ## Delete Registration
@@ -361,7 +459,7 @@ GET /api/v1/contest-registrations/{registration_id}
 DELETE /api/v1/contest-registrations/{registration_id}
 ```
 
-Represents withdrawal from a contest.
+Represents withdrawal from a contest. Response `204 No Content`.
 
 ---
 
@@ -377,12 +475,42 @@ Leaderboards are derived resources.
 GET /api/v1/contests/{contest_id}/leaderboard
 ```
 
+Response `200 OK`:
+
+```json
+{
+  "contest_id": "forecast_2027",
+  "entries": [
+    {
+      "rank": 1,
+      "user_id": "u_abc123",
+      "username": "student1",
+      "submission_id": "sub_001",
+      "score": 0.142,
+      "updated_at": "2027-02-10T14:30:00Z"
+    }
+  ]
+}
+```
+
 ---
 
 ## Get User Ranking
 
 ```http
 GET /api/v1/contests/{contest_id}/leaderboard/{user_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "rank": 1,
+  "user_id": "u_abc123",
+  "submission_id": "sub_001",
+  "score": 0.142,
+  "updated_at": "2027-02-10T14:30:00Z"
+}
 ```
 
 ---
@@ -399,12 +527,41 @@ Digital twins are exposed as metadata resources.
 GET /api/v1/twins
 ```
 
+Response `200 OK`:
+
+```json
+{
+  "twins": [
+    {
+      "twin_id": "mechanical_system",
+      "name": "Mechanical System",
+      "version": "1.0.0",
+      "description": "Simple mass-spring-damper example",
+      "is_active": true
+    }
+  ]
+}
+```
+
 ---
 
 ## Get Twin
 
 ```http
 GET /api/v1/twins/{twin_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "twin_id": "mechanical_system",
+  "name": "Mechanical System",
+  "version": "1.0.0",
+  "description": "Simple mass-spring-damper example",
+  "is_active": true,
+  "metadata": {}
+}
 ```
 
 ---
@@ -449,6 +606,63 @@ GET /api/v1/twins/{twin_id}/sensors
 
 ```http
 GET /api/v1/twins/{twin_id}/sensors/{sensor_id}
+```
+
+---
+
+# Faults
+
+Faults belong to digital twins and are exposed as read-only metadata resources.
+
+---
+
+## List Twin Faults
+
+```http
+GET /api/v1/twins/{twin_id}/faults
+```
+
+Response `200 OK`:
+
+```json
+{
+  "twin_id": "mechanical_system",
+  "faults": [
+    {
+      "fault_id": "increased_damping",
+      "name": "Increased Damping",
+      "version": "1.0.0",
+      "description": "Gradual increase in damping coefficient"
+    },
+    {
+      "fault_id": "sensor_bias",
+      "name": "Sensor Bias",
+      "version": "1.0.0",
+      "description": "Constant offset added to sensor measurement"
+    }
+  ]
+}
+```
+
+---
+
+## Get Fault
+
+```http
+GET /api/v1/twins/{twin_id}/faults/{fault_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "fault_id": "increased_damping",
+  "twin_id": "mechanical_system",
+  "name": "Increased Damping",
+  "version": "1.0.0",
+  "description": "Gradual increase in damping coefficient",
+  "metadata": {}
+}
 ```
 
 ---
@@ -634,12 +848,52 @@ GET /api/v1/contests/{contest_id}/submissions
 POST /api/v1/contests/{contest_id}/submissions
 ```
 
+Request:
+
+```json
+{
+  "task_id": "forecasting",
+  "payload": {
+    "forecast": {
+      "horizon_1": { "position": 0.12 },
+      "horizon_5": { "position": 0.24 }
+    }
+  }
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "submission_id": "sub_001",
+  "contest_id": "forecast_2027",
+  "user_id": "u_abc123",
+  "task_id": "forecasting",
+  "submitted_at": "2027-02-10T14:00:00Z",
+  "status": "PENDING"
+}
+```
+
 ---
 
 ## Get Submission
 
 ```http
 GET /api/v1/submissions/{submission_id}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "submission_id": "sub_001",
+  "contest_id": "forecast_2027",
+  "user_id": "u_abc123",
+  "task_id": "forecasting",
+  "submitted_at": "2027-02-10T14:00:00Z",
+  "status": "EVALUATED"
+}
 ```
 
 ---
@@ -650,7 +904,7 @@ GET /api/v1/submissions/{submission_id}
 DELETE /api/v1/submissions/{submission_id}
 ```
 
-If contest rules allow it.
+If contest rules allow it. Response `204 No Content`.
 
 ---
 
@@ -664,6 +918,28 @@ Scores are derived resources generated from submissions.
 
 ```http
 GET /api/v1/submissions/{submission_id}/scores
+```
+
+Response `200 OK`:
+
+```json
+{
+  "submission_id": "sub_001",
+  "scores": [
+    {
+      "score_id": "sc_001",
+      "metric_id": "mae",
+      "value": 0.142,
+      "computed_at": "2027-02-10T14:05:00Z"
+    },
+    {
+      "score_id": "sc_002",
+      "metric_id": "rmse",
+      "value": 0.201,
+      "computed_at": "2027-02-10T14:05:00Z"
+    }
+  ]
+}
 ```
 
 ---

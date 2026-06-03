@@ -526,9 +526,11 @@ datasets
 For many-to-many relationships:
 
 ```text
-contest_allowed_twins
-contest_allowed_scenarios
+contest_allowed_twins       (contest_id, twin_id, twin_version)
+contest_allowed_scenarios   (contest_id, scenario_id, twin_id)
 ```
+
+`twin_version` in `contest_allowed_twins` pins the specific plugin version the contest uses, ensuring reproducibility if a twin is updated after the contest is published. If `twin_version` is `NULL`, the latest registered version is used.
 
 ---
 

@@ -1,5 +1,7 @@
 # Scoring Framework
 
+> Related: [Plugin System](plugin-system.md) — canonical `ScoringMetric` interface · [Domain Model](domain-model.md) — `Score` and `LeaderboardEntry` entities · [Contest Management](contest-management.md)
+
 The Scoring Framework is responsible for evaluating participant submissions and generating contest rankings.
 
 The framework must be:
@@ -65,22 +67,9 @@ ROC AUC
 
 # Metric Interface
 
-Every metric must implement:
+Every metric must implement the `ScoringMetric` abstract class defined in [Plugin System](plugin-system.md).
 
-```python
-from abc import ABC, abstractmethod
-
-class ScoringMetric(ABC):
-
-    @property
-    @abstractmethod
-    def metric_id(self):
-        pass
-
-    @abstractmethod
-    def compute(self, y_true, y_pred):
-        pass
-```
+The interface requires implementing: `metric_id`, `direction` (`"minimize"` or `"maximize"`), `compute(y_true, y_pred)`, and `metadata()`.
 
 ---
 
@@ -567,11 +556,11 @@ Metrics should be discoverable.
 Example:
 
 ```python
-metric_registry.register(MAE)
+metric_registry.register(MAE())
 
-metric_registry.register(RMSE)
+metric_registry.register(RMSE())
 
-metric_registry.register(F1Score)
+metric_registry.register(F1Score())
 ```
 
 ---

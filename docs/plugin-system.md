@@ -70,27 +70,61 @@ class DigitalTwin(ABC):
         pass
 
     @abstractmethod
-    def create_initial_state(self):
+    def create_initial_state(
+        self,
+        initial_conditions: dict | None = None
+    ) -> SimulationState:
+        """
+        Create and return the initial latent state for a simulation session.
+
+        The simulation engine calls this once at session start, passing the
+        'initial_conditions' dict returned by Scenario.initialize() (if any).
+        The twin merges those overrides with its own defaults.
+
+        If initial_conditions is None or empty, return the twin's default
+        initial state.
+        """
         pass
 
     @abstractmethod
-    def step(self, state, dt):
+    def step(self, state: SimulationState, dt: float) -> SimulationState:
+        """
+        Advance the simulation by one time step dt (in seconds).
+
+        Must return a new SimulationState. Must not modify state in place.
+        The engine replaces the current state with the returned value.
+
+        Typical implementation:
+        1. Compute system dynamics
+        2. Apply operating profile for this time step
+        3. Return updated state
+        (Faults are applied by the engine after this call.)
+        """
         pass
 
     @abstractmethod
-    def get_sensors(self):
+    def get_sensors(self) -> list[Sensor]:
         pass
 
     @abstractmethod
-    def get_faults(self):
+    def get_faults(self) -> list[Fault]:
         pass
 
     @abstractmethod
-    def get_scenarios(self):
+    def get_scenarios(self) -> list[Scenario]:
         pass
 
     @abstractmethod
-    def metadata(self):
+    def metadata(self) -> dict:
+        """
+        Return plugin metadata. Must include at minimum:
+        {
+            "twin_id": str,
+            "name": str,
+            "version": str,   # semver, e.g. "1.0.0"
+            "description": str
+        }
+        """
         pass
 ```
 
@@ -160,11 +194,20 @@ class Sensor(ABC):
 
     @property
     @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
     def unit(self) -> str:
         pass
 
     @abstractmethod
-    def observe(self, state):
+    def observe(self, state) -> float:
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
         pass
 ```
 
@@ -214,9 +257,109 @@ class Fault(ABC):
     def fault_id(self) -> str:
         pass
 
+    @property
     @abstractmethod
-    def apply(self, state, dt):
+    def name(self) -> str:
         pass
+
+    @property
+    @abstractmethod
+    def current_severity(self) -> float:
+        """
+        Current severity in [0.0, 1.0].
+        0.0 = no effect. 1.0 = maximum effect.
+        The fault is responsible for evolving this value over time
+        inside apply() (e.g. gradual faults increase it each step).
+        """
+        pass
+
+    @abstractmethod
+    def activate(self, initial_severity: float = 1.0) -> None:
+        """
+        Called by the engine when the fault schedule activates this fault.
+        Set internal state to active and initialise severity.
+        """
+        pass
+
+    @abstractmethod
+    def deactivate(self) -> None:
+        """
+        Called by the engine when the fault schedule ends this fault.
+        Reset internal state to inactive and severity to 0.0.
+        """
+        pass
+
+    @abstractmethod
+    def apply(self, state: SimulationState, dt: float) -> None:
+        """
+        Modify state in place to reflect fault effects for this time step.
+        Also responsible for evolving current_severity if the fault is gradual.
+        Called by the engine every step while the fault is active.
+        """
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
+        """
+        Return plugin metadata. Must include at minimum:
+        {
+            "fault_id": str,
+            "name": str,
+            "version": str,
+            "description": str
+        }
+        """
+        pass
+```
+
+`apply(state, dt)` is called by the simulation engine on every time step while the fault is active. For state and parameter faults, implementations modify `state` in place and evolve `current_severity`. For sensor faults, `apply()` is a no-op on the latent state — sensor-level corruption is handled separately (see below).
+
+---
+
+# Sensor Fault Interface
+
+A `SensorFault` is a specialised `Fault` that corrupts a measurement after it is produced by a sensor, rather than modifying the latent state.
+
+```python
+class SensorFault(Fault):
+
+    @property
+    @abstractmethod
+    def target_sensor_ids(self) -> list[str]:
+        """
+        Sensor ids this fault applies to.
+        Return an empty list to apply to all sensors of the twin.
+        """
+        pass
+
+    def apply(self, state: SimulationState, dt: float) -> None:
+        # no-op: sensor faults do not modify the latent state
+        pass
+
+    @abstractmethod
+    def apply_to_measurement(self, measurement: float) -> float:
+        """
+        Corrupt and return the sensor measurement.
+        Called by the engine after sensor.observe(state).
+        May use self.current_severity to scale the effect.
+        """
+        pass
+```
+
+The simulation engine applies `SensorFault.apply_to_measurement()` after calling `sensor.observe(state)`, so the corruption happens on the observable value only.
+
+This separation keeps the `Fault` interface uniform while allowing the engine to distinguish fault categories without coupling to domain logic:
+
+```text
+Latent State
+      ↓
+step() + StateFault.apply() + ParameterFault.apply()
+      ↓
+sensor.observe(state)
+      ↓
+SensorFault.apply_to_measurement(measurement)
+      ↓
+SensorObservation
 ```
 
 ---
@@ -242,6 +385,8 @@ Examples:
 
 ## Sensor Measurements
 
+These are implemented as `SensorFault` subclasses (see above).
+
 Examples:
 
 - bias
@@ -249,7 +394,7 @@ Examples:
 - stuck values
 - excessive noise
 
-The Core should not distinguish between categories.
+The Core distinguishes `SensorFault` from other faults only to determine the application point in the simulation pipeline (`apply()` vs `apply_to_measurement()`). It never inspects the fault's domain content.
 
 ---
 
@@ -264,15 +409,50 @@ class Scenario(ABC):
 
     @property
     @abstractmethod
-    def scenario_id(self):
+    def scenario_id(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
         pass
 
     @abstractmethod
-    def initialize(self):
+    def initialize(self) -> dict:
+        """
+        Return a dictionary of initial configuration for this scenario.
+
+        The dictionary may contain:
+        - 'initial_conditions': dict of state variable overrides passed to
+          the twin's create_initial_state()
+        - 'operating_profile': an OperatingProfile instance
+        - 'parameters': dict of system parameter overrides (e.g. mass, stiffness)
+
+        The simulation engine merges these values into the twin's defaults.
+        The twin remains the source of truth for any key not present here.
+        """
         pass
 
     @abstractmethod
-    def get_fault_schedule(self):
+    def get_fault_schedule(self) -> list[dict]:
+        """
+        Return a list of fault activation entries.
+
+        Each entry is a dict with:
+        - 'fault_id': str — registered fault to activate
+        - 'start_time': float — simulation time (seconds) to activate
+        - 'end_time': float | None — simulation time to deactivate, or None for indefinite
+        - 'severity': float (0.0–1.0) — initial severity at activation
+
+        Example:
+        [
+            {'fault_id': 'sensor_bias', 'start_time': 120.0, 'end_time': None, 'severity': 0.5}
+        ]
+        """
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
         pass
 ```
 
@@ -295,7 +475,7 @@ Interface:
 class OperatingProfile(ABC):
 
     @abstractmethod
-    def value(self, t):
+    def value(self, t: float) -> float:
         pass
 ```
 
@@ -312,11 +492,21 @@ class ScoringMetric(ABC):
 
     @property
     @abstractmethod
-    def metric_id(self):
+    def metric_id(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def direction(self) -> str:
+        """Return 'minimize' or 'maximize'."""
         pass
 
     @abstractmethod
-    def compute(self, y_true, y_pred):
+    def compute(self, y_true, y_pred) -> float:
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
         pass
 ```
 
@@ -351,18 +541,12 @@ All should implement ScoringMetric.
 
 # Plugin Discovery
 
-Plugins should be registered through registries.
+Plugins are registered through registries at application startup.
 
 Example:
 
 ```python
-registry.register(MyTwin())
-```
-
-or
-
-```python
-registry.register_class(MyTwin)
+twin_registry.register(MechanicalTwin())
 ```
 
 The registry is responsible for:
@@ -372,24 +556,26 @@ The registry is responsible for:
 - lookup;
 - metadata retrieval.
 
+See [Plugin Registry](plugin-registry.md) for the full specification.
+
 ---
 
 # Twin Registry
 
 ```python
-registry.register(MechanicalTwin())
-registry.register(IndustrialPumpTwin())
+twin_registry.register(MechanicalTwin())
+twin_registry.register(IndustrialPumpTwin())
 ```
 
-The REST API should automatically expose all registered twins.
+The REST API automatically exposes all registered twins.
 
 ---
 
 # Sensor Registry
 
 ```python
-sensor_registry.register(PositionSensor)
-sensor_registry.register(TemperatureSensor)
+sensor_registry.register(PositionSensor())
+sensor_registry.register(TemperatureSensor())
 ```
 
 Sensors become reusable building blocks.
@@ -399,8 +585,8 @@ Sensors become reusable building blocks.
 # Fault Registry
 
 ```python
-fault_registry.register(BiasFault)
-fault_registry.register(DriftFault)
+fault_registry.register(SensorBiasFault())
+fault_registry.register(IncreasedDampingFault())
 ```
 
 Faults become reusable across multiple twins.
@@ -409,15 +595,17 @@ Faults become reusable across multiple twins.
 
 # Metadata Contract
 
-Every plugin should expose metadata.
+Every plugin must implement a `metadata()` method returning a dict.
 
-Example:
+The key for the plugin's identifier must match the plugin's own id field (e.g. `sensor_id`, `fault_id`, `twin_id`, `metric_id`).
+
+Example for a sensor:
 
 ```python
 {
-    "id": "temperature_sensor",
+    "sensor_id": "temperature_sensor",
     "name": "Temperature Sensor",
-    "version": "1.0",
+    "version": "1.0.0",
     "description": "Basic temperature sensor"
 }
 ```

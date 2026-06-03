@@ -1,5 +1,7 @@
 # Digital Twin Development Guide
 
+> Related: [Plugin System](plugin-system.md) — canonical interfaces · [Sensors](sensors.md) · [Faults](faults.md) · [API Specification](api-specification.md)
+
 Digital twins are the core simulation components of EPIC.
 
 A digital twin represents a dynamic system that evolves over time and can be observed through sensors.
@@ -63,47 +65,9 @@ Those responsibilities belong to EPIC Core.
 
 # Digital Twin Interface
 
-Every twin must implement:
+Every twin must implement the `DigitalTwin` abstract class defined in [Plugin System](plugin-system.md).
 
-```python
-from abc import ABC, abstractmethod
-
-class DigitalTwin(ABC):
-
-    @property
-    @abstractmethod
-    def twin_id(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @abstractmethod
-    def create_initial_state(self):
-        pass
-
-    @abstractmethod
-    def step(self, state, dt):
-        pass
-
-    @abstractmethod
-    def get_sensors(self):
-        pass
-
-    @abstractmethod
-    def get_faults(self):
-        pass
-
-    @abstractmethod
-    def get_scenarios(self):
-        pass
-
-    @abstractmethod
-    def metadata(self):
-        pass
-```
+The interface requires implementing: `twin_id`, `name`, `create_initial_state(initial_conditions)`, `step(state, dt) -> SimulationState`, `get_sensors() -> list[Sensor]`, `get_faults() -> list[Fault]`, `get_scenarios() -> list[Scenario]`, and `metadata()`.
 
 ---
 

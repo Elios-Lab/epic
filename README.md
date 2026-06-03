@@ -145,13 +145,74 @@ epic/
 
 Detailed documentation is available in the `docs/` directory.
 
-- Architecture
-- APIs
-- Digital Twin Development
-- Contest Management
-- Dataset Generation
-- Scoring
-- Authentication
+| Document | Description |
+|---|---|
+| [Architecture](docs/architecture.md) | High-level system architecture and layers |
+| [Domain Model](docs/domain-model.md) | Canonical entity definitions and database schema |
+| [Plugin System](docs/plugin-system.md) | Canonical interface definitions for all plugin types |
+| [Plugin Registry](docs/plugin-registry.md) | Registry specification, discovery, and versioning |
+| [Simulation Engine](docs/simulation-engine.md) | Simulation loop, concurrency, WebSocket streaming |
+| [API Specification](docs/api-specification.md) | REST and WebSocket API reference |
+| [Authentication](docs/authentication.md) | Auth, JWT, and role-based access control |
+| [Configuration](docs/configuration.md) | Environment variables and settings reference |
+| [Error Handling](docs/error-handling.md) | Exception hierarchy and API error mapping |
+| [Testing](docs/testing.md) | Testing strategy, utilities, and contract tests |
+| [Digital Twins](docs/digital-twins.md) | Guide for implementing digital twin plugins |
+| [Sensors](docs/sensors.md) | Guide for implementing sensor plugins |
+| [Faults](docs/faults.md) | Guide for implementing fault plugins |
+| [Scoring](docs/scoring.md) | Metrics, scoring policies and leaderboards |
+| [Contest Management](docs/contest-management.md) | Contest lifecycle, submissions and rankings |
+| [Contest Authoring](docs/contest-authoring.md) | Configuration-driven contest creation guide |
+| [Datasets](docs/datasets.md) | Dataset generation and export |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv) (recommended) or pip
+
+### Install
+
+```bash
+git clone https://github.com/your-org/epic.git
+cd epic
+uv sync
+```
+
+### Run the development server
+
+```bash
+uv run uvicorn epic_api.main:app --reload
+```
+
+The API will be available at `http://localhost:8000`.
+
+Interactive documentation is auto-generated at:
+
+- `http://localhost:8000/docs` (Swagger UI)
+- `http://localhost:8000/redoc` (ReDoc)
+
+### Run tests
+
+```bash
+uv run pytest
+```
+
+### Register a digital twin
+
+Create a twin by implementing the `DigitalTwin` interface (see [Digital Twins](docs/digital-twins.md) and [Plugin System](docs/plugin-system.md)), then register it in your application startup:
+
+```python
+from epic_core.registry import twin_registry
+from my_twins import MechanicalTwin
+
+twin_registry.register(MechanicalTwin())
+```
+
+No API changes are required. The new twin will appear automatically at `GET /api/v1/twins`.
 
 ---
 

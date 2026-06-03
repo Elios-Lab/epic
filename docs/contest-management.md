@@ -1,5 +1,7 @@
 # Contest Management Framework
 
+> Related: [Domain Model](domain-model.md) — canonical entity definitions · [API Specification](api-specification.md) — REST endpoints · [Scoring](scoring.md) — metrics and leaderboards
+
 The Contest Management Framework is responsible for creating, managing and evaluating machine learning competitions within EPIC.
 
 A contest is the primary organizational unit of the platform.
@@ -35,12 +37,14 @@ The contest system is built around the following entities:
 ```text
 User
 Contest
-Registration
-Submission
-Leaderboard
+ContestRegistration
 Task
+Submission
 Score
+LeaderboardEntry
 ```
+
+See [Domain Model](domain-model.md) for canonical entity definitions.
 
 ---
 
@@ -71,22 +75,22 @@ class Contest:
 
     description: str
 
+    status: ContestStatus
+
+    visibility: ContestVisibility
+
     start_date: datetime
 
     end_date: datetime
 
-    status: ContestStatus
+    created_by: str
 
-    tasks: List[Task]
+    created_at: datetime
 
-    allowed_twins: List[str]
-
-    allowed_scenarios: List[str]
-
-    scoring_configuration: dict
-
-    visibility: Visibility
+    updated_at: datetime
 ```
+
+Tasks, allowed twins, allowed scenarios, and scoring configuration are linked entities managed separately. See [Domain Model](domain-model.md) for the full relational structure.
 
 ---
 
@@ -190,11 +194,19 @@ class Task:
 
     task_id: str
 
+    contest_id: str
+
+    task_type: TaskType
+
     name: str
 
     description: str
 
-    metric_ids: List[str]
+    metric_ids: list[str]
+
+    weight: float
+
+    configuration: dict
 ```
 
 ---
@@ -231,8 +243,6 @@ Examples:
 
 Users interact with contests.
 
-Each user has:
-
 ```python
 class User:
 
@@ -242,8 +252,18 @@ class User:
 
     email: str
 
-    role: Role
+    password_hash: str
+
+    role: UserRole
+
+    is_active: bool
+
+    created_at: datetime
+
+    updated_at: datetime
 ```
+
+See [Domain Model](domain-model.md) for the full definition.
 
 ---
 
@@ -260,7 +280,7 @@ Future roles:
 
 ```text
 INSTRUCTOR
-TA
+TEACHING_ASSISTANT
 JUDGE
 RESEARCHER
 ```
@@ -300,7 +320,7 @@ Participants may:
 A registration links a user to a contest.
 
 ```python
-class Registration:
+class ContestRegistration:
 
     registration_id: str
 
@@ -308,8 +328,14 @@ class Registration:
 
     user_id: str
 
-    timestamp: datetime
+    registered_at: datetime
+
+    status: RegistrationStatus
 ```
+
+Supported statuses: `REGISTERED`, `WITHDRAWN`, `BANNED`.
+
+The pair `(user_id, contest_id)` must be unique.
 
 Only registered users may submit solutions.
 
@@ -332,12 +358,18 @@ class Submission:
 
     task_id: str
 
-    timestamp: datetime
+    submitted_at: datetime
 
     payload: dict
 
-    score: float
+    status: SubmissionStatus
+
+    metadata: dict
 ```
+
+Scores are stored separately as `Score` entities linked to the submission.
+
+See [Domain Model](domain-model.md) for the full entity definition.
 
 ---
 
@@ -437,13 +469,19 @@ Final Score =
 ```python
 class LeaderboardEntry:
 
-    rank: int
+    entry_id: str
+
+    contest_id: str
 
     user_id: str
 
+    submission_id: str
+
+    rank: int
+
     score: float
 
-    submission_time: datetime
+    updated_at: datetime
 ```
 
 ---

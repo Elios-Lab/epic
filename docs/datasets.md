@@ -89,16 +89,30 @@ class Dataset:
 
     dataset_id: str
 
+    user_id: str
+
+    contest_id: str | None
+
     twin_id: str
 
     scenario_ids: list[str]
 
-    session_ids: list[str]
+    num_sessions: int
 
-    output_format: str
+    duration_seconds: float
+
+    sampling_rate_hz: float
+
+    output_format: DatasetFormat
+
+    file_path: str
+
+    created_at: datetime
 
     metadata: dict
 ```
+
+See [Domain Model](domain-model.md) for the full entity definition.
 
 ---
 
