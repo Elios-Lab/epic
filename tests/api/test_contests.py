@@ -154,7 +154,7 @@ def test_create_contest_as_organizer_returns_201(
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "DRAFT"
-    assert body["created_by"] == registered_organizer["username"]
+    assert body["created_by"] == registered_organizer["id"]
 
 
 def test_create_contest_with_unknown_twin_returns_404(client, admin_headers):

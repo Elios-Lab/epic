@@ -64,7 +64,7 @@ def contest_response(contest: Contest) -> dict:
         "sampling_rate_hz": contest.sampling_rate_hz,
         "start_date": contest.start_date,
         "end_date": contest.end_date,
-        "created_by": contest.created_by,
+        "created_by": str(contest.created_by) if contest.created_by else None,
         "created_at": contest.created_at,
     }
 
@@ -115,7 +115,7 @@ async def create_contest(
         sampling_rate_hz=request.sampling_rate_hz,
         start_date=request.start_date,
         end_date=request.end_date,
-        created_by=current_user.username,
+        created_by=current_user.id,
     )
     db.add(contest)
     await db.commit()
@@ -166,7 +166,7 @@ async def update_contest(
     engine: SimulationEngine = Depends(get_engine),
 ):
     contest = await get_contest_or_raise(db, contest_id)
-    if current_user.role == "ORGANIZER" and contest.created_by != current_user.username:
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
         raise InsufficientPermissionsError(
             "Organizers can only modify their own contests"
         )

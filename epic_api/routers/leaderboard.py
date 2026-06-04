@@ -65,7 +65,7 @@ async def get_user_leaderboard_entry(
     )
     if current_user.role == "PARTICIPANT" and current_user.id != target_user_id:
         raise InsufficientPermissionsError("Leaderboard access denied")
-    if current_user.role == "ORGANIZER" and contest.created_by != current_user.username:
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
         raise InsufficientPermissionsError("Leaderboard access denied")
 
     result = await db.execute(

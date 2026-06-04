@@ -294,7 +294,7 @@ async def list_submissions(
     contest = await get_contest_or_raise(db, contest_id)
     query = select(Submission).where(Submission.contest_id == contest.id)
     if current_user.role == "ORGANIZER":
-        if contest.created_by != current_user.username:
+        if contest.created_by != current_user.id:
             raise InsufficientPermissionsError("Submission access denied")
     elif current_user.role != "ADMINISTRATOR":
         query = query.where(Submission.user_id == current_user.id)
@@ -326,7 +326,7 @@ async def get_submission(
             select(Contest).where(Contest.id == submission.contest_id)
         )
         contest = result.scalar_one()
-        if contest.created_by != current_user.username:
+        if contest.created_by != current_user.id:
             raise InsufficientPermissionsError("Submission access denied")
     elif current_user.role != "ADMINISTRATOR" and submission.user_id != current_user.id:
         raise InsufficientPermissionsError("Submission access denied")
@@ -353,7 +353,7 @@ async def get_submission_scores(
             select(Contest).where(Contest.id == submission.contest_id)
         )
         contest = result.scalar_one()
-        if contest.created_by != current_user.username:
+        if contest.created_by != current_user.id:
             raise InsufficientPermissionsError("Submission access denied")
     elif current_user.role != "ADMINISTRATOR" and submission.user_id != current_user.id:
         raise InsufficientPermissionsError("Submission access denied")

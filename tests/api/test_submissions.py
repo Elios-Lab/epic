@@ -46,7 +46,7 @@ def create_contest_with_observation(db_factory, name: str, status: str = "ACTIVE
                 sampling_rate_hz=20.0,
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
-                created_by="admin1",
+                created_by=None,
             )
             db.add(contest)
             await db.commit()
@@ -110,7 +110,7 @@ def create_scoring_contest(db_factory):
                 forecast_horizons=[1],
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
-                created_by="admin1",
+                created_by=None,
             )
             db.add(contest)
             await db.commit()

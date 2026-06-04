@@ -104,7 +104,7 @@ async def list_registrations(
             query = query.where(ContestRegistration.contest_id == contest.id)
     elif current_user.role == "ORGANIZER" and contest_id is not None:
         contest = await get_contest_or_raise(db, contest_id)
-        if contest.created_by != current_user.username:
+        if contest.created_by != current_user.id:
             raise InsufficientPermissionsError("Registration access denied")
         query = query.where(ContestRegistration.contest_id == contest.id)
     else:

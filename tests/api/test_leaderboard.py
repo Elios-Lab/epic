@@ -38,7 +38,7 @@ def create_active_contest_with_observations(db_factory, name: str = "Leaderboard
                 forecast_horizons=[1],
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
-                created_by="admin1",
+                created_by=None,
             )
             db.add(contest)
             await db.commit()
