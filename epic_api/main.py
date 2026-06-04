@@ -9,6 +9,7 @@ from epic_api.errors import register_exception_handlers
 from epic_api.routers import (
     auth,
     contests,
+    leaderboard,
     registrations,
     sessions,
     submissions,
@@ -47,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(contests.router, prefix="/api/v1")
+    app.include_router(leaderboard.router, prefix="/api/v1")
     app.include_router(registrations.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")
     app.include_router(submissions.router, prefix="/api/v1")

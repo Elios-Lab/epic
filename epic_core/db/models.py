@@ -196,6 +196,35 @@ class Score(Base):
     )
 
 
+class LeaderboardEntry(Base):
+    __tablename__ = "leaderboard_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "contest_id",
+            "user_id",
+            name="uq_leaderboard_entries_contest_id_user_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contests.id"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("submissions.id"), nullable=False
+    )
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class SensorObservation(Base):
     __tablename__ = "sensor_observations"
 

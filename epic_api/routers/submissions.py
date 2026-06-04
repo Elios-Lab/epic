@@ -16,6 +16,7 @@ from epic_api.dependencies import get_current_user
 from epic_core.db.models import (
     Contest,
     ContestRegistration,
+    LeaderboardEntry,
     Score,
     SensorObservation,
     SimulationSession,
@@ -145,6 +146,7 @@ async def _score_submission(
             return
 
         metric = registry_module.metric_registry.get("mae")
+        score_values: list[float] = []
         for sensor_id, horizon_predictions in predictions_by_sensor.items():
             sensor_horizons = sorted(horizon_predictions)
             y_true = [
@@ -152,11 +154,13 @@ async def _score_submission(
                 for horizon in sensor_horizons
             ]
             y_pred = [horizon_predictions[horizon] for horizon in sensor_horizons]
+            score_value = metric.compute(y_true, y_pred)
+            score_values.append(score_value)
             db.add(
                 Score(
                     submission_id=submission.id,
                     metric_id=metric.metric_id,
-                    value=metric.compute(y_true, y_pred),
+                    value=score_value,
                     details={
                         "sensor_id": sensor_id,
                         "horizons": details_by_sensor[sensor_id],
@@ -164,6 +168,53 @@ async def _score_submission(
                 )
             )
         submission.status = "EVALUATED"
+        await db.commit()
+        if score_values:
+            composite_score = sum(score_values) / len(score_values)
+            await _update_leaderboard(
+                submission.contest_id,
+                submission.user_id,
+                submission.id,
+                composite_score,
+                db_factory,
+            )
+
+
+async def _update_leaderboard(
+    contest_id: UUID,
+    user_id: UUID,
+    submission_id: UUID,
+    score_value: float,
+    db_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with db_factory() as db:
+        result = await db.execute(
+            select(LeaderboardEntry).where(
+                LeaderboardEntry.contest_id == contest_id,
+                LeaderboardEntry.user_id == user_id,
+            )
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            entry = LeaderboardEntry(
+                contest_id=contest_id,
+                user_id=user_id,
+                submission_id=submission_id,
+                rank=0,
+                score=score_value,
+            )
+            db.add(entry)
+        elif score_value < entry.score:
+            entry.submission_id = submission_id
+            entry.score = score_value
+
+        result = await db.execute(
+            select(LeaderboardEntry)
+            .where(LeaderboardEntry.contest_id == contest_id)
+            .order_by(LeaderboardEntry.score.asc())
+        )
+        for rank, leaderboard_entry in enumerate(result.scalars(), start=1):
+            leaderboard_entry.rank = rank
         await db.commit()
 
 
