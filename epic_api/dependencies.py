@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 def get_settings() -> Settings:
     return core_get_settings()
+
+
+def get_engine(request: Request):
+    return request.app.state.engine
 
 
 async def get_current_user(
@@ -40,4 +44,3 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise InvalidCredentialsError("Invalid credentials")
     return user
-

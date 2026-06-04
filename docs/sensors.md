@@ -111,7 +111,7 @@ Metadata is used by:
 - APIs
 - Documentation
 - User Interfaces
-- Dataset Generation
+- Contest configuration
 
 ---
 

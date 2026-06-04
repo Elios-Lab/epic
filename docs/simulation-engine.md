@@ -30,25 +30,16 @@ The engine is not responsible for:
 
 ---
 
-# Execution Modes
+# Execution Model
 
-The engine supports two execution modes.
+Each contest has exactly one simulation session, running in real wall-clock time from the moment the contest becomes ACTIVE until it becomes CLOSED.
 
-## Streaming Mode
+The engine runs this session continuously at the configured `sampling_rate_hz`. Every produced observation is:
 
-The simulation runs in real time (or near-real time).
+1. Pushed to all connected WebSocket clients (participants receive sensor readings only).
+2. Persisted to the database privately with full labels (for scoring use only).
 
-Observations are pushed to a WebSocket stream as they are produced.
-
-Used when a participant is interacting live with a session.
-
-## Batch Mode
-
-The simulation runs as fast as possible, without real-time constraints.
-
-Observations are written directly to storage and optionally exported as a dataset.
-
-Used for dataset generation.
+There is no batch mode, no accelerated simulation, and no pause or stop mechanism available to participants. The simulation clock is wall-clock time.
 
 ---
 
@@ -76,26 +67,24 @@ The engine exposes the following interface to the rest of the Core:
 ```python
 class SimulationEngine:
 
-    async def run_session(self, session: SimulationSession) -> None:
+    async def run_session(
+        self,
+        session_id: str,
+        db_factory,
+    ) -> None:
         """
-        Execute a simulation session.
+        Execute a contest simulation session to completion.
 
-        In streaming mode, observations are pushed to the session's
-        output queue as they are produced.
+        Runs in real wall-clock time at session.sampling_rate_hz.
+        Each observation is persisted privately and broadcast to
+        all WebSocket subscribers of the contest.
 
-        In batch mode, observations are written directly to storage.
+        The session ends naturally when wall-clock time reaches
+        contest.end_date. It cannot be paused or cancelled by
+        participants.
 
-        Raises SimulationError if the twin or scenario cannot be loaded,
-        or if a fatal error occurs during the simulation loop.
-        """
-        pass
-
-    def cancel_session(self, session_id: str) -> None:
-        """
-        Cancel a running session.
-
-        The session status is set to CANCELLED.
-        Any observations produced before cancellation are preserved.
+        Raises PluginExecutionError if the twin or scenario cannot
+        be loaded, or if a fatal error occurs during the loop.
         """
         pass
 
@@ -107,27 +96,22 @@ class SimulationEngine:
 
 # Session Lifecycle
 
-A session transitions through the following states:
+A session is created when the contest transitions to ACTIVE and transitions through:
 
 ```text
 CREATED
-    ↓
+    ↓  (engine starts the loop)
 RUNNING
-    ↓  (normal completion)
+    ↓  (wall-clock reaches contest.end_date)
 COMPLETED
 
     or
 
-    ↓  (exception in twin or sensor)
+    ↓  (unrecoverable plugin exception)
 FAILED
-
-    or
-
-    ↓  (cancel_session called)
-CANCELLED
 ```
 
-The engine is responsible for updating session status in storage at each transition.
+The engine is responsible for updating session status in storage at each transition. There is no CANCELLED state — only the platform can stop a session, and only by closing the contest.
 
 ---
 
@@ -143,8 +127,8 @@ The engine executes the following loop for every session:
 5.  Parse fault schedule from scenario.get_fault_schedule()
 6.  Set session status to RUNNING
 7.  t = 0.0
-8.  While t < duration:
-        a.  Advance time: t += dt  (dt = 1 / sampling_rate_hz)
+8.  While wall-clock time < contest.end_date:
+        a.  Advance virtual time: t += dt  (dt = 1 / sampling_rate_hz)
         b.  Activate/deactivate faults according to schedule
         c.  Call twin.step(state, dt) → new_state
         d.  Call fault.apply(new_state, dt) for each active non-SensorFault
@@ -153,11 +137,12 @@ The engine executes the following loop for every session:
                 raw = sensor.observe(new_state)
                 For each active SensorFault targeting this sensor:
                     raw = sensor_fault.apply_to_measurement(raw)
-        f.  Assemble SensorObservation
-        g.  Attach labels if session mode is TRAINING
-        h.  Persist observation
-        i.  Push observation to output stream (streaming mode only)
-        j.  state = new_state
+        f.  Assemble SensorObservation (sensors dict only, for broadcast)
+        g.  Build full observation with labels (for private storage)
+        h.  Persist full observation to database (private — never exposed to participants)
+        i.  Broadcast sensor readings only to all WebSocket subscribers of the contest
+        j.  Sleep until next tick (wall-clock alignment)
+        k.  state = new_state
 9.  Set session status to COMPLETED
 ```
 
@@ -218,9 +203,7 @@ The engine applies the fault only to matching sensors.
 
 # Labels
 
-In `TRAINING` mode, the engine attaches labels to each observation.
-
-Labels are produced from the active fault state at that time step:
+The engine always produces ground-truth labels at each time step:
 
 ```python
 labels = {
@@ -230,39 +213,52 @@ labels = {
 }
 ```
 
-In `VALIDATION` and `TEST` modes, labels are stored in the database but are not included in the observation payload returned by the API.
+Labels are persisted to the database as part of every `SensorObservation` record. They are never included in the WebSocket broadcast to participants. The scoring engine reads them directly from the database when evaluating submissions.
 
 ---
 
-# WebSocket Streaming
+# WebSocket Broadcasting
 
-In streaming mode, the engine pushes each `SensorObservation` to an `asyncio.Queue` associated with the session.
-
-The WebSocket handler reads from this queue and forwards to the connected client:
+The engine maintains a broadcast queue per contest session. All connected WebSocket clients for a contest share the same queue.
 
 ```text
 SimulationEngine
-      ↓  (asyncio.Queue.put)
-SessionQueue
-      ↓  (asyncio.Queue.get)
-WebSocketHandler
-      ↓  (WebSocket.send_json)
-Client
+      ↓  (produces observation)
+ContestBroadcaster
+      ↓  (fan-out to all subscribers)
+WebSocketHandler × N
+      ↓  (WebSocket.send_json per client)
+Client × N
 ```
 
-The queue has a bounded capacity. If the client is too slow to consume observations, the engine drops the oldest entry and continues. Dropped observations are still persisted to storage.
+The message sent to participants contains sensor readings only:
+
+```json
+{
+  "timestamp": "2027-01-15T10:00:00.500Z",
+  "session_id": "abc123",
+  "sequence_id": 500,
+  "sensors": {
+    "position": 0.15,
+    "velocity": 1.82,
+    "temperature": 31.5
+  }
+}
+```
+
+Labels and fault metadata are never included.
+
+Each client has its own bounded output queue. If a client is too slow to consume, its oldest messages are dropped. The engine's main loop is never blocked by slow clients. Observations are always persisted to the database regardless of client speed.
 
 ---
 
 # Simulation Clock
 
-The engine uses a virtual clock, not wall-clock time.
+The engine uses wall-clock time as the primary clock. The simulation runs in real time: one simulated second equals one real second.
 
-In streaming mode, the engine sleeps for `dt` seconds between steps to approximate real-time delivery.
+Between steps the engine sleeps for `dt` seconds (`dt = 1 / sampling_rate_hz`) to align with real time. The `SensorObservation.timestamp` records the actual wall-clock time of each observation.
 
-In batch mode, there is no sleep — steps execute as fast as possible.
-
-The virtual time `t` is what is stored in `SensorObservation.timestamp`, not the wall-clock time of observation production. This guarantees reproducibility.
+The competition's `end_date` is the natural termination condition. The engine checks wall-clock time against `contest.end_date` at each step.
 
 ---
 
@@ -294,18 +290,6 @@ If `twin.step()` raises an exception, the engine:
 The same policy applies to `sensor.observe()` and `fault.apply()`.
 
 The engine must never propagate a plugin exception to the API layer uncaught. See [Error Handling](error-handling.md) for the full exception hierarchy.
-
----
-
-# Dataset Generation
-
-Dataset generation is batch execution of multiple sessions.
-
-The engine runs each session sequentially or concurrently (configurable) and writes all observations to storage.
-
-When all sessions complete, the storage layer exports the observations to the requested format (CSV, JSONL).
-
-The engine does not manage export format — it only runs sessions. The dataset service coordinates the full pipeline.
 
 ---
 

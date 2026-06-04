@@ -1,271 +1,95 @@
-# Dataset Generation Framework
+# Dataset Collection
 
-Dataset generation is one of the central educational concepts of EPIC.
+> Related: [Simulation Engine](simulation-engine.md) · [API Specification](api-specification.md) · [Contest Management](contest-management.md)
 
-Unlike traditional machine learning competitions, participants are not expected to receive a fixed dataset.
-
-Instead, participants generate datasets by interacting with digital twins and simulation scenarios.
-
-This approach teaches:
-
-- Experimental design
-- Data collection
-- Data engineering
-- Dataset curation
-- Machine learning under uncertainty
-
-The goal is to mimic real-world engineering workflows.
+EPIC does not generate or export datasets on the server. Dataset collection is the participant's responsibility.
 
 ---
 
 # Philosophy
 
-Traditional workflow:
+A core educational principle of EPIC is that collecting data from a live system is itself a skill. Participants are expected to:
 
-```text
-Dataset
-    ↓
-Model
-    ↓
-Evaluation
-```
+- Connect to the contest's WebSocket stream
+- Decide what to record and at what granularity
+- Handle connection interruptions gracefully
+- Curate and engineer their own dataset for model training
 
-EPIC workflow:
-
-```text
-Digital Twin
-    ↓
-Simulation Sessions
-    ↓
-Dataset Generation
-    ↓
-Dataset Curation
-    ↓
-Model Training
-    ↓
-Evaluation
-```
-
-Dataset generation is part of the challenge.
+This mirrors real-world industrial monitoring, where an engineer does not receive a pre-packaged dataset — they instrument the system and collect what they need.
 
 ---
 
-# Dataset Sources
+# How Data Collection Works
 
-Datasets are generated from:
+When a contest is ACTIVE, a shared simulation runs in real wall-clock time. All participants observe the same system through the WebSocket stream (see [API Specification](api-specification.md)).
 
-- Digital Twins
-- Scenarios
-- Operating Profiles
-- Fault Schedules
-- Random Seeds
+Each WebSocket message contains:
 
-Different configurations produce different datasets.
-
----
-
-# Dataset Generation Pipeline
-
-```text
-Digital Twin
-      ↓
-Scenario Selection
-      ↓
-Session Generation
-      ↓
-Sensor Observations
-      ↓
-Dataset Export
+```json
+{
+  "timestamp": "2027-01-15T10:00:00.500Z",
+  "session_id": "sess_abc",
+  "sequence_id": 500,
+  "sensors": {
+    "position": 0.15,
+    "velocity": 1.82,
+    "temperature": 31.5
+  }
+}
 ```
 
+Participants receive sensor readings only. Labels and fault information are never exposed.
+
 ---
 
-# Dataset Definition
+# Client-Side Storage
 
-A dataset is a collection of simulation sessions.
+Participants choose their own storage format and location. Common approaches:
+
+- Append each message to a CSV file
+- Stream into a local database (SQLite, DuckDB)
+- Buffer in memory and write periodically
+
+A minimal Python example:
 
 ```python
-class Dataset:
+import asyncio
+import csv
+import websockets
+import json
 
-    dataset_id: str
-
-    user_id: str
-
-    contest_id: str | None
-
-    twin_id: str
-
-    scenario_ids: list[str]
-
-    num_sessions: int
-
-    duration_seconds: float
-
-    sampling_rate_hz: float
-
-    output_format: DatasetFormat
-
-    file_path: str
-
-    created_at: datetime
-
-    metadata: dict
-```
-
-See [Domain Model](domain-model.md) for the full entity definition.
-
----
-
-# Dataset Generation Request
-
-Example:
-
-```json
-{
-  "twin_id": "mechanical_system",
-  "scenario_ids": [
-    "normal_operation",
-    "sensor_bias"
-  ],
-  "num_sessions": 100,
-  "duration_seconds": 600,
-  "sampling_rate_hz": 10
-}
+async def collect(contest_id: str, token: str, output_path: str):
+    url = f"wss://epic.example.com/api/v1/ws/contests/{contest_id}?token={token}"
+    with open(output_path, "w", newline="") as f:
+        writer = None
+        async with websockets.connect(url) as ws:
+            async for message in ws:
+                data = json.loads(message)
+                row = {"timestamp": data["timestamp"],
+                       "sequence_id": data["sequence_id"],
+                       **data["sensors"]}
+                if writer is None:
+                    writer = csv.DictWriter(f, fieldnames=row.keys())
+                    writer.writeheader()
+                writer.writerow(row)
 ```
 
 ---
 
-# Training Dataset Generation
+# Connection Interruptions
 
-Participants may create:
+If a participant's connection drops, they miss the observations produced during the outage. This is intentional — it reflects real-world conditions. Participants should design their collection pipeline to reconnect automatically and handle gaps in the sequence_id.
 
-- Normal datasets
-- Faulty datasets
-- Mixed datasets
-
-Example:
-
-```text
-80% normal
-20% faulty
-```
+The server does not replay missed observations.
 
 ---
 
-# Validation Dataset Generation
+# Late Joiners
 
-Participants may reserve separate scenarios or seeds.
-
-Example:
-
-```text
-Training Seeds:
-1-100
-
-Validation Seeds:
-101-120
-```
-
-This prevents data leakage.
+A participant who connects after the contest has started will receive data from that point forward. Past observations are not accessible. This is by design: earlier participants who collected more data have a natural advantage, just as in a real monitoring scenario.
 
 ---
 
-# Reproducibility
+# Design Requirement
 
-Every dataset must store:
-
-- Twin ID
-- Twin Version
-- Scenario IDs
-- Seeds
-- Sampling Rate
-- Duration
-
-This allows complete regeneration.
-
----
-
-# Export Formats
-
-Initial formats:
-
-## CSV
-
-Suitable for:
-
-- Pandas
-- Scikit-Learn
-
-## JSONL
-
-Suitable for:
-
-- Streaming workflows
-- Event-based pipelines
-
-Future formats:
-
-- Parquet
-- Arrow
-- HDF5
-
----
-
-# Labels
-
-Training datasets may contain labels.
-
-Example:
-
-```json
-{
-  "is_anomaly": true,
-  "fault_type": "sensor_bias"
-}
-```
-
----
-
-# Hidden Labels
-
-Validation and test datasets may hide labels.
-
-This supports contest evaluation.
-
----
-
-# Dataset Metadata
-
-Every dataset should contain:
-
-```json
-{
-  "dataset_id": "...",
-  "twin_id": "...",
-  "num_sessions": 100,
-  "sampling_rate_hz": 10
-}
-```
-
----
-
-# Dataset Versioning
-
-Datasets should be versioned.
-
-Example:
-
-```text
-dataset_v1
-dataset_v2
-```
-
-This supports reproducibility and benchmarking.
-
----
-
-# Long-Term Goal
-
-Dataset generation should become one of the defining features of EPIC.
-
-Students should learn that creating high-quality datasets is often as important as building machine learning models.
+The EPIC platform must never be required to know how a participant stores or processes their data. The WebSocket stream is the only data delivery mechanism. All decisions about storage format, filtering, and feature engineering are client-side concerns.

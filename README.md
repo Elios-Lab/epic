@@ -163,7 +163,7 @@ Detailed documentation is available in the `docs/` directory.
 | [Scoring](docs/scoring.md) | Metrics, scoring policies and leaderboards |
 | [Contest Management](docs/contest-management.md) | Contest lifecycle, submissions and rankings |
 | [Contest Authoring](docs/contest-authoring.md) | Configuration-driven contest creation guide |
-| [Datasets](docs/datasets.md) | Dataset generation and export |
+| [Datasets](docs/datasets.md) | Client-side data collection via WebSocket |
 
 ---
 

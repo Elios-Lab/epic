@@ -17,9 +17,18 @@ def init_db(database_url: str) -> None:
         AsyncSessionFactory = async_sessionmaker(_engine, expire_on_commit=False)
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if AsyncSessionFactory is None:
         raise RuntimeError("Database not initialised. Call init_db() first.")
+    return AsyncSessionFactory
 
-    async with AsyncSessionFactory() as session:
+
+def get_engine() -> AsyncEngine:
+    if _engine is None:
+        raise RuntimeError("Database not initialised. Call init_db() first.")
+    return _engine
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with get_session_factory()() as session:
         yield session

@@ -50,12 +50,7 @@ class Settings(BaseSettings):
     # Simulation
     max_concurrent_sessions: int = 50
     default_sampling_rate_hz: float = 10.0
-    default_session_duration_seconds: float = 600.0
     session_queue_capacity: int = 1000
-
-    # Dataset Generation
-    dataset_storage_path: str = "./datasets"
-    max_dataset_sessions: int = 1000
 
     # Plugin Discovery
     plugin_discovery: str = "explicit"
@@ -108,12 +103,9 @@ If either is missing, Pydantic raises a `ValidationError` at startup with a clea
 | `SECRET_KEY` | — | JWT signing secret |
 | `ALGORITHM` | `HS256` | JWT signing algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT access token lifetime |
-| `MAX_CONCURRENT_SESSIONS` | `50` | Maximum concurrent simulation sessions |
-| `DEFAULT_SAMPLING_RATE_HZ` | `10.0` | Default sensor sampling rate |
-| `DEFAULT_SESSION_DURATION_SECONDS` | `600.0` | Default session duration |
-| `SESSION_QUEUE_CAPACITY` | `1000` | Max buffered observations per WebSocket session |
-| `DATASET_STORAGE_PATH` | `./datasets` | Directory for dataset export files |
-| `MAX_DATASET_SESSIONS` | `1000` | Max sessions per dataset generation request |
+| `MAX_CONCURRENT_SESSIONS` | `50` | Maximum concurrent simulation sessions (one per active contest) |
+| `DEFAULT_SAMPLING_RATE_HZ` | `10.0` | Default sensor sampling rate for new contests |
+| `SESSION_QUEUE_CAPACITY` | `1000` | Max buffered observations per WebSocket client |
 | `PLUGIN_DISCOVERY` | `explicit` | Plugin discovery mode (`explicit` or `entrypoints`) |
 
 ---

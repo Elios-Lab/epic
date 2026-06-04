@@ -13,8 +13,6 @@ The API provides access to:
 - Scenarios
 - Sensors
 - Simulation Sessions
-- Observations
-- Datasets
 - Submissions
 - Scores
 - Leaderboards
@@ -669,161 +667,31 @@ Response `200 OK`:
 
 # Simulation Sessions
 
-A session represents one execution of a digital twin.
+Each contest has one simulation session, created automatically when the contest becomes ACTIVE. Participants cannot create, modify, or delete sessions.
 
 ---
 
-## List Sessions
+## Get Contest Session
 
 ```http
-GET /api/v1/sessions
+GET /api/v1/contests/{contest_id}/session
 ```
 
-Filters:
+Returns the current simulation session for a contest.
 
-```text
-user_id
-contest_id
-twin_id
-scenario_id
-status
-```
-
----
-
-## Create Session
-
-```http
-POST /api/v1/sessions
-```
-
-Example:
+Response `200 OK`:
 
 ```json
 {
+  "session_id": "sess_abc",
+  "contest_id": "forecast_2027",
   "twin_id": "mechanical_system",
   "scenario_id": "normal_operation",
-  "mode": "TRAINING",
-  "duration_seconds": 600,
-  "sampling_rate_hz": 10
+  "sampling_rate_hz": 10.0,
+  "status": "RUNNING",
+  "started_at": "2027-01-10T00:00:00Z",
+  "ended_at": null
 }
-```
-
----
-
-## Get Session
-
-```http
-GET /api/v1/sessions/{session_id}
-```
-
----
-
-## Update Session
-
-```http
-PATCH /api/v1/sessions/{session_id}
-```
-
----
-
-## Delete Session
-
-```http
-DELETE /api/v1/sessions/{session_id}
-```
-
----
-
-# Observations
-
-Observations belong to sessions.
-
----
-
-## List Observations
-
-```http
-GET /api/v1/sessions/{session_id}/observations
-```
-
-Parameters:
-
-```text
-offset
-limit
-from_timestamp
-to_timestamp
-```
-
----
-
-## Get Observation
-
-```http
-GET /api/v1/sessions/{session_id}/observations/{observation_id}
-```
-
----
-
-# Datasets
-
-Datasets are resources generated from simulation sessions.
-
----
-
-## List Datasets
-
-```http
-GET /api/v1/datasets
-```
-
----
-
-## Create Dataset
-
-```http
-POST /api/v1/datasets
-```
-
-Example:
-
-```json
-{
-  "twin_id": "mechanical_system",
-  "scenario_ids": [
-    "normal_operation",
-    "sensor_bias"
-  ],
-  "num_sessions": 50,
-  "duration_seconds": 600,
-  "sampling_rate_hz": 10,
-  "output_format": "CSV"
-}
-```
-
----
-
-## Get Dataset
-
-```http
-GET /api/v1/datasets/{dataset_id}
-```
-
----
-
-## Download Dataset
-
-```http
-GET /api/v1/datasets/{dataset_id}/download
-```
-
----
-
-## Delete Dataset
-
-```http
-DELETE /api/v1/datasets/{dataset_id}
 ```
 
 ---
@@ -956,23 +824,25 @@ Administrator only.
 
 # WebSocket API
 
-EPIC provides real-time sensor streaming.
+The WebSocket stream is the primary way participants interact with a contest simulation. Participants connect to receive live sensor readings in real time.
 
 ---
 
-## Session Stream
+## Contest Stream
 
 ```text
-WS /api/v1/ws/sessions/{session_id}
+WS /api/v1/ws/contests/{contest_id}
 ```
 
-Message:
+Authentication: JWT token passed as a query parameter or `Authorization` header.
+
+The server streams one JSON message per simulation tick:
 
 ```json
 {
-  "timestamp": "2027-01-01T12:00:00Z",
-  "session_id": "abc123",
-  "sequence_id": 100,
+  "timestamp": "2027-01-15T10:00:00.500Z",
+  "session_id": "sess_abc",
+  "sequence_id": 500,
   "sensors": {
     "position": 0.15,
     "velocity": 1.82,
@@ -981,9 +851,11 @@ Message:
 }
 ```
 
-The sensor dictionary is generated dynamically by the selected digital twin.
+The sensor keys are determined by the digital twin configured for the contest. The API never assumes fixed sensor names.
 
-The API must never assume fixed sensor names.
+Labels and fault metadata are never included in WebSocket messages. Participants are responsible for collecting and storing the received sensor readings client-side.
+
+If the contest is not ACTIVE, the server closes the connection immediately with an appropriate error code.
 
 ---
 

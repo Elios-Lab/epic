@@ -6,7 +6,7 @@ The domain model is designed to support:
 
 - digital twin registration;
 - simulation sessions;
-- dataset generation;
+- simulation sessions;
 - contest management;
 - user registration;
 - submissions;
@@ -34,7 +34,6 @@ ScenarioMetadata
 SensorMetadata
 SimulationSession
 SensorObservation
-Dataset
 ```
 
 ---
@@ -349,31 +348,25 @@ The platform must not assume fixed sensor names.
 
 # SimulationSession
 
-Represents one execution of a digital twin.
+Represents the single shared simulation running for a contest.
+
+Each contest has exactly one `SimulationSession`. It is created automatically by the platform when the contest transitions to ACTIVE, and stopped when the contest transitions to CLOSED. Participants never create sessions directly.
+
+The session runs in real wall-clock time. Its duration is `contest.end_date - contest.start_date`. It cannot be paused, stopped, or modified by participants.
 
 ```python
 class SimulationSession:
     session_id: str
-    user_id: str
-    contest_id: str | None
+    contest_id: str         # FK to Contest, unique (1:1 relationship)
     twin_id: str
     scenario_id: str
-    mode: SessionMode
-    status: SessionStatus
-    start_time: datetime
-    end_time: datetime | None
-    duration_seconds: float
     sampling_rate_hz: float
     seed: int | None
-    metadata: dict
-```
-
-Supported modes:
-
-```text
-TRAINING
-VALIDATION
-TEST
+    status: SessionStatus
+    started_at: datetime | None
+    ended_at: datetime | None
+    created_at: datetime
+    session_metadata: dict | None
 ```
 
 Supported statuses:
@@ -383,12 +376,12 @@ CREATED
 RUNNING
 COMPLETED
 FAILED
-CANCELLED
 ```
 
 Relationships:
 
 ```text
+Contest 1 -> 1 SimulationSession
 SimulationSession 1 -> N SensorObservation
 ```
 
@@ -398,6 +391,8 @@ SimulationSession 1 -> N SensorObservation
 
 Represents one time step of observed sensor data.
 
+Observations are stored server-side for scoring purposes only. They are never exposed to participants through the API. Participants receive sensor readings exclusively through the WebSocket stream and are responsible for collecting and storing data client-side.
+
 ```python
 class SensorObservation:
     observation_id: str
@@ -405,8 +400,8 @@ class SensorObservation:
     sequence_id: int
     timestamp: datetime
     sensors: dict[str, float]
-    labels: dict | None
-    metadata: dict
+    labels: dict | None        # stored privately for scoring; never sent to participants
+    obs_metadata: dict | None
 ```
 
 The `sensors` field is intentionally generic.
@@ -421,53 +416,17 @@ Example:
 }
 ```
 
-In training mode, `labels` may include:
+`labels` always contains fault ground truth:
 
 ```json
 {
-  "is_anomaly": false,
-  "fault_type": null
+  "is_anomaly": true,
+  "fault_ids": ["increased_damping"],
+  "severities": {"increased_damping": 0.4}
 }
 ```
 
-In test mode, labels must not be exposed to participants.
-
----
-
-# Dataset
-
-Represents an exported dataset generated from simulations.
-
-```python
-class Dataset:
-    dataset_id: str
-    user_id: str
-    contest_id: str | None
-    twin_id: str
-    scenario_ids: list[str]
-    num_sessions: int
-    duration_seconds: float
-    sampling_rate_hz: float
-    output_format: DatasetFormat
-    file_path: str
-    created_at: datetime
-    metadata: dict
-```
-
-Supported formats:
-
-```text
-CSV
-JSONL
-PARQUET
-```
-
-Initially implement:
-
-```text
-CSV
-JSONL
-```
+This information is used by the scoring engine to evaluate submissions. It is never returned by any participant-facing API endpoint.
 
 ---
 
@@ -478,21 +437,18 @@ High-level relationship model:
 ```text
 User
  ├── ContestRegistration
- ├── Submission
- ├── SimulationSession
- └── Dataset
+ └── Submission
 
 Contest
  ├── ContestRegistration
  ├── Task
  ├── Submission
  ├── LeaderboardEntry
- └── SimulationSession
+ └── SimulationSession (1:1)
 
 DigitalTwinMetadata
  ├── ScenarioMetadata
- ├── SensorMetadata
- └── SimulationSession
+ └── SensorMetadata
 
 SimulationSession
  └── SensorObservation
@@ -520,7 +476,6 @@ scenarios
 sensors
 simulation_sessions
 sensor_observations
-datasets
 ```
 
 For many-to-many relationships:
@@ -574,23 +529,11 @@ Persist only:
 
 # Data Visibility Rules
 
-Training sessions may expose:
+The simulation produces sensor readings and ground-truth labels at every time step.
 
-- sensor readings;
-- labels;
-- limited fault metadata;
-- optional latent state, if explicitly enabled.
+Participants receive sensor readings only, through the WebSocket stream. Labels and latent state are never exposed to participants through any API endpoint.
 
-Validation sessions expose:
-
-- sensor readings;
-- possibly partial labels, depending on contest settings.
-
-Test sessions expose:
-
-- sensor readings only.
-
-The persistence layer may store hidden labels for scoring, but the API must not expose them to participants.
+The persistence layer stores all observations (including labels) privately for use by the scoring engine.
 
 ---
 
@@ -612,7 +555,7 @@ ScenarioMetadata(twin_id, scenario_id) unique
 
 SensorMetadata(twin_id, sensor_id) unique
 
-SimulationSession(session_id) unique
+SimulationSession(contest_id) unique   ← one session per contest
 
 Submission(submission_id) unique
 ```
@@ -640,17 +583,13 @@ submissions.submitted_at
 
 scores.submission_id
 
-simulation_sessions.user_id
 simulation_sessions.contest_id
 simulation_sessions.twin_id
-simulation_sessions.scenario_id
+simulation_sessions.status
 
 sensor_observations.session_id
 sensor_observations.timestamp
 sensor_observations.sequence_id
-
-datasets.user_id
-datasets.contest_id
 ```
 
 ---
@@ -708,7 +647,6 @@ For the first implementation, create persistence support for:
 9. SensorMetadata
 10. SimulationSession
 11. SensorObservation
-12. Dataset
 
 Keep the schema simple but extensible.
 

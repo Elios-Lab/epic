@@ -170,36 +170,39 @@ See [Plugin Registry](plugin-registry.md) for the full specification of registra
 
 A simulation session is executed by the `SimulationEngine`, an asyncio-based component in the EPIC Core.
 
-Each session runs as an independent `asyncio.Task`, allowing concurrent sessions.
+Each contest has exactly one simulation session, started automatically when the contest becomes ACTIVE and running in real wall-clock time until the contest closes.
 
 High-level flow:
 
-1. Load twin and scenario from registries
-2. Initialise latent state
-3. Parse fault schedule
-4. Loop: advance state → apply faults → observe sensors → stream/persist
-5. Transition session to COMPLETED or FAILED
+1. Contest transitions to ACTIVE → platform creates and starts the session
+2. Load twin and scenario from registries
+3. Initialise latent state
+4. Loop (wall-clock time): advance state → apply faults → observe sensors → persist privately → broadcast to WebSocket subscribers
+5. Contest transitions to CLOSED → session stops, status set to COMPLETED
 
 ```text
 Latent State
       |
       v
- twin.step()         ← state evolution (returns new state)
+ twin.step()                         ← state evolution (returns new state)
       |
       v
- fault.apply()       ← StateFault and ParameterFault (modify state in place)
+ fault.apply()                       ← StateFault and ParameterFault
       |
       v
- sensor.observe()    ← produces raw measurement
+ sensor.observe()                    ← produces raw measurement
       |
       v
- sensor_fault.apply_to_measurement()   ← SensorFault (corrupts measurement)
+ sensor_fault.apply_to_measurement() ← SensorFault
       |
       v
- SensorObservation   ← persisted + streamed
+ SensorObservation (with labels)     ← persisted privately for scoring
+      |
+      v
+ WebSocket broadcast (sensors only)  ← delivered to all connected participants
 ```
 
-See [Simulation Engine](simulation-engine.md) for the full engine specification including concurrency, WebSocket streaming, label generation, and dataset generation mode.
+See [Simulation Engine](simulation-engine.md) for the full engine specification including wall-clock timing, WebSocket broadcasting, and label storage.
 
 ---
 

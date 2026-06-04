@@ -136,6 +136,10 @@ Submissions are disabled.
 
 Contest is running.
 
+The platform automatically creates and starts the contest's simulation session. The simulation runs in real wall-clock time and cannot be paused, stopped, or modified.
+
+Participants connect via WebSocket to receive live sensor readings.
+
 Participants may submit solutions.
 
 Leaderboards are active.
@@ -146,9 +150,13 @@ Leaderboards are active.
 
 Contest has ended.
 
+The simulation session is stopped. The platform sets the session status to COMPLETED.
+
 Submissions are rejected.
 
 Scores become final.
+
+Participants can no longer connect to the WebSocket stream.
 
 ---
 
@@ -308,7 +316,7 @@ Participants may:
 
 - Register
 - Join contests
-- Generate datasets
+- Connect to contest WebSocket stream and collect data client-side
 - Submit predictions
 - View scores
 - View rankings
@@ -504,7 +512,7 @@ Each contest may provide:
 
 - documentation
 - starter code
-- dataset generation guides
+- WebSocket client examples
 - API examples
 - baseline models
 

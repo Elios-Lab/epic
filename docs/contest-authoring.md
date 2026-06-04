@@ -382,57 +382,9 @@ visibility: PUBLIC
 
 ---
 
-# Dataset Policies
+# Data Visibility
 
-Contest authors decide what participants can access.
-
-Example:
-
-```yaml
-datasets:
-
-  allow_generation: true
-
-  allow_export: true
-```
-
----
-
-# Label Visibility
-
-Training contests:
-
-```yaml
-labels:
-
-  expose_fault_labels: true
-```
-
-Research contests:
-
-```yaml
-labels:
-
-  expose_fault_labels: false
-```
-
----
-
-# Latent State Visibility
-
-Normally hidden.
-
-Educational contests may expose it.
-
-Example:
-
-```yaml
-latent_state:
-
-  exposed: true
-```
-
-Useful for introductory courses.
+Labels, fault metadata, and latent state are never exposed to participants. This is not configurable — it is a platform-level guarantee. Participants receive only sensor readings through the WebSocket stream.
 
 ---
 

@@ -247,7 +247,7 @@ Participant
 can:
 
 - Join contests
-- Generate datasets
+- Connect to contest WebSocket stream
 - Submit solutions
 
 but cannot:
@@ -493,7 +493,9 @@ Receive JWT
     ↓
 Join Contest
     ↓
-Generate Dataset
+Connect to WebSocket stream
+    ↓
+Collect data client-side
     ↓
 Submit Solution
     ↓
