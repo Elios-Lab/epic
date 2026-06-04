@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -13,11 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import epic_core.registry as registry_module
 from epic_api.dependencies import get_engine, require_organizer_or_admin
+from epic_api.utils import get_contest_or_raise
 from epic_core.db.models import Contest, SimulationSession, User
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.engine import SimulationEngine
 from epic_core.exceptions import (
-    ContestNotFoundError,
     ContestStateError,
     EPICValidationError,
     InsufficientPermissionsError,
@@ -56,7 +54,7 @@ class UpdateContestRequest(BaseModel):
 
 def contest_response(contest: Contest) -> dict:
     return {
-        "id": str(contest.id),
+        "contest_id": str(contest.id),
         "name": contest.name,
         "description": contest.description,
         "status": contest.status,
@@ -91,19 +89,6 @@ def as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
-
-
-async def get_contest_or_raise(db: AsyncSession, contest_id: str) -> Contest:
-    try:
-        contest_uuid = UUID(contest_id)
-    except ValueError as exc:
-        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist") from exc
-
-    result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
-    contest = result.scalar_one_or_none()
-    if contest is None:
-        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
-    return contest
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

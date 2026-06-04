@@ -25,7 +25,7 @@ def create_contest(client, admin_headers, name: str, status: str = "DRAFT") -> d
     contest = response.json()
     if status != "DRAFT":
         patch_response = client.patch(
-            f"/api/v1/contests/{contest['id']}",
+            f"/api/v1/contests/{contest['contest_id']}",
             json={"status": status},
             headers=admin_headers,
         )
@@ -47,11 +47,11 @@ def test_post_registers_participant_in_scheduled_contest(
 ):
     contest = create_contest(client, admin_headers, "Scheduled registration", "SCHEDULED")
 
-    response = register_for_contest(client, auth_headers, contest["id"])
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
 
     assert response.status_code == 201
     body = response.json()
-    assert body["contest_id"] == contest["id"]
+    assert body["contest_id"] == contest["contest_id"]
     assert body["user_id"] == registered_user["id"]
     assert body["status"] == "REGISTERED"
 
@@ -59,7 +59,7 @@ def test_post_registers_participant_in_scheduled_contest(
 def test_post_registers_participant_in_active_contest(client, admin_headers, auth_headers):
     contest = create_contest(client, admin_headers, "Active registration", "ACTIVE")
 
-    response = register_for_contest(client, auth_headers, contest["id"])
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
 
     assert response.status_code == 201
     assert response.json()["status"] == "REGISTERED"
@@ -68,7 +68,7 @@ def test_post_registers_participant_in_active_contest(client, admin_headers, aut
 def test_post_on_draft_contest_returns_409(client, admin_headers, auth_headers):
     contest = create_contest(client, admin_headers, "Draft registration")
 
-    response = register_for_contest(client, auth_headers, contest["id"])
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "REGISTRATION_ERROR"
@@ -76,10 +76,10 @@ def test_post_on_draft_contest_returns_409(client, admin_headers, auth_headers):
 
 def test_post_duplicate_registration_returns_409(client, admin_headers, auth_headers):
     contest = create_contest(client, admin_headers, "Duplicate registration", "SCHEDULED")
-    first_response = register_for_contest(client, auth_headers, contest["id"])
+    first_response = register_for_contest(client, auth_headers, contest["contest_id"])
     assert first_response.status_code == 201
 
-    response = register_for_contest(client, auth_headers, contest["id"])
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "REGISTRATION_ERROR"
@@ -103,7 +103,7 @@ def test_get_returns_only_authenticated_users_registrations(
     other_contest = create_contest(
         client, admin_headers, "Other registration", "SCHEDULED"
     )
-    own_registration = register_for_contest(client, auth_headers, own_contest["id"])
+    own_registration = register_for_contest(client, auth_headers, own_contest["contest_id"])
     assert own_registration.status_code == 201
 
     other_user_response = client.post(
@@ -124,7 +124,7 @@ def test_get_returns_only_authenticated_users_registrations(
         "Authorization": f"Bearer {login_response.json()['access_token']}"
     }
     other_registration = register_for_contest(
-        client, other_headers, other_contest["id"]
+        client, other_headers, other_contest["contest_id"]
     )
     assert other_registration.status_code == 201
 
@@ -139,7 +139,7 @@ def test_get_returns_only_authenticated_users_registrations(
 
 def test_delete_withdraws_registration(client, admin_headers, auth_headers):
     contest = create_contest(client, admin_headers, "Withdraw registration", "SCHEDULED")
-    registration_response = register_for_contest(client, auth_headers, contest["id"])
+    registration_response = register_for_contest(client, auth_headers, contest["contest_id"])
     assert registration_response.status_code == 201
 
     response = client.delete(
@@ -156,7 +156,7 @@ def test_delete_already_withdrawn_registration_returns_409(
     contest = create_contest(
         client, admin_headers, "Already withdrawn registration", "SCHEDULED"
     )
-    registration_response = register_for_contest(client, auth_headers, contest["id"])
+    registration_response = register_for_contest(client, auth_headers, contest["contest_id"])
     assert registration_response.status_code == 201
     registration_id = registration_response.json()["registration_id"]
     first_delete = client.delete(
@@ -172,3 +172,102 @@ def test_delete_already_withdrawn_registration_returns_409(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "REGISTRATION_ERROR"
+
+
+def test_organizer_can_filter_registrations_for_own_contest(
+    client, organizer_headers, auth_headers
+):
+    contest = create_contest(
+        client, organizer_headers, "Organizer registration filter", "SCHEDULED"
+    )
+    first_registration = register_for_contest(
+        client, auth_headers, contest["contest_id"]
+    )
+    assert first_registration.status_code == 201
+
+    other_user_response = client.post(
+        "/api/v1/users",
+        json={
+            "username": "registration-filter-user",
+            "email": "registration-filter-user@example.com",
+            "password": "other-password",
+        },
+    )
+    assert other_user_response.status_code == 201
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "registration-filter-user", "password": "other-password"},
+    )
+    assert login_response.status_code == 200
+    other_headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    second_registration = register_for_contest(
+        client, other_headers, contest["contest_id"]
+    )
+    assert second_registration.status_code == 201
+
+    response = client.get(
+        "/api/v1/contest-registrations",
+        params={"contest_id": contest["contest_id"]},
+        headers=organizer_headers,
+    )
+
+    assert response.status_code == 200
+    registration_ids = {
+        registration["registration_id"]
+        for registration in response.json()["registrations"]
+    }
+    assert first_registration.json()["registration_id"] in registration_ids
+    assert second_registration.json()["registration_id"] in registration_ids
+
+
+def test_participant_contest_filter_returns_only_own_registrations(
+    client, admin_headers, auth_headers
+):
+    own_contest = create_contest(
+        client, admin_headers, "Participant own registration filter", "SCHEDULED"
+    )
+    other_contest = create_contest(
+        client, admin_headers, "Participant other registration filter", "SCHEDULED"
+    )
+    own_registration = register_for_contest(
+        client, auth_headers, own_contest["contest_id"]
+    )
+    assert own_registration.status_code == 201
+
+    other_user_response = client.post(
+        "/api/v1/users",
+        json={
+            "username": "participant-filter-user",
+            "email": "participant-filter-user@example.com",
+            "password": "other-password",
+        },
+    )
+    assert other_user_response.status_code == 201
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "participant-filter-user", "password": "other-password"},
+    )
+    assert login_response.status_code == 200
+    other_headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    other_registration = register_for_contest(
+        client, other_headers, other_contest["contest_id"]
+    )
+    assert other_registration.status_code == 201
+
+    response = client.get(
+        "/api/v1/contest-registrations",
+        params={"contest_id": other_contest["contest_id"]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    registration_ids = {
+        registration["registration_id"]
+        for registration in response.json()["registrations"]
+    }
+    assert own_registration.json()["registration_id"] in registration_ids
+    assert other_registration.json()["registration_id"] not in registration_ids

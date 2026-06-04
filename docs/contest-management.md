@@ -355,14 +355,18 @@ class Submission:
 
     task_id: str
 
-    submitted_at: datetime
+    submitted_at: datetime              # set by the server
+
+    prediction_from_sequence: int       # temporal integrity anchor
 
     payload: dict
 
     status: SubmissionStatus
 
-    metadata: dict
+    submission_metadata: dict | None
 ```
+
+`prediction_from_sequence` is the `sequence_id` of the last observation the participant used to build their prediction. The server validates at submission time that this sequence_id was published before `submitted_at`. See [Scoring](scoring.md) for the full explanation.
 
 Scores are stored separately as `Score` entities linked to the submission.
 

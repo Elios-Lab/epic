@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import epic_core.registry as registry_module
 from epic_api.dependencies import get_current_user
+from epic_api.utils import get_contest_or_raise, parse_uuid
 from epic_core.db.models import (
     Contest,
     ContestRegistration,
@@ -25,7 +26,6 @@ from epic_core.db.models import (
 )
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.exceptions import (
-    ContestNotFoundError,
     ContestStateError,
     InsufficientPermissionsError,
     RegistrationError,
@@ -39,13 +39,6 @@ class CreateSubmissionRequest(BaseModel):
     task_id: str
     prediction_from_sequence: int
     payload: dict
-
-
-def parse_uuid(value: str, error_cls, message: str) -> UUID:
-    try:
-        return UUID(value)
-    except ValueError as exc:
-        raise error_cls(message) from exc
 
 
 def submission_summary(submission: Submission) -> dict:
@@ -216,19 +209,6 @@ async def _update_leaderboard(
         for rank, leaderboard_entry in enumerate(result.scalars(), start=1):
             leaderboard_entry.rank = rank
         await db.commit()
-
-
-async def get_contest_or_raise(db: AsyncSession, contest_id: str) -> Contest:
-    contest_uuid = parse_uuid(
-        contest_id,
-        ContestNotFoundError,
-        f"Contest '{contest_id}' does not exist",
-    )
-    result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
-    contest = result.scalar_one_or_none()
-    if contest is None:
-        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
-    return contest
 
 
 async def ensure_registered(

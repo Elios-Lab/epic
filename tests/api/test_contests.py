@@ -198,8 +198,8 @@ def test_list_contests_returns_created_contest(client, admin_headers):
     assert response.status_code == 200
     body = response.json()
     assert body["total"] >= 1
-    contest_ids = {item["id"] for item in body["contests"]}
-    assert contest["id"] in contest_ids
+    contest_ids = {item["contest_id"] for item in body["contests"]}
+    assert contest["contest_id"] in contest_ids
 
 
 def test_list_contests_with_status_filter_returns_matching_contests(
@@ -208,7 +208,7 @@ def test_list_contests_with_status_filter_returns_matching_contests(
     draft = create_contest(client, admin_headers, name="Draft contest")
     scheduled = create_contest(client, admin_headers, name="Scheduled contest")
     schedule_response = client.patch(
-        f"/api/v1/contests/{scheduled['id']}",
+        f"/api/v1/contests/{scheduled['contest_id']}",
         json={"status": "SCHEDULED"},
         headers=admin_headers,
     )
@@ -219,18 +219,18 @@ def test_list_contests_with_status_filter_returns_matching_contests(
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 1
-    contest_ids = {item["id"] for item in body["contests"]}
-    assert draft["id"] in contest_ids
-    assert scheduled["id"] not in contest_ids
+    contest_ids = {item["contest_id"] for item in body["contests"]}
+    assert draft["contest_id"] in contest_ids
+    assert scheduled["contest_id"] not in contest_ids
 
 
 def test_get_contest_returns_contest(client, admin_headers):
     contest = create_contest(client, admin_headers)
 
-    response = client.get(f"/api/v1/contests/{contest['id']}")
+    response = client.get(f"/api/v1/contests/{contest['contest_id']}")
 
     assert response.status_code == 200
-    assert response.json()["id"] == contest["id"]
+    assert response.json()["contest_id"] == contest["contest_id"]
 
 
 def test_get_nonexistent_contest_returns_404(client):
@@ -244,7 +244,7 @@ def test_patch_draft_to_active_creates_session(client, admin_headers, db_factory
     contest = create_contest(client, admin_headers)
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=admin_headers,
     )
@@ -256,7 +256,7 @@ def test_patch_draft_to_active_creates_session(client, admin_headers, db_factory
         async with db_factory() as db:
             result = await db.execute(
                 select(SimulationSession).where(
-                    SimulationSession.contest_id == UUID(contest["id"])
+                    SimulationSession.contest_id == UUID(contest["contest_id"])
                 )
             )
             return result.scalar_one_or_none()
@@ -273,7 +273,7 @@ def test_patch_contest_by_creator_organizer_returns_200(client, organizer_header
     )
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "SCHEDULED"},
         headers=organizer_headers,
     )
@@ -298,7 +298,7 @@ def test_patch_contest_by_different_organizer_returns_403(
     )
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "SCHEDULED"},
         headers=other_organizer_headers,
     )
@@ -311,7 +311,7 @@ def test_patch_draft_to_closed_returns_409(client, admin_headers):
     contest = create_contest(client, admin_headers)
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "CLOSED"},
         headers=admin_headers,
     )
@@ -329,7 +329,7 @@ def test_patch_end_date_on_active_contest_updates_deadline(client, admin_headers
         end_date=(now + timedelta(seconds=3)).isoformat(),
     )
     active_response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=admin_headers,
     )
@@ -337,7 +337,7 @@ def test_patch_end_date_on_active_contest_updates_deadline(client, admin_headers
 
     new_end_date = datetime.now(timezone.utc) + timedelta(seconds=5)
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"end_date": new_end_date.isoformat()},
         headers=admin_headers,
     )
@@ -359,14 +359,14 @@ def test_patch_end_date_with_past_date_returns_422(client, admin_headers):
         end_date=(now + timedelta(seconds=3)).isoformat(),
     )
     active_response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=admin_headers,
     )
     assert active_response.status_code == 200
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"end_date": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()},
         headers=admin_headers,
     )
@@ -379,7 +379,7 @@ def test_patch_contest_as_participant_returns_403(client, admin_headers, auth_he
     contest = create_contest(client, admin_headers)
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=auth_headers,
     )
@@ -390,14 +390,14 @@ def test_patch_contest_as_participant_returns_403(client, admin_headers, auth_he
 def test_patch_active_to_closed_sets_end_date(client, admin_headers):
     contest = create_contest(client, admin_headers)
     active_response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=admin_headers,
     )
     assert active_response.status_code == 200
 
     response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "CLOSED"},
         headers=admin_headers,
     )
@@ -418,12 +418,12 @@ def test_organizer_sees_all_own_contest_submissions_participant_sees_own(
         end_date=(datetime.now(timezone.utc) + timedelta(seconds=3)).isoformat(),
     )
     active_response = client.patch(
-        f"/api/v1/contests/{contest['id']}",
+        f"/api/v1/contests/{contest['contest_id']}",
         json={"status": "ACTIVE"},
         headers=organizer_headers,
     )
     assert active_response.status_code == 200
-    add_observation_for_contest(db_factory, contest["id"])
+    add_observation_for_contest(db_factory, contest["contest_id"])
 
     other_headers = create_user_headers(
         client,
@@ -431,17 +431,17 @@ def test_organizer_sees_all_own_contest_submissions_participant_sees_own(
         "student-for-organizer-view@example.com",
         "participant-password",
     )
-    register_for_contest(client, auth_headers, contest["id"])
-    register_for_contest(client, other_headers, contest["id"])
-    own_submission = submit_for_contest(client, auth_headers, contest["id"])
-    other_submission = submit_for_contest(client, other_headers, contest["id"])
+    register_for_contest(client, auth_headers, contest["contest_id"])
+    register_for_contest(client, other_headers, contest["contest_id"])
+    own_submission = submit_for_contest(client, auth_headers, contest["contest_id"])
+    other_submission = submit_for_contest(client, other_headers, contest["contest_id"])
 
     organizer_response = client.get(
-        f"/api/v1/contests/{contest['id']}/submissions",
+        f"/api/v1/contests/{contest['contest_id']}/submissions",
         headers=organizer_headers,
     )
     participant_response = client.get(
-        f"/api/v1/contests/{contest['id']}/submissions",
+        f"/api/v1/contests/{contest['contest_id']}/submissions",
         headers=auth_headers,
     )
 

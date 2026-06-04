@@ -271,23 +271,24 @@ Success criteria:
 
 ---
 
-## Phase 2 – Contest Platform
+## Phase 2 – Contest Platform ✅
 
 Goal: Enable participants to compete and be evaluated.
 
 Deliverables:
 
-- Contest registration (participants join contests)
-- Submission management
-- Scoring framework and metric evaluation
-- Leaderboards with automatic updates
-- Public and private score separation
+- Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT
+- Contest registration (participants join SCHEDULED or ACTIVE contests)
+- Submission management with temporal integrity anchor (prediction_from_sequence)
+- MAE scoring against privately stored ground-truth observations
+- Leaderboards with automatic ranking after each scored submission
+- Deadline extension for organizers and admins
 
 Success criteria:
 
 - Multiple users can participate in competitions.
 - Leaderboards update automatically after submissions.
-- Contest deadlines are enforced.
+- Submissions are verified as temporally honest (not post-hoc).
 
 ---
 
@@ -297,17 +298,18 @@ Goal: Improve realism and simulation richness.
 
 Deliverables:
 
-- Advanced sensor models
-- Sensor drift
-- Quantization
-- Latency
-- Fault scheduling
+- Sensor drift (linear, random walk)
+- Sensor latency
+- Sensor quantization and filtering
 - Multiple simultaneous faults
-- Scenario composition
+- Fault severity evolution models (sudden, gradual, intermittent)
+- Scenario composition (combine multiple fault schedules)
+- Additional fault types for the mechanical twin
 
 Success criteria:
 
-- Realistic forecasting and anomaly detection tasks become possible.
+- Realistic anomaly detection and forecasting challenges become possible.
+- A student cannot trivially distinguish sensor noise from a genuine fault.
 
 ---
 

@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user
-from epic_core.db.models import Contest, ContestRegistration, User
+from epic_api.utils import get_contest_or_raise, parse_uuid
+from epic_core.db.models import ContestRegistration, User
 from epic_core.db.session import get_db
 from epic_core.exceptions import (
-    ContestNotFoundError,
     InsufficientPermissionsError,
     RegistrationError,
-    SessionNotFoundError,
 )
 
 router = APIRouter(prefix="/contest-registrations", tags=["contest-registrations"])
@@ -36,19 +33,12 @@ def registration_response(registration: ContestRegistration) -> dict:
     }
 
 
-def parse_uuid(value: str, error_cls, message: str) -> UUID:
-    try:
-        return UUID(value)
-    except ValueError as exc:
-        raise error_cls(message) from exc
-
-
 async def get_registration_or_raise(
     db: AsyncSession, registration_id: str
 ) -> ContestRegistration:
     registration_uuid = parse_uuid(
         registration_id,
-        SessionNotFoundError,
+        RegistrationError,
         f"Registration '{registration_id}' does not exist",
     )
     result = await db.execute(
@@ -56,7 +46,7 @@ async def get_registration_or_raise(
     )
     registration = result.scalar_one_or_none()
     if registration is None:
-        raise SessionNotFoundError(f"Registration '{registration_id}' does not exist")
+        raise RegistrationError(f"Registration '{registration_id}' does not exist")
     return registration
 
 
@@ -71,15 +61,7 @@ async def create_registration(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    contest_uuid = parse_uuid(
-        request.contest_id,
-        ContestNotFoundError,
-        f"Contest '{request.contest_id}' does not exist",
-    )
-    contest_result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
-    contest = contest_result.scalar_one_or_none()
-    if contest is None:
-        raise ContestNotFoundError(f"Contest '{request.contest_id}' does not exist")
+    contest = await get_contest_or_raise(db, request.contest_id)
     if contest.status not in {"SCHEDULED", "ACTIVE"}:
         raise RegistrationError("Contest is not open for registration")
 
@@ -106,6 +88,7 @@ async def create_registration(
 @router.get("")
 async def list_registrations(
     user_id: str | None = Query(None),
+    contest_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -114,8 +97,16 @@ async def list_registrations(
         if user_id is not None:
             query = query.where(
                 ContestRegistration.user_id
-                == parse_uuid(user_id, SessionNotFoundError, f"User '{user_id}' does not exist")
+                == parse_uuid(user_id, RegistrationError, f"User '{user_id}' does not exist")
             )
+        if contest_id is not None:
+            contest = await get_contest_or_raise(db, contest_id)
+            query = query.where(ContestRegistration.contest_id == contest.id)
+    elif current_user.role == "ORGANIZER" and contest_id is not None:
+        contest = await get_contest_or_raise(db, contest_id)
+        if contest.created_by != current_user.username:
+            raise InsufficientPermissionsError("Registration access denied")
+        query = query.where(ContestRegistration.contest_id == contest.id)
     else:
         query = query.where(ContestRegistration.user_id == current_user.id)
 

@@ -151,6 +151,12 @@ sequence_id = prediction_from_sequence + H
 
 These observations are loaded from the server's private `SensorObservation` store.
 
+## PENDING Submissions
+
+If one or more horizon observations have not yet been produced by the simulation at the time of scoring (because the participant submitted very close to the current simulation time), the submission status is set to `PENDING` and scoring is deferred.
+
+**Known limitation (Phase 2):** there is currently no background job that automatically retries PENDING submissions when the missing observations become available. A participant whose submission lands in PENDING must wait until the organizer or administrator manually re-triggers evaluation, or resubmit. A retry mechanism is planned for Phase 3.
+
 ## What This Mechanism Does Not Prevent
 
 The temporal anchor does not prevent **collusion**: one participant sharing their collected data or trained model with another. EPIC is an educational platform — preventing collusion entirely is a policy and academic integrity matter, not a technical one. Instructors can detect identical or near-identical submissions through post-hoc similarity analysis.

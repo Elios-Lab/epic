@@ -2,29 +2,21 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user
-from epic_core.db.models import Contest, LeaderboardEntry, User
+from epic_api.utils import get_contest_or_raise, parse_uuid
+from epic_core.db.models import LeaderboardEntry, User
 from epic_core.db.session import get_db
 from epic_core.exceptions import (
     ContestNotFoundError,
     InsufficientPermissionsError,
-    SessionNotFoundError,
+    RegistrationError,
 )
 
 router = APIRouter(prefix="/contests", tags=["leaderboard"])
-
-
-def parse_uuid(value: str, error_cls, message: str) -> UUID:
-    try:
-        return UUID(value)
-    except ValueError as exc:
-        raise error_cls(message) from exc
 
 
 def leaderboard_entry_response(entry: LeaderboardEntry, user: User) -> dict:
@@ -36,19 +28,6 @@ def leaderboard_entry_response(entry: LeaderboardEntry, user: User) -> dict:
         "score": entry.score,
         "updated_at": entry.updated_at.isoformat(),
     }
-
-
-async def get_contest_or_raise(db: AsyncSession, contest_id: str) -> Contest:
-    contest_uuid = parse_uuid(
-        contest_id,
-        ContestNotFoundError,
-        f"Contest '{contest_id}' does not exist",
-    )
-    result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
-    contest = result.scalar_one_or_none()
-    if contest is None:
-        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
-    return contest
 
 
 @router.get("/{contest_id}/leaderboard")
@@ -81,7 +60,7 @@ async def get_user_leaderboard_entry(
     contest = await get_contest_or_raise(db, contest_id)
     target_user_id = parse_uuid(
         user_id,
-        SessionNotFoundError,
+        ContestNotFoundError,
         f"Leaderboard entry for user '{user_id}' does not exist",
     )
     if current_user.role == "PARTICIPANT" and current_user.id != target_user_id:
@@ -99,8 +78,6 @@ async def get_user_leaderboard_entry(
     )
     row = result.one_or_none()
     if row is None:
-        raise SessionNotFoundError(
-            f"Leaderboard entry for user '{user_id}' does not exist"
-        )
+        raise RegistrationError("No leaderboard entry found")
     entry, user = row
     return leaderboard_entry_response(entry, user)
