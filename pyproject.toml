@@ -3,9 +3,15 @@ name = "epic"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "aiosqlite",
+    "alembic",
+    "bcrypt<5",
     "fastapi",
     "numpy",
+    "passlib[bcrypt]",
     "pydantic-settings",
+    "python-jose[cryptography]",
+    "sqlalchemy[asyncio]",
     "uvicorn[standard]",
 ]
 
@@ -13,5 +19,6 @@ dependencies = [
 dev = [
     "httpx2",
     "pytest",
+    "pytest-asyncio",
     "pytest-cov",
 ]
