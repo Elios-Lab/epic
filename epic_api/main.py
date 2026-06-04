@@ -6,7 +6,16 @@ from fastapi import FastAPI
 
 from epic_api import dependencies
 from epic_api.errors import register_exception_handlers
-from epic_api.routers import auth, contests, registrations, sessions, twins, users, ws
+from epic_api.routers import (
+    auth,
+    contests,
+    registrations,
+    sessions,
+    submissions,
+    twins,
+    users,
+    ws,
+)
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.config import Settings, get_settings
 from epic_core.db.base import create_all_tables
@@ -40,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(contests.router, prefix="/api/v1")
     app.include_router(registrations.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")
+    app.include_router(submissions.router, prefix="/api/v1")
     app.include_router(twins.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(ws.router, prefix="/api/v1/ws")

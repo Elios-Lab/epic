@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import epic_core.registry as registry_module
-from epic_api.dependencies import get_current_user, get_engine
+from epic_api.dependencies import get_engine, require_organizer_or_admin
 from epic_core.db.models import Contest, SimulationSession, User
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.engine import SimulationEngine
@@ -68,11 +68,6 @@ def contest_response(contest: Contest) -> dict:
     }
 
 
-def require_admin(user: User) -> None:
-    if user.role != "ADMINISTRATOR":
-        raise InsufficientPermissionsError("Administrator privileges required")
-
-
 def validate_twin_and_scenario(twin_id: str, scenario_id: str) -> None:
     twin = registry_module.twin_registry.get(twin_id)
     if not any(scenario.scenario_id == scenario_id for scenario in twin.get_scenarios()):
@@ -106,10 +101,9 @@ async def get_contest_or_raise(db: AsyncSession, contest_id: str) -> Contest:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_contest(
     request: CreateContestRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_organizer_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    require_admin(current_user)
     validate_twin_and_scenario(request.twin_id, request.scenario_id)
     validate_visibility(request.visibility)
     if request.end_date <= request.start_date:
@@ -171,12 +165,15 @@ async def get_contest(
 async def update_contest(
     contest_id: str,
     request: UpdateContestRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_organizer_or_admin),
     db: AsyncSession = Depends(get_db),
     engine: SimulationEngine = Depends(get_engine),
 ):
-    require_admin(current_user)
     contest = await get_contest_or_raise(db, contest_id)
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.username:
+        raise InsufficientPermissionsError(
+            "Organizers can only modify their own contests"
+        )
 
     if request.status is None and request.end_date is None:
         raise EPICValidationError("Request must include status or end_date")

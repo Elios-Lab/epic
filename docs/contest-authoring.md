@@ -406,7 +406,7 @@ lifecycle:
 
 # Deadline Extensions
 
-Administrators must be able to modify:
+Organizers (for own contests) and administrators must be able to modify:
 
 ```yaml
 contest_end

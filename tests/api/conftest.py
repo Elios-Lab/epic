@@ -102,5 +102,46 @@ def admin_headers(client, registered_admin):
 
 
 @pytest.fixture
+def registered_organizer(client):
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "username": "organizer1",
+            "email": "organizer@example.com",
+            "password": "organizer-password",
+        },
+    )
+    assert response.status_code == 201
+
+    async def promote_organizer():
+        async with get_session_factory()() as db:
+            result = await db.execute(select(User).where(User.username == "organizer1"))
+            user = result.scalar_one()
+            user.role = "ORGANIZER"
+            await db.commit()
+            await db.refresh(user)
+            return user
+
+    asyncio.run(promote_organizer())
+    user = response.json()
+    user["role"] = "ORGANIZER"
+    return user
+
+
+@pytest.fixture
+def organizer_headers(client, registered_organizer):
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": registered_organizer["username"],
+            "password": "organizer-password",
+        },
+    )
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 def db_factory(client):
     return get_session_factory()

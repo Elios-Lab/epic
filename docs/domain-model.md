@@ -56,17 +56,15 @@ class User:
 Supported roles:
 
 ```text
-ADMINISTRATOR
-PARTICIPANT
+ADMINISTRATOR   ← full platform management
+ORGANIZER       ← creates and manages own contests
+PARTICIPANT     ← registers for contests and submits predictions
 ```
 
-Future roles:
+Future roles (Phase 4+):
 
 ```text
-INSTRUCTOR
-TEACHING_ASSISTANT
-JUDGE
-RESEARCHER
+EXPERT          ← registers digital twin and sensor plugins at runtime
 ```
 
 Relationships:

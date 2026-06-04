@@ -221,7 +221,7 @@ class Task:
 
 # Contest Configuration
 
-Administrators must be able to configure:
+Organizers and administrators must be able to configure:
 
 - title
 - description
@@ -277,49 +277,38 @@ See [Domain Model](domain-model.md) for the full definition.
 
 # Roles
 
-Supported roles:
-
 ```text
-ADMINISTRATOR
-PARTICIPANT
-```
-
-Future roles:
-
-```text
-INSTRUCTOR
-TEACHING_ASSISTANT
-JUDGE
-RESEARCHER
+ADMINISTRATOR   ← full platform management
+ORGANIZER       ← creates and manages own contests
+PARTICIPANT     ← registers for contests and submits predictions
 ```
 
 ---
 
 # Administrator Permissions
 
-Administrators may:
+- Full control over all contests and all users
+- Everything an ORGANIZER can do, platform-wide
+
+---
+
+# Organizer Permissions
 
 - Create contests
-- Modify contests
-- Publish contests
-- Close contests
-- Extend deadlines
-- Inspect submissions
-- Manage users
-- Manage leaderboards
+- Manage own contests through full lifecycle (DRAFT → ACTIVE → CLOSED)
+- Extend deadlines on own contests
+- View all submissions to own contests
+- Cannot modify other organizers' contests
+- Cannot manage users
 
 ---
 
 # Participant Permissions
 
-Participants may:
-
-- Register
-- Join contests
+- Register for contests (SCHEDULED or ACTIVE)
 - Connect to contest WebSocket stream and collect data client-side
-- Submit predictions
-- View scores
-- View rankings
+- Submit predictions with temporal anchor
+- View own scores and rankings
 
 ---
 
@@ -556,7 +545,7 @@ allowed_scenarios = [
 
 # Deadline Management
 
-Administrators must be able to modify:
+Organizers (for own contests) and administrators must be able to modify:
 
 - start date
 - end date

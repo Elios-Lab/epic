@@ -12,7 +12,7 @@ from epic_core.auth import decode_access_token
 from epic_core.config import Settings, get_settings as core_get_settings
 from epic_core.db.models import User
 from epic_core.db.session import get_db
-from epic_core.exceptions import InvalidCredentialsError
+from epic_core.exceptions import InsufficientPermissionsError, InvalidCredentialsError
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -49,3 +49,21 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise InvalidCredentialsError("Invalid credentials")
     return user
+
+
+async def require_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role != "ADMINISTRATOR":
+        raise InsufficientPermissionsError("Administrator privileges required")
+    return current_user
+
+
+async def require_organizer_or_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role not in {"ADMINISTRATOR", "ORGANIZER"}:
+        raise InsufficientPermissionsError(
+            "ORGANIZER or ADMINISTRATOR privileges required"
+        )
+    return current_user

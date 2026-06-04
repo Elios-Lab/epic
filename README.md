@@ -125,18 +125,19 @@ Future twins may include:
 
 ```text
 epic/
-
-├── epic_core/
-├── epic_api/
-├── epic_auth/
-├── epic_contests/
-├── epic_twins/
-├── epic_sensors/
-├── epic_faults/
-├── epic_scoring/
-├── epic_storage/
-├── docs/
-└── tests/
+├── epic_core/          ← interfaces, registry, engine, broadcaster, db models, auth
+│   └── db/             ← SQLAlchemy models and session management
+├── epic_api/           ← FastAPI application, routers, dependencies, error handling
+│   └── routers/        ← twins, auth, users, contests, registrations, submissions, ws
+├── epic_twins/         ← digital twin plugins
+│   └── mechanical/     ← mass-spring-damper twin, sensors, faults, scenarios
+├── alembic/            ← database migrations
+│   └── versions/
+├── docs/               ← architecture and API documentation
+└── tests/              ← unit, integration, and API tests
+    ├── core/
+    ├── api/
+    └── twins/
 ```
 
 ---

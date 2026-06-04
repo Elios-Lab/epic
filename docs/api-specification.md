@@ -214,7 +214,7 @@ offset
 POST /api/v1/contests
 ```
 
-Administrator only.
+ORGANIZER or ADMINISTRATOR.
 
 Request:
 
@@ -272,7 +272,7 @@ Response `200 OK`:
 PATCH /api/v1/contests/{contest_id}
 ```
 
-Administrator only.
+ORGANIZER (own contest) or ADMINISTRATOR.
 
 Typical updates:
 
@@ -360,7 +360,7 @@ GET /api/v1/contests/{contest_id}/tasks
 POST /api/v1/contests/{contest_id}/tasks
 ```
 
-Administrator only.
+ORGANIZER (own contest) or ADMINISTRATOR.
 
 ---
 
@@ -402,7 +402,8 @@ Participants register by creating a registration.
 GET /api/v1/contest-registrations
 ```
 
-Administrator only.
+Without filters: returns the authenticated user's own registrations.
+With `contest_id` filter: ORGANIZER (own contest) or ADMINISTRATOR can see all registrations for a contest.
 
 Filters:
 
@@ -822,7 +823,7 @@ Response `200 OK`:
 GET /api/v1/contests/{contest_id}/scores
 ```
 
-Administrator only.
+ORGANIZER (own contest) or ADMINISTRATOR.
 
 ---
 

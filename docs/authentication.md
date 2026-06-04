@@ -171,7 +171,7 @@ Example payload:
 {
   "sub": "user_id",
   "username": "student1",
-  "role": "participant",
+  "role": "PARTICIPANT",
   "exp": 1700000000
 }
 ```
@@ -208,7 +208,7 @@ Example response:
 {
   "user_id": "123",
   "username": "student1",
-  "role": "participant"
+  "role": "PARTICIPANT"
 }
 ```
 
@@ -216,21 +216,22 @@ Example response:
 
 # Roles
 
-The first implementation should support:
+Supported roles:
 
 ```text
-ADMINISTRATOR
-PARTICIPANT
+ADMINISTRATOR   ← full platform management (users, system settings)
+ORGANIZER       ← creates and manages own contests
+PARTICIPANT     ← registers for contests, collects data, submits predictions
 ```
 
-Future versions may add:
+Future roles (Phase 4+):
 
 ```text
-INSTRUCTOR
-TEACHING_ASSISTANT
-JUDGE
-RESEARCHER
+EXPERT          ← registers new digital twin and sensor plugins at runtime
 ```
+
+The role names are intentionally domain-independent. ORGANIZER can be a professor,
+researcher, or company. PARTICIPANT can be a student, engineer, or external competitor.
 
 ---
 
@@ -238,55 +239,42 @@ RESEARCHER
 
 Authorization is based on roles.
 
-Example:
+## PARTICIPANT can:
 
-```text
-Participant
-```
+- Register for contests (SCHEDULED or ACTIVE)
+- Connect to contest WebSocket stream and collect data client-side
+- Submit predictions (with temporal integrity anchor)
+- View own registrations, submissions, and scores
 
-can:
-
-- Join contests
-- Connect to contest WebSocket stream
-- Submit solutions
-
-but cannot:
+## ORGANIZER can:
 
 - Create contests
-- Modify contests
-- Delete contests
+- Manage own contests through full lifecycle (DRAFT → ACTIVE → CLOSED)
+- Extend deadlines on own contests
+- View all submissions to own contests (for evaluation and grading)
+- Cannot modify contests created by other organizers
+- Cannot manage users
 
----
+## ADMINISTRATOR can:
 
-# Administrator Permissions
-
-Administrators can:
-
-- Create contests
-- Modify contests
-- Publish contests
-- Close contests
-- Extend deadlines
-- Manage users
-- Inspect submissions
-- Configure scoring
+- Everything an ORGANIZER can do, across all contests
+- Manage all users (create, deactivate, change roles)
+- Inspect all submissions and scores platform-wide
+- Override any contest configuration
 
 ---
 
 # Protected Endpoints
 
-Administrative endpoints require administrator privileges.
+Contest management endpoints require ORGANIZER or ADMINISTRATOR role.
+User management endpoints require ADMINISTRATOR role.
 
-Example:
+Examples:
 
 ```http
-POST /api/v1/contests
-```
-
-Authorization:
-
-```text
-ADMINISTRATOR ONLY
+POST /api/v1/contests        ← ORGANIZER or ADMINISTRATOR
+PATCH /api/v1/contests/{id}  ← ORGANIZER (own contest) or ADMINISTRATOR
+GET  /api/v1/users           ← ADMINISTRATOR only
 ```
 
 ---
