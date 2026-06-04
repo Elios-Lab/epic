@@ -32,12 +32,7 @@ class Settings(BaseSettings):
     # Simulation
     max_concurrent_sessions: int = 50
     default_sampling_rate_hz: float = 10.0
-    default_session_duration_seconds: float = 600.0
     session_queue_capacity: int = 1000
-
-    # Dataset Generation
-    dataset_storage_path: str = "./datasets"
-    max_dataset_sessions: int = 1000
 
     # Plugin Discovery
     plugin_discovery: str = "explicit"

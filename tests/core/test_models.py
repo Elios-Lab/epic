@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from epic_core.db.base import create_all_tables, create_engine
-from epic_core.db.models import SensorObservation, SimulationSession, User
+from epic_core.db.models import Contest, SensorObservation, SimulationSession, User
 import epic_core.db.session as db_session_module
 
 
@@ -45,6 +45,23 @@ def _user(username: str = "alice", email: str = "alice@example.com") -> User:
     )
 
 
+def _contest(name: str = "Contest") -> Contest:
+    return Contest(
+        name=name,
+        twin_id="mechanical_system",
+        scenario_id="normal_operation",
+        sampling_rate_hz=10.0,
+    )
+
+
+async def _create_contest(db_session, name: str = "Contest") -> Contest:
+    contest = _contest(name=name)
+    db_session.add(contest)
+    await db_session.commit()
+    await db_session.refresh(contest)
+    return contest
+
+
 async def _create_user(db_session, username: str = "alice") -> User:
     user = _user(username=username, email=f"{username}@example.com")
     db_session.add(user)
@@ -53,14 +70,14 @@ async def _create_user(db_session, username: str = "alice") -> User:
     return user
 
 
-async def _create_simulation_session(db_session, user: User) -> SimulationSession:
+async def _create_simulation_session(
+    db_session, contest: Contest
+) -> SimulationSession:
     session = SimulationSession(
-        user_id=user.id,
-        twin_id="mechanical_system",
-        scenario_id="normal_operation",
-        mode="TRAINING",
-        sampling_rate_hz=10.0,
-        duration_seconds=60.0,
+        contest_id=contest.id,
+        twin_id=contest.twin_id,
+        scenario_id=contest.scenario_id,
+        sampling_rate_hz=contest.sampling_rate_hz,
         session_metadata={"source": "test"},
     )
     db_session.add(session)
@@ -105,39 +122,59 @@ async def test_email_uniqueness_constraint_raises_integrity_error(db_session):
 
 
 @pytest.mark.asyncio
+async def test_create_contest_and_query_by_name(db_session):
+    contest = await _create_contest(db_session, name="Model Contest")
+
+    result = await db_session.execute(
+        select(Contest).where(Contest.name == "Model Contest")
+    )
+    queried_contest = result.scalar_one()
+
+    assert queried_contest.id == contest.id
+    assert queried_contest.twin_id == "mechanical_system"
+
+
+@pytest.mark.asyncio
+async def test_contest_default_status_is_draft(db_session):
+    contest = await _create_contest(db_session, name="Draft Contest")
+
+    assert contest.status == "DRAFT"
+
+
+@pytest.mark.asyncio
 async def test_create_simulation_session_and_query_it_back(db_session):
-    user = await _create_user(db_session, username="session_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Session Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
 
     result = await db_session.execute(
         select(SimulationSession).where(SimulationSession.id == simulation_session.id)
     )
     queried_session = result.scalar_one()
 
-    assert queried_session.user_id == user.id
+    assert queried_session.contest_id == contest.id
     assert queried_session.twin_id == "mechanical_system"
 
 
 @pytest.mark.asyncio
 async def test_simulation_session_default_status_is_created(db_session):
-    user = await _create_user(db_session, username="status_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Status Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
 
     assert simulation_session.status == "CREATED"
 
 
 @pytest.mark.asyncio
 async def test_simulation_session_metadata_stores_dict(db_session):
-    user = await _create_user(db_session, username="metadata_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Metadata Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
 
     assert simulation_session.session_metadata == {"source": "test"}
 
 
 @pytest.mark.asyncio
 async def test_create_sensor_observation_and_query_it_back(db_session):
-    user = await _create_user(db_session, username="observation_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Observation Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
     observation = SensorObservation(
         session_id=simulation_session.id,
         sequence_id=1,
@@ -159,8 +196,8 @@ async def test_create_sensor_observation_and_query_it_back(db_session):
 
 @pytest.mark.asyncio
 async def test_sensor_observation_sensors_store_dict(db_session):
-    user = await _create_user(db_session, username="sensors_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Sensors Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
     observation = SensorObservation(
         session_id=simulation_session.id,
         sequence_id=2,
@@ -176,8 +213,8 @@ async def test_sensor_observation_sensors_store_dict(db_session):
 
 @pytest.mark.asyncio
 async def test_sensor_observation_labels_are_nullable(db_session):
-    user = await _create_user(db_session, username="labels_user")
-    simulation_session = await _create_simulation_session(db_session, user)
+    contest = await _create_contest(db_session, name="Labels Contest")
+    simulation_session = await _create_simulation_session(db_session, contest)
     observation = SensorObservation(
         session_id=simulation_session.id,
         sequence_id=3,

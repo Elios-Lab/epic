@@ -51,24 +51,58 @@ class User(Base):
     )
 
 
+class Contest(Base):
+    __tablename__ = "contests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(
+        String(256), unique=True, nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="DRAFT", index=True
+    )
+    twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    sampling_rate_hz: Mapped[float] = mapped_column(
+        Float, nullable=False, default=10.0
+    )
+    start_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    end_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+
 class SimulationSession(Base):
     __tablename__ = "simulation_sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("contests.id"),
+        nullable=False,
+        unique=True,
+        index=True,
     )
-    twin_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
     scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    sampling_rate_hz: Mapped[float] = mapped_column(Float, nullable=False)
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="CREATED", index=True
     )
-    sampling_rate_hz: Mapped[float] = mapped_column(Float, nullable=False)
-    duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
-    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -102,4 +136,3 @@ class SensorObservation(Base):
     sensors: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
     labels: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     obs_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-
