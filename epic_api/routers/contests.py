@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,12 +33,15 @@ ALLOWED_TRANSITIONS = {
     ("CLOSED", "ARCHIVED"),
 }
 ALLOWED_VISIBILITIES = {"PUBLIC", "PRIVATE", "INVITATION_ONLY"}
+ALLOWED_TASK_TYPES = {"FORECASTING"}
 
 
 class CreateContestRequest(BaseModel):
     name: str
     description: str | None = None
     visibility: str = "PUBLIC"
+    task_type: str = "FORECASTING"
+    forecast_horizons: list[int] = Field(default_factory=lambda: [1, 5, 10])
     twin_id: str
     scenario_id: str
     sampling_rate_hz: float
@@ -79,6 +82,11 @@ def validate_visibility(visibility: str) -> None:
         raise EPICValidationError(f"visibility '{visibility}' is not supported")
 
 
+def validate_task_type(task_type: str) -> None:
+    if task_type not in ALLOWED_TASK_TYPES:
+        raise EPICValidationError(f"task_type '{task_type}' is not supported")
+
+
 def as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -106,6 +114,7 @@ async def create_contest(
 ):
     validate_twin_and_scenario(request.twin_id, request.scenario_id)
     validate_visibility(request.visibility)
+    validate_task_type(request.task_type)
     if request.end_date <= request.start_date:
         raise EPICValidationError("end_date must be after start_date")
 
@@ -114,6 +123,8 @@ async def create_contest(
         description=request.description,
         status="DRAFT",
         visibility=request.visibility,
+        task_type=request.task_type,
+        forecast_horizons=request.forecast_horizons,
         twin_id=request.twin_id,
         scenario_id=request.scenario_id,
         sampling_rate_hz=request.sampling_rate_hz,

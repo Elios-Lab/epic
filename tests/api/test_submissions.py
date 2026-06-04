@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 from epic_core.db.models import Contest, SensorObservation, SimulationSession
@@ -91,6 +92,90 @@ def submit(client, auth_headers, contest_id: str, sequence_id: int = 1):
         json=submission_payload(sequence_id),
         headers=auth_headers,
     )
+
+
+def create_scoring_contest(db_factory):
+    async def create_records():
+        now = datetime.now(timezone.utc)
+        async with db_factory() as db:
+            contest = Contest(
+                name="Scored submission contest",
+                description="Scoring test contest",
+                status="ACTIVE",
+                visibility="PUBLIC",
+                twin_id="mechanical_system",
+                scenario_id="normal_operation",
+                sampling_rate_hz=20.0,
+                task_type="FORECASTING",
+                forecast_horizons=[1],
+                start_date=now,
+                end_date=now + timedelta(seconds=10),
+                created_by="admin1",
+            )
+            db.add(contest)
+            await db.commit()
+            await db.refresh(contest)
+
+            session = SimulationSession(
+                contest_id=contest.id,
+                twin_id=contest.twin_id,
+                scenario_id=contest.scenario_id,
+                sampling_rate_hz=contest.sampling_rate_hz,
+                status="RUNNING",
+            )
+            db.add(session)
+            await db.commit()
+            await db.refresh(session)
+
+            for sequence_id, position in ((1, 0.1), (2, 0.2)):
+                db.add(
+                    SensorObservation(
+                        session_id=session.id,
+                        sequence_id=sequence_id,
+                        timestamp=datetime.now(timezone.utc) - timedelta(seconds=1),
+                        sensors={"position": position},
+                        labels=None,
+                    )
+                )
+            await db.commit()
+            return contest
+
+    return asyncio.run(create_records())
+
+
+def scored_submission_payload() -> dict:
+    return {
+        "task_id": "forecasting",
+        "prediction_from_sequence": 1,
+        "payload": {
+            "forecast": {
+                "horizon_1": {"position": 0.25},
+            }
+        },
+    }
+
+
+def create_scored_submission(client, db_factory, auth_headers):
+    contest = create_scoring_contest(db_factory)
+    register_participant(client, auth_headers, str(contest.id))
+    response = client.post(
+        f"/api/v1/contests/{contest.id}/submissions",
+        json=scored_submission_payload(),
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    return contest, response.json()
+
+
+def wait_for_evaluated_submission(client, auth_headers, submission_id: str) -> dict:
+    for _ in range(20):
+        response = client.get(f"/api/v1/submissions/{submission_id}", headers=auth_headers)
+        assert response.status_code == 200
+        body = response.json()
+        if body["status"] == "EVALUATED":
+            return body
+        time.sleep(0.05)
+    return body
 
 
 def test_post_valid_submission_returns_pending(
@@ -201,3 +286,57 @@ def test_get_submission_by_different_user_returns_403(
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_scored_submission_eventually_becomes_evaluated(
+    client, db_factory, auth_headers
+):
+    _contest, submission = create_scored_submission(client, db_factory, auth_headers)
+
+    body = wait_for_evaluated_submission(
+        client, auth_headers, submission["submission_id"]
+    )
+
+    assert body["status"] == "EVALUATED"
+
+
+def test_get_submission_scores_returns_mae_score(client, db_factory, auth_headers):
+    _contest, submission = create_scored_submission(client, db_factory, auth_headers)
+    body = wait_for_evaluated_submission(
+        client, auth_headers, submission["submission_id"]
+    )
+    assert body["status"] == "EVALUATED"
+
+    response = client.get(
+        f"/api/v1/submissions/{submission['submission_id']}/scores",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    scores = response.json()["scores"]
+    assert scores
+    mae_scores = [score for score in scores if score["metric_id"] == "mae"]
+    assert mae_scores
+    assert isinstance(mae_scores[0]["value"], float)
+    assert mae_scores[0]["value"] >= 0.0
+
+
+def test_score_details_contain_per_sensor_breakdown(
+    client, db_factory, auth_headers
+):
+    _contest, submission = create_scored_submission(client, db_factory, auth_headers)
+    body = wait_for_evaluated_submission(
+        client, auth_headers, submission["submission_id"]
+    )
+    assert body["status"] == "EVALUATED"
+
+    response = client.get(
+        f"/api/v1/submissions/{submission['submission_id']}/scores",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    score = response.json()["scores"][0]
+    assert score["details"]["sensor_id"] == "position"
+    assert score["details"]["horizons"]["horizon_1"]["y_true"] == 0.2
+    assert score["details"]["horizons"]["horizon_1"]["y_pred"] == 0.25

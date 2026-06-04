@@ -11,10 +11,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+import epic_core.registry as registry_module
 from epic_api.dependencies import get_current_user
 from epic_core.db.models import (
     Contest,
     ContestRegistration,
+    Score,
     SensorObservation,
     SimulationSession,
     Submission,
@@ -80,6 +82,87 @@ async def _score_submission(
         submission = result.scalar_one_or_none()
         if submission is None:
             return
+        contest_result = await db.execute(
+            select(Contest).where(Contest.id == submission.contest_id)
+        )
+        contest = contest_result.scalar_one()
+        if contest.task_type != "FORECASTING":
+            submission.status = "EVALUATED"
+            await db.commit()
+            return
+
+        horizons = contest.forecast_horizons or [1, 5, 10]
+        observations: dict[int, SensorObservation] = {}
+        for horizon in horizons:
+            result = await db.execute(
+                select(SensorObservation)
+                .join(
+                    SimulationSession,
+                    SensorObservation.session_id == SimulationSession.id,
+                )
+                .where(
+                    SimulationSession.contest_id == contest.id,
+                    SensorObservation.sequence_id
+                    == submission.prediction_from_sequence + horizon,
+                )
+            )
+            observation = result.scalar_one_or_none()
+            if observation is None:
+                submission.status = "PENDING"
+                await db.commit()
+                return
+            observations[horizon] = observation
+
+        try:
+            forecast = submission.payload["forecast"]
+            predictions_by_sensor: dict[str, dict[int, float]] = {}
+            details_by_sensor: dict[str, dict[str, dict[str, float]]] = {}
+            for horizon in horizons:
+                horizon_predictions = forecast[f"horizon_{horizon}"]
+                if not isinstance(horizon_predictions, dict):
+                    raise TypeError(f"horizon_{horizon} must be a prediction dict")
+                for sensor_id, predicted_value in horizon_predictions.items():
+                    true_value = observations[horizon].sensors[sensor_id]
+                    predicted_float = float(predicted_value)
+                    true_float = float(true_value)
+                    predictions_by_sensor.setdefault(sensor_id, {})[horizon] = (
+                        predicted_float
+                    )
+                    details_by_sensor.setdefault(sensor_id, {})[
+                        f"horizon_{horizon}"
+                    ] = {
+                        "y_true": true_float,
+                        "y_pred": predicted_float,
+                        "absolute_error": abs(true_float - predicted_float),
+                    }
+        except (KeyError, TypeError, ValueError) as exc:
+            submission.status = "FAILED"
+            submission.submission_metadata = {
+                **(submission.submission_metadata or {}),
+                "error": str(exc),
+            }
+            await db.commit()
+            return
+
+        metric = registry_module.metric_registry.get("mae")
+        for sensor_id, horizon_predictions in predictions_by_sensor.items():
+            sensor_horizons = sorted(horizon_predictions)
+            y_true = [
+                float(observations[horizon].sensors[sensor_id])
+                for horizon in sensor_horizons
+            ]
+            y_pred = [horizon_predictions[horizon] for horizon in sensor_horizons]
+            db.add(
+                Score(
+                    submission_id=submission.id,
+                    metric_id=metric.metric_id,
+                    value=metric.compute(y_true, y_pred),
+                    details={
+                        "sensor_id": sensor_id,
+                        "horizons": details_by_sensor[sensor_id],
+                    },
+                )
+            )
         submission.status = "EVALUATED"
         await db.commit()
 
@@ -217,3 +300,44 @@ async def get_submission(
     elif current_user.role != "ADMINISTRATOR" and submission.user_id != current_user.id:
         raise InsufficientPermissionsError("Submission access denied")
     return submission_response(submission)
+
+
+@router.get("/submissions/{submission_id}/scores")
+async def get_submission_scores(
+    submission_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    submission_uuid = parse_uuid(
+        submission_id,
+        SubmissionError,
+        f"Submission '{submission_id}' does not exist",
+    )
+    result = await db.execute(select(Submission).where(Submission.id == submission_uuid))
+    submission = result.scalar_one_or_none()
+    if submission is None:
+        raise SubmissionError(f"Submission '{submission_id}' does not exist")
+    if current_user.role == "ORGANIZER":
+        result = await db.execute(
+            select(Contest).where(Contest.id == submission.contest_id)
+        )
+        contest = result.scalar_one()
+        if contest.created_by != current_user.username:
+            raise InsufficientPermissionsError("Submission access denied")
+    elif current_user.role != "ADMINISTRATOR" and submission.user_id != current_user.id:
+        raise InsufficientPermissionsError("Submission access denied")
+
+    result = await db.execute(select(Score).where(Score.submission_id == submission.id))
+    return {
+        "submission_id": str(submission.id),
+        "scores": [
+            {
+                "score_id": str(score.id),
+                "metric_id": score.metric_id,
+                "value": score.value,
+                "details": score.details,
+                "computed_at": score.computed_at.isoformat(),
+            }
+            for score in result.scalars()
+        ],
+    }

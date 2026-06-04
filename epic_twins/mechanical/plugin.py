@@ -1,5 +1,6 @@
 """Registration entry point for the mechanical twin plugin."""
 
+from epic_core.scoring import MAE
 from epic_twins.mechanical.faults import (
     IncreasedDampingFault,
     ReducedStiffnessFault,
@@ -17,6 +18,7 @@ from epic_twins.mechanical.twin import MechanicalTwin
 def register():
     from epic_core.registry import (
         fault_registry,
+        metric_registry,
         scenario_registry,
         sensor_registry,
         twin_registry,
@@ -30,3 +32,4 @@ def register():
     fault_registry.register(IncreasedDampingFault())
     fault_registry.register(ReducedStiffnessFault())
     fault_registry.register(SensorBiasFault())
+    metric_registry.register(MAE())
