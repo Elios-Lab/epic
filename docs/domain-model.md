@@ -202,11 +202,17 @@ class Submission:
     contest_id: str
     user_id: str
     task_id: str
-    submitted_at: datetime
+    submitted_at: datetime          # set by the server, not the client
+    prediction_from_sequence: int   # sequence_id of the last observation
+                                    # the participant used to build this prediction
     payload: dict
     status: SubmissionStatus
     metadata: dict
 ```
+
+`prediction_from_sequence` is the `sequence_id` of the most recent observation the participant claims to have used when producing their prediction. The server validates at submission time that this sequence_id was actually published at or before `submitted_at` — i.e., the participant cannot anchor their prediction from a future observation they could not yet have received.
+
+This is the primary mechanism EPIC uses to guarantee **temporal honesty**: predictions must be genuinely prospective. See [Scoring](scoring.md) for how this anchor is used during evaluation.
 
 Supported statuses:
 

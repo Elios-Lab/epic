@@ -716,11 +716,14 @@ GET /api/v1/contests/{contest_id}/submissions
 POST /api/v1/contests/{contest_id}/submissions
 ```
 
+`prediction_from_sequence` is required. It must be the `sequence_id` of the last observation the participant used to build their prediction. The server rejects the submission if this sequence_id had not yet been published at the time of submission. See [Scoring](scoring.md) for a full explanation of the temporal integrity guarantee.
+
 Request:
 
 ```json
 {
   "task_id": "forecasting",
+  "prediction_from_sequence": 500,
   "payload": {
     "forecast": {
       "horizon_1": { "position": 0.12 },
@@ -738,6 +741,7 @@ Response `201 Created`:
   "contest_id": "forecast_2027",
   "user_id": "u_abc123",
   "task_id": "forecasting",
+  "prediction_from_sequence": 500,
   "submitted_at": "2027-02-10T14:00:00Z",
   "status": "PENDING"
 }

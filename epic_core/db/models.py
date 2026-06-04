@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     String,
+    UniqueConstraint,
     Uuid,
     func,
     text,
@@ -118,6 +119,33 @@ class SimulationSession(Base):
     )
     session_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True
+    )
+
+
+class ContestRegistration(Base):
+    __tablename__ = "contest_registrations"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "contest_id",
+            name="uq_contest_registrations_user_id_contest_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contests.id"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="REGISTERED"
     )
 
 

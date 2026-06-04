@@ -102,6 +102,8 @@ Every submission follows:
 ```text
 Submission
       ↓
+Temporal Integrity Check
+      ↓
 Validation
       ↓
 Ground Truth Retrieval
@@ -112,6 +114,48 @@ Score Aggregation
       ↓
 Leaderboard Update
 ```
+
+---
+
+# Submission Integrity: The Temporal Anchor
+
+## The Problem
+
+EPIC competitions run on a shared real-time simulation. Because all participants receive the same sensor readings, a dishonest participant could observe future data and then submit predictions that were computed after the fact — making them appear to have forecast something that was already known.
+
+## The Solution: `prediction_from_sequence`
+
+Every submission must include a `prediction_from_sequence` field: the `sequence_id` of the most recent observation the participant used when producing their prediction.
+
+At submission time, the server performs the **temporal integrity check**:
+
+```text
+Is SensorObservation(sequence_id = prediction_from_sequence)
+published at or before submitted_at?
+```
+
+If the answer is no — i.e., the participant claims to have used an observation that hadn't been produced yet — the submission is rejected with status `REJECTED`.
+
+This guarantees that every accepted submission is **genuinely prospective**: the predictions it contains could only have been built from data the participant actually had at the moment they submitted.
+
+## How Scoring Uses the Anchor
+
+For a forecasting task with horizon H, the scoring engine evaluates the submission's predictions against observations:
+
+```text
+sequence_id = prediction_from_sequence + 1
+sequence_id = prediction_from_sequence + 2
+...
+sequence_id = prediction_from_sequence + H
+```
+
+These observations are loaded from the server's private `SensorObservation` store.
+
+## What This Mechanism Does Not Prevent
+
+The temporal anchor does not prevent **collusion**: one participant sharing their collected data or trained model with another. EPIC is an educational platform — preventing collusion entirely is a policy and academic integrity matter, not a technical one. Instructors can detect identical or near-identical submissions through post-hoc similarity analysis.
+
+The anchor also does not prevent a participant from observing one tick and submitting for the very next tick (a ~100ms window at 10 Hz). In practice this is negligible for any non-trivial prediction horizon.
 
 ---
 
