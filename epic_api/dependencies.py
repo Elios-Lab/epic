@@ -2,10 +2,11 @@
 
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import HTTPConnection
 
 from epic_core.auth import decode_access_token
 from epic_core.config import Settings, get_settings as core_get_settings
@@ -20,8 +21,12 @@ def get_settings() -> Settings:
     return core_get_settings()
 
 
-def get_engine(request: Request):
-    return request.app.state.engine
+def get_engine(connection: HTTPConnection):
+    return connection.app.state.engine
+
+
+def get_broadcaster(connection: HTTPConnection):
+    return connection.app.state.broadcaster
 
 
 async def get_current_user(

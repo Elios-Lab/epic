@@ -11,12 +11,16 @@ import numpy as np
 from sqlalchemy import select
 
 import epic_core.registry as registry_module
+from epic_core.broadcaster import ContestBroadcaster
 from epic_core.db.models import Contest, SensorObservation, SimulationSession
 from epic_core.exceptions import PluginExecutionError, PluginNotFoundError
 from epic_core.interfaces import SensorFault
 
 
 class SimulationEngine:
+    def __init__(self, broadcaster: ContestBroadcaster | None = None) -> None:
+        self._broadcaster = broadcaster
+
     async def run_session(self, session_id: str, db_factory) -> None:
         async with db_factory() as db:
             session = await self._load_session(db, session_id)
@@ -200,7 +204,8 @@ class SimulationEngine:
         return contest
 
     async def _broadcast(self, contest_id: str, payload: dict) -> None:
-        pass
+        if self._broadcaster:
+            await self._broadcaster.broadcast(contest_id, payload)
 
     def _as_utc(self, value):
         if value is None:
