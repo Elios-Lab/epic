@@ -1,0 +1,225 @@
+"""Contest lifecycle endpoints."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import epic_core.registry as registry_module
+from epic_api.dependencies import get_current_user, get_engine
+from epic_core.db.models import Contest, SimulationSession, User
+from epic_core.db.session import get_db, get_session_factory
+from epic_core.engine import SimulationEngine
+from epic_core.exceptions import (
+    ContestNotFoundError,
+    ContestStateError,
+    EPICValidationError,
+    InsufficientPermissionsError,
+)
+
+router = APIRouter(prefix="/contests", tags=["contests"])
+
+ALLOWED_TRANSITIONS = {
+    ("DRAFT", "SCHEDULED"),
+    ("DRAFT", "ACTIVE"),
+    ("SCHEDULED", "ACTIVE"),
+    ("ACTIVE", "CLOSED"),
+    ("CLOSED", "ARCHIVED"),
+}
+ALLOWED_VISIBILITIES = {"PUBLIC", "PRIVATE", "INVITATION_ONLY"}
+
+
+class CreateContestRequest(BaseModel):
+    name: str
+    description: str | None = None
+    visibility: str = "PUBLIC"
+    twin_id: str
+    scenario_id: str
+    sampling_rate_hz: float
+    start_date: datetime
+    end_date: datetime
+
+
+class UpdateContestRequest(BaseModel):
+    status: str | None = None
+    end_date: datetime | None = None
+
+
+def contest_response(contest: Contest) -> dict:
+    return {
+        "id": str(contest.id),
+        "name": contest.name,
+        "description": contest.description,
+        "status": contest.status,
+        "visibility": contest.visibility,
+        "twin_id": contest.twin_id,
+        "scenario_id": contest.scenario_id,
+        "sampling_rate_hz": contest.sampling_rate_hz,
+        "start_date": contest.start_date,
+        "end_date": contest.end_date,
+        "created_by": contest.created_by,
+        "created_at": contest.created_at,
+    }
+
+
+def require_admin(user: User) -> None:
+    if user.role != "ADMINISTRATOR":
+        raise InsufficientPermissionsError("Administrator privileges required")
+
+
+def validate_twin_and_scenario(twin_id: str, scenario_id: str) -> None:
+    twin = registry_module.twin_registry.get(twin_id)
+    if not any(scenario.scenario_id == scenario_id for scenario in twin.get_scenarios()):
+        raise EPICValidationError(f"scenario '{scenario_id}' is not available")
+
+
+def validate_visibility(visibility: str) -> None:
+    if visibility not in ALLOWED_VISIBILITIES:
+        raise EPICValidationError(f"visibility '{visibility}' is not supported")
+
+
+def as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+async def get_contest_or_raise(db: AsyncSession, contest_id: str) -> Contest:
+    try:
+        contest_uuid = UUID(contest_id)
+    except ValueError as exc:
+        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist") from exc
+
+    result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
+    contest = result.scalar_one_or_none()
+    if contest is None:
+        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
+    return contest
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_contest(
+    request: CreateContestRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    require_admin(current_user)
+    validate_twin_and_scenario(request.twin_id, request.scenario_id)
+    validate_visibility(request.visibility)
+    if request.end_date <= request.start_date:
+        raise EPICValidationError("end_date must be after start_date")
+
+    contest = Contest(
+        name=request.name,
+        description=request.description,
+        status="DRAFT",
+        visibility=request.visibility,
+        twin_id=request.twin_id,
+        scenario_id=request.scenario_id,
+        sampling_rate_hz=request.sampling_rate_hz,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        created_by=current_user.username,
+    )
+    db.add(contest)
+    await db.commit()
+    await db.refresh(contest)
+    return contest_response(contest)
+
+
+@router.get("")
+async def list_contests(
+    status: str | None = Query(None),
+    visibility: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Contest)
+    count_query = select(func.count()).select_from(Contest)
+    if status is not None:
+        query = query.where(Contest.status == status)
+        count_query = count_query.where(Contest.status == status)
+    if visibility is not None:
+        query = query.where(Contest.visibility == visibility)
+        count_query = count_query.where(Contest.visibility == visibility)
+
+    total_result = await db.execute(count_query)
+    result = await db.execute(query.offset(offset).limit(limit))
+    return {
+        "total": total_result.scalar_one(),
+        "contests": [contest_response(contest) for contest in result.scalars()],
+    }
+
+
+@router.get("/{contest_id}")
+async def get_contest(
+    contest_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    contest = await get_contest_or_raise(db, contest_id)
+    return contest_response(contest)
+
+
+@router.patch("/{contest_id}")
+async def update_contest(
+    contest_id: str,
+    request: UpdateContestRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    engine: SimulationEngine = Depends(get_engine),
+):
+    require_admin(current_user)
+    contest = await get_contest_or_raise(db, contest_id)
+
+    if request.status is None and request.end_date is None:
+        raise EPICValidationError("Request must include status or end_date")
+
+    target_status = request.status
+    if target_status is not None and (
+        contest.status,
+        target_status,
+    ) not in ALLOWED_TRANSITIONS:
+        raise ContestStateError(
+            f"Cannot transition contest from {contest.status} to {target_status}"
+        )
+
+    if request.end_date is not None:
+        deadline_status = target_status or contest.status
+        if deadline_status not in {"ACTIVE", "SCHEDULED"}:
+            raise ContestStateError(
+                "Deadline can only be extended on ACTIVE or SCHEDULED contests"
+            )
+        if as_utc(request.end_date) <= datetime.now(timezone.utc):
+            raise EPICValidationError("end_date must be in the future")
+        contest.end_date = request.end_date
+
+    if target_status is not None:
+        if target_status == "ACTIVE":
+            validate_twin_and_scenario(contest.twin_id, contest.scenario_id)
+            session = SimulationSession(
+                contest_id=contest.id,
+                twin_id=contest.twin_id,
+                scenario_id=contest.scenario_id,
+                sampling_rate_hz=contest.sampling_rate_hz,
+            )
+            db.add(session)
+            await db.commit()
+            asyncio.create_task(
+                engine.run_session(str(session.id), get_session_factory())
+            )
+
+        if target_status == "CLOSED":
+            contest.end_date = datetime.now(timezone.utc)
+
+        contest.status = target_status
+
+    await db.commit()
+    await db.refresh(contest)
+    return contest_response(contest)

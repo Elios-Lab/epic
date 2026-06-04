@@ -6,7 +6,6 @@ The domain model is designed to support:
 
 - digital twin registration;
 - simulation sessions;
-- simulation sessions;
 - contest management;
 - user registration;
 - submissions;
@@ -486,6 +485,8 @@ contest_allowed_scenarios   (contest_id, scenario_id, twin_id)
 ```
 
 `twin_version` in `contest_allowed_twins` pins the specific plugin version the contest uses, ensuring reproducibility if a twin is updated after the contest is published. If `twin_version` is `NULL`, the latest registered version is used.
+
+**Phase 1 note:** these junction tables are not implemented in Phase 1. Each `Contest` record directly stores `twin_id`, `scenario_id`, and `sampling_rate_hz`, implying exactly one twin and one scenario per contest. The junction tables and multi-twin support are Phase 2 work.
 
 ---
 

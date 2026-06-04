@@ -124,7 +124,11 @@ class SimulationEngine:
                     self._call_plugin(fault.fault_id, "deactivate", fault.deactivate)
                     active_faults.remove(fault)
 
-            new_state = self._call_plugin(twin.twin_id, "step", twin.step, state, dt)
+            loop = asyncio.get_running_loop()
+            new_state = await loop.run_in_executor(
+                None,
+                lambda: self._call_plugin(twin.twin_id, "step", twin.step, state, dt),
+            )
             for fault in list(active_faults):
                 if not isinstance(fault, SensorFault):
                     self._call_plugin(
@@ -179,6 +183,8 @@ class SimulationEngine:
 
             if sequence_id % commit_interval == 0:
                 await db.commit()
+                contest = await self._load_contest(db, session.contest_id)
+                contest_end_date = self._as_utc(contest.end_date)
             await asyncio.sleep(dt)
 
         await db.commit()

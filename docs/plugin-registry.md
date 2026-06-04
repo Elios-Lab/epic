@@ -31,6 +31,8 @@ from epic_core.registry import (
 
 These are module-level singletons. They are initialised once at application startup and shared across all components.
 
+Note: `scenario_registry` and `metric_registry` exist but are not used by the simulation engine in Phase 1. Scenarios are resolved through `twin.get_scenarios()` (scenarios are owned by their twin, not registered independently). Metrics are not yet implemented. Both registries are available for future use.
+
 ---
 
 # Registry Interface

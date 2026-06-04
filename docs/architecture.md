@@ -208,30 +208,21 @@ See [Simulation Engine](simulation-engine.md) for the full engine specification 
 
 # Data Visibility
 
-Different contest modes expose different information.
+In Phase 1, data visibility is fixed: participants always receive sensor readings only through the WebSocket stream. Labels, fault metadata, and latent state are always stored privately and never exposed to participants.
 
-## Training Mode
+Future phases may introduce configurable visibility modes (e.g. a training contest that exposes labels to help students learn). The three intended modes are:
 
-Can expose:
+## Training Mode (future)
 
-- sensor readings
-- labels
-- fault metadata
-- latent state (optional)
+May expose sensor readings plus labels and fault metadata, configurable per contest.
 
-## Validation Mode
+## Validation Mode (future)
 
-Typically exposes:
+Exposes sensor readings only, possibly with partial labels.
 
-- sensor readings
+## Test Mode (future)
 
-May expose limited labels.
-
-## Test Mode
-
-Exposes:
-
-- sensor readings only
+Exposes sensor readings only. No hidden information available.
 
 No internal state information.
 

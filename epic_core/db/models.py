@@ -60,8 +60,12 @@ class Contest(Base):
     name: Mapped[str] = mapped_column(
         String(256), unique=True, nullable=False, index=True
     )
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="DRAFT", index=True
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="PUBLIC"
     )
     twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
     scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)

@@ -226,7 +226,7 @@ Each phase should produce a fully working system before increasing complexity.
 
 ---
 
-## Phase 0 – Foundation
+## Phase 0 – Foundation ✅
 
 Goal: Build the minimal EPIC infrastructure.
 
@@ -238,7 +238,6 @@ Deliverables:
 - Plugin registries
 - Configuration system
 - Development environment
-- CI/CD setup
 
 Success criteria:
 
@@ -247,52 +246,46 @@ Success criteria:
 
 ---
 
-## Phase 1 – Minimal Vertical Slice
+## Phase 1 – Minimal Vertical Slice ✅
 
-Goal: Create a complete end-to-end workflow using a simple digital twin.
+Goal: Create a complete end-to-end workflow using a simple digital twin running in real time.
 
 Deliverables:
 
 - FastAPI backend
-- Mechanical digital twin
-- Position sensor
-- Velocity sensor
-- Temperature sensor
-- One normal scenario
-- One fault scenario
-- Simulation sessions
-- WebSocket streaming
-- Dataset export
-- Basic forecasting score
+- User management and JWT authentication
+- Mechanical digital twin (mass-spring-damper)
+- Position, velocity, acceleration, temperature sensors
+- Normal operation and fault scenarios
+- Contest lifecycle management (DRAFT → ACTIVE → CLOSED)
+- Shared real-time simulation per contest (wall-clock time)
+- WebSocket streaming of live sensor readings to participants
+- Private server-side observation storage for scoring
 
 Success criteria:
 
-- A participant can create a simulation session.
-- A participant can stream sensor data.
-- A participant can generate a dataset.
-- A participant can submit a forecasting solution.
+- An admin can create and activate a contest.
+- Participants can connect via WebSocket and receive live sensor readings.
+- The simulation runs in real wall-clock time and stops when the contest closes.
 
 ---
 
 ## Phase 2 – Contest Platform
 
-Goal: Introduce contest management capabilities.
+Goal: Enable participants to compete and be evaluated.
 
 Deliverables:
 
-- User management
-- Authentication
-- Contest creation
-- Contest lifecycle management
-- Contest registration
+- Contest registration (participants join contests)
 - Submission management
-- Leaderboards
-- Score persistence
+- Scoring framework and metric evaluation
+- Leaderboards with automatic updates
+- Public and private score separation
 
 Success criteria:
 
 - Multiple users can participate in competitions.
-- Leaderboards update automatically.
+- Leaderboards update automatically after submissions.
 - Contest deadlines are enforced.
 
 ---
@@ -369,7 +362,7 @@ Deliverables:
 - Contest templates
 - Web-based contest authoring
 - Twin catalog
-- Dataset generation wizard
+- WebSocket client starter kit
 - Educational dashboards
 
 Success criteria:
