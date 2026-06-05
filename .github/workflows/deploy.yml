@@ -22,5 +22,6 @@ jobs:
             source .venv/bin/activate
             pip install -e . --quiet
             alembic upgrade head
+            sudo systemctl daemon-reload
             sudo systemctl restart epic
             echo "Deploy complete"
