@@ -21,6 +21,7 @@ jobs:
             git pull origin main
             source .venv/bin/activate
             pip install -e . --quiet
+            export $(grep -v '^#' .env | xargs)
             alembic upgrade head
             sudo systemctl daemon-reload
             sudo systemctl restart epic
