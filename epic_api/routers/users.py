@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from epic_api.dependencies import require_admin
+from epic_api.dependencies import get_settings, require_admin
 from epic_api.utils import parse_uuid
-from epic_core.auth import hash_password
+from epic_core.auth import create_access_token, hash_password
+from epic_core.config import Settings
 from epic_core.db.models import User
 from epic_core.db.session import get_db
 from epic_core.exceptions import EPICValidationError, RegistrationError, SessionNotFoundError
@@ -155,3 +156,33 @@ async def delete_user(
     user.is_active = False
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{user_id}/impersonate")
+async def impersonate_user(
+    user_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    user_uuid = parse_uuid(
+        user_id,
+        SessionNotFoundError,
+        f"User '{user_id}' does not exist",
+    )
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise SessionNotFoundError(f"User '{user_id}' does not exist")
+    if not user.is_active:
+        raise EPICValidationError("Cannot impersonate an inactive user")
+    token = create_access_token(
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "role": user.role,
+            "impersonated_by": str(current_user.id),
+        },
+        settings,
+    )
+    return {"access_token": token, "token_type": "bearer"}
