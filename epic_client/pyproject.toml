@@ -31,6 +31,3 @@ notebook = [
 
 [tool.setuptools]
 packages = ["epic_client"]
-
-[tool.setuptools.package-dir]
-epic_client = "."

@@ -88,7 +88,10 @@ class EPICClient:
 
         if csv_path is not None:
             csv_file = Path(csv_path).open("w", newline="")
-            writer = csv.DictWriter(csv_file, fieldnames=["sequence_id", "timestamp", "sensors"])
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=["sequence_id", "timestamp", "sensors"],
+            )
             writer.writeheader()
 
         try:
