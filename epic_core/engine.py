@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -54,7 +55,7 @@ class SimulationEngine:
             contest = await self._load_contest(db, session.contest_id)
 
         try:
-            twin = registry_module.twin_registry.get(session.twin_id)
+            twin = copy.deepcopy(registry_module.twin_registry.get(session.twin_id))
         except PluginNotFoundError as exc:
             raise PluginExecutionError(
                 f"twin '{session.twin_id}' could not be loaded"

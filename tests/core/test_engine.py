@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -158,6 +159,41 @@ async def test_fault_schedule_produces_anomaly_labels(engine_db_factory):
 
     assert observations[0].labels["is_anomaly"] is True
     assert "mock_fault" in observations[0].labels["fault_ids"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_sessions_use_independent_twin_state(engine_db_factory):
+    _, faulted_session = await _create_contest_and_session(
+        engine_db_factory,
+        "concurrent-faulted",
+        fault_schedule=MOCK_FAULT_SCHEDULE,
+        seconds=0.5,
+    )
+    _, normal_session = await _create_contest_and_session(
+        engine_db_factory,
+        "concurrent-normal",
+        seconds=0.5,
+    )
+
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
+        await asyncio.gather(
+            SimulationEngine().run_session(str(faulted_session.id), engine_db_factory),
+            SimulationEngine().run_session(str(normal_session.id), engine_db_factory),
+        )
+
+    faulted_observations = await _get_observations(engine_db_factory, faulted_session.id)
+    normal_observations = await _get_observations(engine_db_factory, normal_session.id)
+
+    assert faulted_observations
+    assert normal_observations
+    assert all(
+        observation.labels["is_anomaly"] is True
+        for observation in faulted_observations
+    )
+    assert all(
+        observation.labels["is_anomaly"] is False
+        for observation in normal_observations
+    )
 
 
 @pytest.mark.asyncio

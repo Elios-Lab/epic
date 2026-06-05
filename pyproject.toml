@@ -13,10 +13,11 @@ dependencies = [
     "python-jose[cryptography]",
     "sqlalchemy[asyncio]",
     "uvicorn[standard]",
+    "websockets",
 ]
 
 [tool.setuptools.packages.find]
-include = ["epic_api*", "epic_core*", "epic_sensors*", "epic_twins*"]
+include = ["epic_api*", "epic_client*", "epic_core*", "epic_sensors*", "epic_twins*"]
 
 [dependency-groups]
 dev = [

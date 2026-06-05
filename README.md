@@ -124,20 +124,22 @@ Future twins may include:
 
 ```text
 epic/
-├── epic_core/          ← interfaces, registry, engine, broadcaster, db models, auth
-│   ├── db/             ← SQLAlchemy models and session management
-│   └── quantities.py   ← PhysicalQuantity ontology (shared by sensors and twins)
-├── epic_api/           ← FastAPI application, routers, dependencies, error handling
-│   └── routers/        ← twins, sensors, auth, users, contests, registrations, submissions, ws
-├── epic_twins/         ← digital twin plugins (declare supported quantities and faults)
-│   └── mass_spring_damper/  ← mass-spring-damper twin with self-contained fault management
-├── epic_sensors/       ← sensor plugins (independent of twins, reusable across domains)
-│   ├── linear/         ← position, velocity, acceleration sensors
-│   └── thermal/        ← temperature sensor
-├── alembic/            ← database migrations
+├── epic_core/              ← interfaces, registry, engine, broadcaster, db models, auth
+│   ├── db/                 ← SQLAlchemy models and session management
+│   └── quantities.py       ← PhysicalQuantity ontology (shared by sensors and twins)
+├── epic_api/               ← FastAPI application, routers, dependencies, error handling
+│   └── routers/            ← twins, sensors, auth, users, contests, registrations, submissions, ws
+├── epic_twins/             ← digital twins (self-contained state, dynamics, fault management)
+│   ├── mass_spring_damper/ ← mechanical system
+│   ├── industrial_pump/    ← centrifugal pump
+│   ├── electric_motor/     ← three-phase induction motor
+│   ├── rotating_machinery/ ← shaft and gearbox
+│   └── smart_building/     ← commercial building floor with HVAC
+├── epic_sensors/           ← sensors (independent of twins, reusable across domains)
+├── alembic/                ← database migrations
 │   └── versions/
-├── docs/               ← architecture and API documentation
-└── tests/              ← unit, integration, and API tests
+├── docs/                   ← architecture and API documentation
+└── tests/                  ← unit, integration, and API tests
     ├── core/
     ├── api/
     ├── twins/
@@ -236,17 +238,17 @@ Goal: Build the minimal EPIC infrastructure.
 
 Deliverables:
 
-- Repository structure
-- Documentation
-- Core interfaces (`DigitalTwin`, `Sensor`, `FaultDescriptor`, `ScoringMetric`)
-- Registries for twins, sensors, and scoring metrics
-- Configuration system
-- Development environment
+- Repository structure ✅
+- Documentation ✅
+- Core interfaces (`DigitalTwin`, `Sensor`, `FaultDescriptor`, `ScoringMetric`) ✅
+- Registries for twins, sensors, and scoring metrics ✅
+- Configuration system ✅
+- Development environment ✅
 
 Success criteria:
 
-- The platform can register and look up twins and sensors.
-- The architecture is stable enough to support future extensions.
+- The platform can register and look up twins and sensors. ✅
+- The architecture is stable enough to support future extensions. ✅
 
 ---
 
@@ -256,21 +258,21 @@ Goal: Create a complete end-to-end workflow using a simple digital twin running 
 
 Deliverables:
 
-- FastAPI backend
-- User management and JWT authentication
-- Mass-spring-damper digital twin with self-contained fault management
-- Position, velocity, acceleration, temperature sensors
-- Fault injection via contest fault schedule (fault ID, start time, end time, severity)
-- Contest lifecycle management (DRAFT → ACTIVE → CLOSED)
-- Shared real-time simulation per contest (wall-clock time)
-- WebSocket streaming of live sensor readings to participants
-- Private server-side observation storage for scoring
+- FastAPI backend ✅
+- User management and JWT authentication ✅
+- Mass-spring-damper digital twin with self-contained fault management ✅
+- Position, velocity, acceleration, temperature sensors ✅
+- Fault injection via contest fault schedule (fault ID, start time, end time, severity) ✅
+- Contest lifecycle management (DRAFT → ACTIVE → CLOSED) ✅
+- Shared real-time simulation per contest (wall-clock time) ✅
+- WebSocket streaming of live sensor readings to participants ✅
+- Private server-side observation storage for scoring ✅
 
 Success criteria:
 
-- An admin can create and activate a contest with a specific fault schedule.
-- Participants can connect via WebSocket and receive live sensor readings.
-- The simulation runs in real wall-clock time and stops when the contest closes.
+- An admin can create and activate a contest with a specific fault schedule. ✅
+- Participants can connect via WebSocket and receive live sensor readings. ✅
+- The simulation runs in real wall-clock time and stops when the contest closes. ✅
 
 ---
 
@@ -280,18 +282,18 @@ Goal: Enable participants to compete and be evaluated.
 
 Deliverables:
 
-- Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT
-- Contest registration (participants join SCHEDULED or ACTIVE contests)
-- Submission management with temporal integrity anchor (`prediction_from_sequence`)
-- MAE scoring for forecasting tasks, F1 scoring for anomaly detection tasks
-- Leaderboards with automatic ranking after each scored submission
-- Deadline extension for organizers and admins
+- Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT ✅
+- Contest registration (participants join SCHEDULED or ACTIVE contests) ✅
+- Submission management with temporal integrity anchor (`prediction_from_sequence`) ✅
+- MAE scoring for forecasting tasks, F1 scoring for anomaly detection tasks ✅
+- Leaderboards with automatic ranking after each scored submission ✅
+- Deadline extension for organizers and admins ✅
 
 Success criteria:
 
-- Multiple users can participate in competitions.
-- Leaderboards update automatically after submissions.
-- Submissions are verified as temporally honest (not post-hoc).
+- Multiple users can participate in competitions. ✅
+- Leaderboards update automatically after submissions. ✅
+- Submissions are verified as temporally honest (not post-hoc). ✅
 
 ---
 
@@ -319,29 +321,53 @@ Success criteria:
 
 ---
 
-## Phase 4 – Industrial Twins 🔄
+## Phase 4 – Industrial Twins ✅
 
 Goal: Introduce realistic industrial systems.
 
 Twins:
 
 - Industrial Pump (flow, pressure, vibration, temperature) ✅
-- Electric Motor (current, voltage, RPM, temperature)
-- Rotating Machinery (vibration, bearing temperature)
-- Smart Building (temperature, humidity, occupancy, HVAC)
+- Electric Motor (current, voltage, RPM, temperature) ✅
+- Rotating Machinery (vibration, power, speed, temperature) ✅
+- Smart Building (temperature, humidity, CO2, occupancy) ✅
 
-Sensors and physical quantities:
+Sensors and physical quantities added:
 
-- `FLOW_RATE`, `PRESSURE`, `VIBRATION` ✅ — `CURRENT`, `VOLTAGE`, `ROTATIONAL_SPEED`
+- `FLOW_RATE`, `PRESSURE`, `VIBRATION`, `CURRENT`, `VOLTAGE`, `ROTATIONAL_SPEED`, `POWER`, `CO2_CONCENTRATION`, `OCCUPANCY` ✅
+
+Architecture validation:
+
+- All four twins integrated with zero changes to EPIC Core ✅
+- Each contest gets its own independent twin instance — concurrent contests with the same twin type are fully isolated ✅
+- One shared simulation per contest — all participants in a contest receive the same real-time sensor stream ✅
 
 Success criteria:
 
-- EPIC supports industrial predictive maintenance challenges.
-- A new twin can be integrated by implementing `DigitalTwin` alone, with no Core changes.
+- EPIC supports industrial predictive maintenance challenges. ✅
+- A new twin can be integrated by implementing `DigitalTwin` alone, with no Core changes. ✅
 
 ---
 
-## Phase 5 – Advanced Contest Types
+## Phase 5 – Educational Ecosystem
+
+Goal: Make EPIC usable by instructors and researchers without software development.
+
+Deliverables:
+
+- Contest templates with predefined fault schedules and sensor configurations
+- Web-based contest authoring UI
+- Twin catalog with browsable fault and sensor documentation
+- WebSocket client starter kit (Python + Jupyter)
+- Educational dashboards (live simulation visualization)
+
+Success criteria:
+
+- A professor can create a complete contest through configuration alone, without writing code.
+
+---
+
+## Phase 6 – Advanced Contest Types
 
 Goal: Support more sophisticated machine learning competitions.
 
@@ -356,24 +382,6 @@ Deliverables:
 Success criteria:
 
 - EPIC supports research-grade competitions.
-
----
-
-## Phase 6 – Educational Ecosystem
-
-Goal: Make EPIC usable by instructors without software development.
-
-Deliverables:
-
-- Contest templates with predefined fault schedules and sensor configurations
-- Web-based contest authoring UI
-- Twin catalog with browsable fault and sensor documentation
-- WebSocket client starter kit (Python + Jupyter)
-- Educational dashboards (live simulation visualization)
-
-Success criteria:
-
-- A professor can create a complete contest through configuration alone, without writing code.
 
 ---
 

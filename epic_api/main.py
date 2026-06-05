@@ -8,11 +8,13 @@ from epic_api import dependencies
 from epic_api.errors import register_exception_handlers
 from epic_api.routers import (
     auth,
+    catalog,
     contests,
     leaderboard,
     registrations,
     sessions,
     submissions,
+    templates,
     twins,
     users,
     ws,
@@ -56,18 +58,26 @@ async def lifespan(app: FastAPI):
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI(
+        title="EPIC API",
+        description="ELIOS Predictive Intelligence Challenge — simulation-driven machine learning competition platform.",
+        version="1.0.0",
+        redoc_url=None,
+        lifespan=lifespan,
+    )
     if settings is not None:
         app.state.settings = settings
         app.dependency_overrides[dependencies.get_settings] = lambda: settings
 
     register_exception_handlers(app)
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(catalog.router, prefix="/api/v1")
     app.include_router(contests.router, prefix="/api/v1")
     app.include_router(leaderboard.router, prefix="/api/v1")
     app.include_router(registrations.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")
     app.include_router(submissions.router, prefix="/api/v1")
+    app.include_router(templates.router, prefix="/api/v1")
     app.include_router(twins.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(ws.router, prefix="/api/v1/ws")
