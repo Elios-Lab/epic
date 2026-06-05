@@ -1,0 +1,1679 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EPIC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              epic: {
+                navy: "#0d3b6e",
+                deep: "#061a33",
+                cyan: "#0096c7",
+                pale: "#e7f7fc",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="min-h-screen bg-epic-deep text-white antialiased">
+    <div
+      x-data="epicApp()"
+      x-init="init()"
+      class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,150,199,0.28),transparent_32rem),linear-gradient(135deg,#061a33_0%,#0d3b6e_52%,#04101f_100%)]"
+    >
+      <template x-if="state === 'landing'">
+        <main class="flex min-h-screen items-center">
+          <section class="mx-auto grid w-full max-w-6xl gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+            <div class="space-y-8">
+              <div class="inline-flex rounded-md bg-white p-4 shadow-2xl shadow-cyan-950/30">
+                <div class="w-72 max-w-[72vw] sm:w-96">
+                  <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                    <rect width="580" height="180" fill="#ffffff" />
+                    <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                    <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                    <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                    <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                    <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                    <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                    <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                    <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                    <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+                  </svg>
+                </div>
+              </div>
+              <div class="max-w-2xl space-y-5">
+                <h1 class="text-5xl font-semibold tracking-normal text-white sm:text-6xl">EPIC</h1>
+                <p class="text-xl leading-8 text-cyan-50">
+                  A simulation-driven machine learning competition platform based on digital twins.
+                </p>
+              </div>
+              <button
+                type="button"
+                @click="showLogin()"
+                class="inline-flex items-center rounded-md bg-cyan-400 px-6 py-3 text-base font-semibold text-epic-deep shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-200/50"
+              >
+                Log in
+              </button>
+            </div>
+            <div class="rounded-lg border border-cyan-300/20 bg-white/8 p-6 shadow-2xl shadow-cyan-950/20 backdrop-blur">
+              <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Digital Twins</div>
+                  <div class="mt-2 text-3xl font-semibold">Live</div>
+                </div>
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Competitions</div>
+                  <div class="mt-2 text-3xl font-semibold">Real Time</div>
+                </div>
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Evaluation</div>
+                  <div class="mt-2 text-3xl font-semibold">Scored</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </template>
+
+      <template x-if="state === 'login'">
+        <main class="flex min-h-screen items-center justify-center px-6 py-12">
+          <section class="w-full max-w-md rounded-lg border border-cyan-300/20 bg-white p-8 text-slate-900 shadow-2xl shadow-cyan-950/30">
+            <button
+              type="button"
+              @click="state = 'landing'; error = ''"
+              class="mb-6 text-sm font-medium text-epic-navy hover:text-epic-cyan"
+            >
+              Back
+            </button>
+            <div class="mb-8 w-48">
+              <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                <rect width="580" height="180" fill="#ffffff" />
+                <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+              </svg>
+            </div>
+            <h2 class="text-2xl font-semibold text-epic-deep">Log in to EPIC</h2>
+            <form class="mt-6 space-y-5" @submit.prevent="login()">
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Username</span>
+                <input
+                  x-model="credentials.username"
+                  type="text"
+                  autocomplete="username"
+                  required
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Password</span>
+                <input
+                  x-model="credentials.password"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <p x-show="error" x-text="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+              <button
+                type="submit"
+                :disabled="loading"
+                class="w-full rounded-md bg-epic-navy px-5 py-3 font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span x-show="!loading">Log in</span>
+                <span x-show="loading">Logging in...</span>
+              </button>
+            </form>
+          </section>
+        </main>
+      </template>
+
+      <template x-if="state === 'dashboard'">
+        <main class="min-h-screen bg-slate-50 text-slate-900">
+          <nav class="border-b border-slate-200 bg-white">
+            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+              <div class="flex items-center gap-3">
+                <div class="w-28">
+                  <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                    <rect width="580" height="180" fill="#ffffff" />
+                    <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                    <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                    <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                    <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                    <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                    <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                    <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                    <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                    <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+                  </svg>
+                </div>
+                <span class="hidden text-sm font-semibold uppercase tracking-wide text-epic-navy sm:inline">Dashboard</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="max-w-[12rem] truncate text-sm font-medium text-slate-700" x-text="user.username"></span>
+                <button
+                  type="button"
+                  @click="logout()"
+                  class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </nav>
+          <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+            <div class="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <template x-if="user.role === 'PARTICIPANT'">
+                <div x-init="loadParticipantDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Participant Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Join active contests, watch live sensor streams, and submit predictions.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setParticipantTab('contests')"
+                        :class="participant.tab === 'contests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Contests
+                      </button>
+                      <button
+                        type="button"
+                        @click="setParticipantTab('activity')"
+                        :class="participant.tab === 'activity' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        My Activity
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="participant.error" x-text="participant.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="participant.success" x-text="participant.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="participant.tab === 'contests'" class="space-y-6">
+                    <template x-if="!participant.connectedContest">
+                      <div class="space-y-5">
+                        <div class="flex items-center justify-between gap-4">
+                          <h2 class="text-xl font-semibold text-slate-900">Active Contests</h2>
+                          <button
+                            type="button"
+                            @click="loadActiveContests()"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        <p x-show="participant.loadingContests" class="text-sm text-slate-500">Loading active contests...</p>
+                        <div x-show="!participant.loadingContests && participant.activeContests.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                          No active contests are available right now.
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <template x-for="contest in participant.activeContests" :key="contest.id || contest.contest_id">
+                            <article class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                              <div class="flex min-h-28 flex-col justify-between gap-4">
+                                <div>
+                                  <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                                  <dl class="mt-3 space-y-2 text-sm text-slate-600">
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Twin</dt>
+                                      <dd x-text="contest.twin_id" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Sampling</dt>
+                                      <dd><span x-text="contest.sampling_rate_hz"></span> Hz</dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Start</dt>
+                                      <dd x-text="formatDate(contest.start_date)" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">End</dt>
+                                      <dd x-text="formatDate(contest.end_date)" class="text-right"></dd>
+                                    </div>
+                                  </dl>
+                                </div>
+                                <button
+                                  type="button"
+                                  @click="isRegistered(contest) ? connectContest(contest) : registerContest(contest)"
+                                  class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100"
+                                >
+                                  <span x-text="isRegistered(contest) ? 'Connect' : 'Register'"></span>
+                                </button>
+                              </div>
+                            </article>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="participant.connectedContest">
+                      <div class="space-y-6">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h2 class="text-xl font-semibold text-slate-900" x-text="participant.connectedContest.name"></h2>
+                            <p class="mt-1 text-sm text-slate-500">
+                              Live stream from <span x-text="participant.connectedContest.twin_id"></span>
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            @click="disconnectContest()"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                          <div class="h-80">
+                            <canvas x-ref="sensorChart" class="h-full w-full"></canvas>
+                          </div>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                          <div class="rounded-md bg-slate-50 p-4">
+                            <div class="text-sm font-medium text-slate-500">Latest sequence</div>
+                            <div class="mt-1 text-2xl font-semibold text-epic-deep" x-text="participant.latestObservation.sequence_id ?? '-'"></div>
+                          </div>
+                          <div class="rounded-md bg-slate-50 p-4">
+                            <div class="text-sm font-medium text-slate-500">Latest timestamp</div>
+                            <div class="mt-1 text-lg font-semibold text-epic-deep" x-text="participant.latestObservation.timestamp || '-'"></div>
+                          </div>
+                        </div>
+                        <form class="rounded-md border border-slate-200 bg-slate-50 p-5" @submit.prevent="submitPrediction()">
+                          <h3 class="text-lg font-semibold text-slate-900">Submit Prediction</h3>
+                          <label class="mt-4 block">
+                            <span class="text-sm font-medium text-slate-700">Prediction payload JSON</span>
+                            <textarea
+                              x-model="participant.submissionPayload"
+                              rows="8"
+                              class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                            ></textarea>
+                          </label>
+                          <label class="mt-4 block">
+                            <span class="text-sm font-medium text-slate-700">Prediction from sequence</span>
+                            <input
+                              type="text"
+                              readonly
+                              :value="participant.latestObservation.sequence_id ?? ''"
+                              class="mt-2 w-full rounded-md border border-slate-200 bg-white px-4 py-3 text-slate-700"
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            :disabled="participant.submitting || participant.latestObservation.sequence_id === null"
+                            class="mt-5 rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <span x-show="!participant.submitting">Submit</span>
+                            <span x-show="participant.submitting">Submitting...</span>
+                          </button>
+                        </form>
+                      </div>
+                    </template>
+                  </div>
+
+                  <div x-show="participant.tab === 'activity'" class="space-y-5">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">My Activity</h2>
+                      <button
+                        type="button"
+                        @click="loadMyActivity()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="participant.loadingActivity" class="text-sm text-slate-500">Loading activity...</p>
+                    <div x-show="!participant.loadingActivity && participant.activity.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No registered contest activity yet.
+                    </div>
+                    <template x-for="contestActivity in participant.activity" :key="contestActivity.contest.id || contestActivity.contest.contest_id">
+                      <section class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <h3 x-text="contestActivity.contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                          <span x-text="contestActivity.contest.status" class="text-sm font-semibold text-epic-cyan"></span>
+                        </div>
+                        <div class="mt-4 overflow-x-auto">
+                          <table class="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead>
+                              <tr class="text-left text-slate-500">
+                                <th class="py-2 pr-4 font-semibold">Submitted</th>
+                                <th class="py-2 pr-4 font-semibold">Status</th>
+                                <th class="py-2 pr-4 font-semibold">Score</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200 bg-white">
+                              <template x-for="submission in contestActivity.submissions" :key="submission.submission_id">
+                                <tr>
+                                  <td class="py-3 pr-4" x-text="formatDate(submission.submitted_at)"></td>
+                                  <td class="py-3 pr-4" x-text="submission.status"></td>
+                                  <td class="py-3 pr-4" x-text="formatScore(submission.score)"></td>
+                                </tr>
+                              </template>
+                              <tr x-show="contestActivity.submissions.length === 0">
+                                <td colspan="3" class="py-4 text-slate-500">No submissions yet.</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <template x-if="user.role === 'ORGANIZER'">
+                <div x-init="loadOrganizerDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Organizer Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Create contests from templates and manage contest lifecycle.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setOrganizerTab('contests')"
+                        :class="organizer.tab === 'contests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        My Contests
+                      </button>
+                      <button
+                        type="button"
+                        @click="setOrganizerTab('new')"
+                        :class="organizer.tab === 'new' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        New Contest
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="organizer.error" x-text="organizer.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="organizer.success" x-text="organizer.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="organizer.tab === 'contests'" class="space-y-5">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">My Contests</h2>
+                      <button
+                        type="button"
+                        @click="loadOrganizerContests()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="organizer.loadingContests" class="text-sm text-slate-500">Loading contests...</p>
+                    <div x-show="!organizer.loadingContests && organizer.contests.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No contests have been created yet.
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                      <template x-for="contest in organizer.contests" :key="contest.contest_id || contest.id">
+                        <article
+                          class="rounded-md border border-slate-200 bg-slate-50 p-5 transition hover:border-cyan-200"
+                          @click="toggleLeaderboard(contest)"
+                        >
+                          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                                <span
+                                  x-text="contest.status"
+                                  :class="statusBadgeClass(contest.status)"
+                                  class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                ></span>
+                              </div>
+                              <dl class="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                                <div>
+                                  <dt class="font-medium text-slate-500">Twin</dt>
+                                  <dd x-text="contest.twin_id"></dd>
+                                </div>
+                                <div>
+                                  <dt class="font-medium text-slate-500">Participants</dt>
+                                  <dd x-text="contest.participant_count ?? '-'"></dd>
+                                </div>
+                                <div>
+                                  <dt class="font-medium text-slate-500">Start</dt>
+                                  <dd x-text="formatDate(contest.start_date)"></dd>
+                                </div>
+                                <div>
+                                  <dt class="font-medium text-slate-500">End</dt>
+                                  <dd x-text="formatDate(contest.end_date)"></dd>
+                                </div>
+                              </dl>
+                            </div>
+                            <div class="flex shrink-0 flex-wrap gap-2" @click.stop>
+                              <button
+                                x-show="contest.status === 'DRAFT'"
+                                type="button"
+                                @click="updateContestStatus(contest, 'ACTIVE')"
+                                class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                              >
+                                Activate
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click="updateContestStatus(contest, 'CLOSED')"
+                                class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                              >
+                                Close
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click="startDeadlineExtension(contest)"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                              >
+                                Extend Deadline
+                              </button>
+                            </div>
+                          </div>
+
+                          <form
+                            x-show="organizer.extendingContestId === contestId(contest)"
+                            class="mt-4 flex flex-col gap-3 rounded-md border border-cyan-200 bg-white p-4 sm:flex-row sm:items-end"
+                            @submit.prevent="extendContestDeadline(contest)"
+                            @click.stop
+                          >
+                            <label class="flex-1">
+                              <span class="text-sm font-medium text-slate-700">New end date</span>
+                              <input
+                                x-model="organizer.newEndDate"
+                                type="datetime-local"
+                                required
+                                class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                              />
+                            </label>
+                            <button type="submit" class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep">
+                              Save
+                            </button>
+                            <button type="button" @click="organizer.extendingContestId = null" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">
+                              Cancel
+                            </button>
+                          </form>
+
+                          <div x-show="organizer.expandedContestId === contestId(contest)" class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                            <div class="mb-3 flex items-center justify-between">
+                              <h4 class="font-semibold text-slate-900">Leaderboard</h4>
+                              <span x-show="organizer.loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                              <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                <thead>
+                                  <tr class="text-left text-slate-500">
+                                    <th class="py-2 pr-4 font-semibold">Rank</th>
+                                    <th class="py-2 pr-4 font-semibold">Username</th>
+                                    <th class="py-2 pr-4 font-semibold">Score</th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                  <template x-for="entry in organizer.leaderboards[contestId(contest)] || []" :key="entry.user_id">
+                                    <tr>
+                                      <td class="py-3 pr-4" x-text="entry.rank"></td>
+                                      <td class="py-3 pr-4" x-text="entry.username"></td>
+                                      <td class="py-3 pr-4" x-text="formatScore(entry.score)"></td>
+                                    </tr>
+                                  </template>
+                                  <tr x-show="(organizer.leaderboards[contestId(contest)] || []).length === 0">
+                                    <td colspan="3" class="py-4 text-slate-500">No leaderboard entries yet.</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </article>
+                      </template>
+                    </div>
+                  </div>
+
+                  <div x-show="organizer.tab === 'new'" class="space-y-5">
+                    <template x-if="organizer.newStep === 1">
+                      <div class="space-y-5">
+                        <div>
+                          <h2 class="text-xl font-semibold text-slate-900">Choose a Template</h2>
+                          <p class="mt-1 text-sm text-slate-600">Templates provide a ready-made twin, sensors, fault schedule, and initial conditions.</p>
+                        </div>
+                        <p x-show="organizer.loadingTemplates" class="text-sm text-slate-500">Loading templates...</p>
+                        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <template x-for="template in organizer.templates" :key="template.template_id">
+                            <button
+                              type="button"
+                              @click="selectTemplate(template)"
+                              class="rounded-md border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-epic-cyan hover:bg-cyan-50"
+                            >
+                              <h3 x-text="template.name" class="text-lg font-semibold text-epic-deep"></h3>
+                              <p class="mt-2 text-sm font-medium text-epic-cyan" x-text="template.twin_id"></p>
+                              <p class="mt-3 text-sm leading-6 text-slate-600" x-text="template.description"></p>
+                            </button>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="organizer.newStep === 2">
+                      <form class="space-y-5" @submit.prevent="createContest()">
+                        <div class="flex items-center justify-between gap-4">
+                          <div>
+                            <h2 class="text-xl font-semibold text-slate-900">Create Contest</h2>
+                            <p class="mt-1 text-sm text-slate-600">
+                              Based on <span x-text="organizer.selectedTemplate?.name"></span>
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            @click="organizer.newStep = 1"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Back
+                          </button>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Contest name</span>
+                            <input x-model="organizer.form.name" type="text" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Visibility</span>
+                            <select x-model="organizer.form.visibility" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                              <option value="PUBLIC">PUBLIC</option>
+                              <option value="PRIVATE">PRIVATE</option>
+                            </select>
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Start date</span>
+                            <input x-model="organizer.form.start_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">End date</span>
+                            <input x-model="organizer.form.end_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Sampling rate</span>
+                            <input x-model.number="organizer.form.sampling_rate_hz" type="number" min="0.1" step="0.1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block md:col-span-2">
+                            <span class="text-sm font-medium text-slate-700">Description</span>
+                            <textarea x-model="organizer.form.description" rows="3" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                          </label>
+                        </div>
+                        <div class="grid gap-4 lg:grid-cols-2">
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Sensor configs</span>
+                            <textarea readonly rows="10" x-text="JSON.stringify(organizer.form.sensor_configs, null, 2)" class="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-700"></textarea>
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Fault schedule</span>
+                            <textarea readonly rows="10" x-text="JSON.stringify(organizer.form.fault_schedule, null, 2)" class="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-700"></textarea>
+                          </label>
+                        </div>
+                        <button
+                          type="submit"
+                          :disabled="organizer.creating"
+                          class="rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span x-show="!organizer.creating">Create</span>
+                          <span x-show="organizer.creating">Creating...</span>
+                        </button>
+                      </form>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <template x-if="user.role === 'ADMINISTRATOR'">
+                <div x-init="loadAdminDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Administrator Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Monitor platform activity and manage users.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setAdminTab('overview')"
+                        :class="admin.tab === 'overview' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Platform Overview
+                      </button>
+                      <button
+                        type="button"
+                        @click="setAdminTab('users')"
+                        :class="admin.tab === 'users' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Users
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="admin.error" x-text="admin.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="admin.success" x-text="admin.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="admin.tab === 'overview'" class="space-y-6">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">Platform Overview</h2>
+                      <button
+                        type="button"
+                        @click="loadAdminOverview()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="admin.loadingOverview" class="text-sm text-slate-500">Loading platform overview...</p>
+                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Total contests</div>
+                        <div class="mt-2 text-3xl font-semibold text-epic-deep" x-text="admin.contests.length"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Active contests</div>
+                        <div class="mt-2 text-3xl font-semibold text-emerald-700" x-text="admin.contests.filter((contest) => contest.status === 'ACTIVE').length"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Registered users</div>
+                        <div class="mt-2 text-3xl font-semibold text-epic-deep" x-text="admin.totalUsers"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Status breakdown</div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                          <template x-for="status in Object.keys(contestsByStatus())" :key="status">
+                            <span :class="statusBadgeClass(status)" class="rounded-full px-2.5 py-1 text-xs font-semibold">
+                              <span x-text="status"></span>
+                              <span x-text="contestsByStatus()[status]"></span>
+                            </span>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-md border border-slate-200">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                          <tr class="text-left text-slate-500">
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('name')" class="hover:text-epic-navy">Name</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('created_by')" class="hover:text-epic-navy">Organizer</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('twin_id')" class="hover:text-epic-navy">Twin</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('status')" class="hover:text-epic-navy">Status</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('sampling_rate_hz')" class="hover:text-epic-navy">Sampling</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('start_date')" class="hover:text-epic-navy">Start</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('end_date')" class="hover:text-epic-navy">End</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">Transition</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 bg-white">
+                          <template x-for="contest in sortedAdminContests()" :key="contest.contest_id || contest.id">
+                            <tr>
+                              <td class="px-4 py-3 font-medium text-slate-900" x-text="contest.name"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="contest.created_by || '-'"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="contest.twin_id"></td>
+                              <td class="px-4 py-3">
+                                <span x-text="contest.status" :class="statusBadgeClass(contest.status)" class="rounded-full px-2.5 py-1 text-xs font-semibold"></span>
+                              </td>
+                              <td class="px-4 py-3 text-slate-600"><span x-text="contest.sampling_rate_hz"></span> Hz</td>
+                              <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.start_date)"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.end_date)"></td>
+                              <td class="px-4 py-3">
+                                <select
+                                  @change="transitionAdminContest(contest, $event.target.value); $event.target.value = ''"
+                                  class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                                >
+                                  <option value="">Choose</option>
+                                  <template x-for="status in allowedStatusTransitions(contest.status)" :key="status">
+                                    <option :value="status" x-text="status"></option>
+                                  </template>
+                                </select>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div x-show="admin.tab === 'users'" class="space-y-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <h2 class="text-xl font-semibold text-slate-900">Users</h2>
+                      <div class="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          x-model="admin.userSearch"
+                          type="search"
+                          placeholder="Search username or email"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                        />
+                        <button
+                          type="button"
+                          @click="loadAdminUsers()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                    <p x-show="admin.loadingUsers" class="text-sm text-slate-500">Loading users...</p>
+                    <div class="overflow-x-auto rounded-md border border-slate-200">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                          <tr class="text-left text-slate-500">
+                            <th class="px-4 py-3 font-semibold">Username</th>
+                            <th class="px-4 py-3 font-semibold">Email</th>
+                            <th class="px-4 py-3 font-semibold">Role</th>
+                            <th class="px-4 py-3 font-semibold">Active</th>
+                            <th class="px-4 py-3 font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 bg-white">
+                          <template x-for="account in filteredAdminUsers()" :key="account.id || account.user_id">
+                            <tr>
+                              <td class="px-4 py-3 font-medium text-slate-900" x-text="account.username"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="account.email"></td>
+                              <td class="px-4 py-3">
+                                <span x-text="account.role" :class="roleBadgeClass(account.role)" class="rounded-full px-2.5 py-1 text-xs font-semibold"></span>
+                              </td>
+                              <td class="px-4 py-3">
+                                <span
+                                  x-text="account.is_active ? 'Active' : 'Inactive'"
+                                  :class="account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'"
+                                  class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                ></span>
+                              </td>
+                              <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                  <select
+                                    :value="account.role"
+                                    @change="updateUserRole(account, $event.target.value)"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                                  >
+                                    <option value="ADMINISTRATOR">ADMINISTRATOR</option>
+                                    <option value="ORGANIZER">ORGANIZER</option>
+                                    <option value="PARTICIPANT">PARTICIPANT</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    @click="toggleUserActive(account)"
+                                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                  >
+                                    <span x-text="account.is_active ? 'Deactivate' : 'Activate'"></span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </template>
+                          <tr x-show="filteredAdminUsers().length === 0">
+                            <td colspan="5" class="px-4 py-6 text-center text-slate-500">No users match the current search.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+        </main>
+      </template>
+    </div>
+
+    <script>
+      function epicApp() {
+        return {
+          state: "landing",
+          loading: false,
+          error: "",
+          credentials: {
+            username: "",
+            password: "",
+          },
+          token: null,
+          user: {
+            username: "",
+            role: "",
+          },
+          participant: {
+            tab: "contests",
+            dashboardLoaded: false,
+            loadingContests: false,
+            loadingActivity: false,
+            submitting: false,
+            activeContests: [],
+            registrations: [],
+            registeredContestIds: new Set(),
+            connectedContest: null,
+            latestObservation: {
+              sequence_id: null,
+              timestamp: "",
+            },
+            submissionPayload: JSON.stringify(
+              {
+                forecast: {
+                  horizon_1: {},
+                  horizon_5: {},
+                  horizon_10: {},
+                },
+              },
+              null,
+              2
+            ),
+            activity: [],
+            error: "",
+            success: "",
+          },
+          organizer: {
+            tab: "contests",
+            dashboardLoaded: false,
+            loadingContests: false,
+            loadingTemplates: false,
+            loadingLeaderboardId: null,
+            creating: false,
+            contests: [],
+            templates: [],
+            selectedTemplate: null,
+            newStep: 1,
+            form: {
+              name: "",
+              description: "",
+              visibility: "PUBLIC",
+              start_date: "",
+              end_date: "",
+              sampling_rate_hz: 1,
+              twin_id: "",
+              sensor_configs: [],
+              fault_schedule: [],
+              initial_conditions: null,
+              task_type: "FORECASTING",
+            },
+            expandedContestId: null,
+            extendingContestId: null,
+            newEndDate: "",
+            leaderboards: {},
+            error: "",
+            success: "",
+          },
+          admin: {
+            tab: "overview",
+            dashboardLoaded: false,
+            loadingOverview: false,
+            loadingUsers: false,
+            contests: [],
+            users: [],
+            totalUsers: 0,
+            contestSortKey: "name",
+            contestSortDirection: "asc",
+            userSearch: "",
+            error: "",
+            success: "",
+          },
+          sensorChart: null,
+          streamSocket: null,
+          init() {
+            const token = localStorage.getItem("epic_token");
+            if (!token) {
+              return;
+            }
+            this.token = token;
+            const payload = this.decodeToken(token);
+            if (payload && payload.username && payload.role) {
+              this.user = { username: payload.username, role: payload.role };
+              this.state = "dashboard";
+            } else {
+              this.logout();
+            }
+          },
+          showLogin() {
+            this.error = "";
+            this.state = "login";
+          },
+          async login() {
+            this.loading = true;
+            this.error = "";
+            try {
+              const response = await fetch("/api/v1/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(this.credentials),
+              });
+              if (!response.ok) {
+                throw new Error("Invalid username or password.");
+              }
+              const data = await response.json();
+              this.token = data.access_token;
+              localStorage.setItem("epic_token", this.token);
+              const payload = this.decodeToken(this.token);
+              this.user = {
+                username: payload.username,
+                role: payload.role,
+              };
+              this.credentials.password = "";
+              this.state = "dashboard";
+            } catch (error) {
+              this.error = error.message || "Login failed.";
+              localStorage.removeItem("epic_token");
+              this.token = null;
+            } finally {
+              this.loading = false;
+            }
+          },
+          logout() {
+            this.disconnectContest();
+            localStorage.removeItem("epic_token");
+            this.token = null;
+            this.user = { username: "", role: "" };
+            this.credentials.password = "";
+            this.error = "";
+            this.state = "landing";
+          },
+          async apiRequest(path, options = {}) {
+            const headers = {
+              ...(options.headers || {}),
+              Authorization: `Bearer ${this.token}`,
+            };
+            if (options.body !== undefined) {
+              headers["Content-Type"] = "application/json";
+            }
+            const response = await fetch(path, { ...options, headers });
+            const text = await response.text();
+            const data = text ? JSON.parse(text) : {};
+            if (!response.ok) {
+              const message = data.error?.message || "EPIC API request failed.";
+              const error = new Error(message);
+              error.status = response.status;
+              throw error;
+            }
+            return data;
+          },
+          async loadParticipantDashboard() {
+            if (this.participant.dashboardLoaded) {
+              return;
+            }
+            this.participant.dashboardLoaded = true;
+            await this.loadActiveContests();
+          },
+          async setParticipantTab(tab) {
+            this.participant.tab = tab;
+            this.participant.error = "";
+            this.participant.success = "";
+            if (tab === "contests") {
+              await this.loadActiveContests();
+            }
+            if (tab === "activity") {
+              this.disconnectContest();
+              await this.loadMyActivity();
+            }
+          },
+          contestId(contest) {
+            return contest.contest_id || contest.id;
+          },
+          formatDate(value) {
+            if (!value) {
+              return "-";
+            }
+            return new Date(value).toLocaleString();
+          },
+          formatScore(value) {
+            if (value === null || value === undefined) {
+              return "-";
+            }
+            return Number(value).toFixed(4);
+          },
+          statusBadgeClass(status) {
+            const classes = {
+              ACTIVE: "bg-emerald-100 text-emerald-800",
+              SCHEDULED: "bg-yellow-100 text-yellow-800",
+              DRAFT: "bg-slate-200 text-slate-700",
+              CLOSED: "bg-red-100 text-red-800",
+              ARCHIVED: "bg-slate-300 text-slate-700",
+            };
+            return classes[status] || "bg-slate-200 text-slate-700";
+          },
+          roleBadgeClass(role) {
+            const classes = {
+              ADMINISTRATOR: "bg-blue-100 text-blue-800",
+              ORGANIZER: "bg-emerald-100 text-emerald-800",
+              PARTICIPANT: "bg-slate-200 text-slate-700",
+            };
+            return classes[role] || "bg-slate-200 text-slate-700";
+          },
+          toLocalDateTime(value) {
+            if (!value) {
+              return "";
+            }
+            const date = new Date(value);
+            const offsetMs = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+          },
+          toApiDateTime(value) {
+            return new Date(value).toISOString();
+          },
+          async loadRegistrations() {
+            const response = await this.apiRequest("/api/v1/contest-registrations");
+            this.participant.registrations = response.registrations || [];
+            this.participant.registeredContestIds = new Set(
+              this.participant.registrations
+                .filter((registration) => registration.status === "REGISTERED")
+                .map((registration) => registration.contest_id)
+            );
+          },
+          async loadActiveContests() {
+            this.participant.loadingContests = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              await this.loadRegistrations();
+              const response = await this.apiRequest("/api/v1/contests?status=ACTIVE");
+              this.participant.activeContests = response.contests || [];
+            } catch (error) {
+              this.participant.error = error.message || "Unable to load active contests.";
+            } finally {
+              this.participant.loadingContests = false;
+            }
+          },
+          isRegistered(contest) {
+            return this.participant.registeredContestIds.has(this.contestId(contest));
+          },
+          async registerContest(contest) {
+            this.participant.error = "";
+            this.participant.success = "";
+            const contestId = this.contestId(contest);
+            try {
+              await this.apiRequest("/api/v1/contest-registrations", {
+                method: "POST",
+                body: JSON.stringify({ contest_id: contestId }),
+              });
+              this.participant.registeredContestIds = new Set([
+                ...this.participant.registeredContestIds,
+                contestId,
+              ]);
+              this.participant.success = "Registration confirmed.";
+            } catch (error) {
+              if (error.status === 409 && error.message.includes("Already registered")) {
+                this.participant.registeredContestIds = new Set([
+                  ...this.participant.registeredContestIds,
+                  contestId,
+                ]);
+                this.participant.success = "Registration confirmed.";
+                return;
+              }
+              this.participant.error = error.message || "Registration failed.";
+            }
+          },
+          connectContest(contest) {
+            this.disconnectContest();
+            this.participant.error = "";
+            this.participant.success = "";
+            this.participant.connectedContest = contest;
+            this.participant.latestObservation = { sequence_id: null, timestamp: "" };
+            this.participant.submissionPayload = JSON.stringify(
+              {
+                forecast: {
+                  horizon_1: {},
+                  horizon_5: {},
+                  horizon_10: {},
+                },
+              },
+              null,
+              2
+            );
+            this.$nextTick(() => {
+              this.createSensorChart();
+              this.openStream(contest);
+            });
+          },
+          disconnectContest() {
+            if (this.streamSocket) {
+              this.streamSocket.close();
+              this.streamSocket = null;
+            }
+            if (this.sensorChart) {
+              this.sensorChart.destroy();
+              this.sensorChart = null;
+            }
+            this.participant.connectedContest = null;
+          },
+          createSensorChart() {
+            if (!this.$refs.sensorChart || typeof Chart === "undefined") {
+              return;
+            }
+            this.sensorChart = new Chart(this.$refs.sensorChart, {
+              type: "line",
+              data: {
+                labels: [],
+                datasets: [],
+              },
+              options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                  intersect: false,
+                  mode: "nearest",
+                },
+                scales: {
+                  x: {
+                    ticks: { color: "#475569", maxTicksLimit: 10 },
+                    grid: { color: "#e2e8f0" },
+                  },
+                  y: {
+                    ticks: { color: "#475569" },
+                    grid: { color: "#e2e8f0" },
+                  },
+                },
+                plugins: {
+                  legend: {
+                    labels: { color: "#0f172a" },
+                  },
+                },
+              },
+            });
+          },
+          openStream(contest) {
+            const contestId = this.contestId(contest);
+            const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+            const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${contestId}?token=${encodeURIComponent(this.token)}`;
+            this.streamSocket = new WebSocket(url);
+            this.streamSocket.onmessage = (event) => {
+              const observation = JSON.parse(event.data);
+              this.participant.latestObservation = {
+                sequence_id: observation.sequence_id,
+                timestamp: observation.timestamp,
+              };
+              this.appendObservation(observation);
+            };
+            this.streamSocket.onerror = () => {
+              this.participant.error = "Live stream connection failed.";
+            };
+            this.streamSocket.onclose = () => {
+              if (this.participant.connectedContest) {
+                this.participant.error = "Live stream disconnected.";
+              }
+            };
+          },
+          appendObservation(observation) {
+            if (!this.sensorChart) {
+              return;
+            }
+            const label = observation.sequence_id;
+            const sensors = observation.sensors || {};
+            const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
+            for (const sensorId of Object.keys(sensors)) {
+              if (!this.sensorChart.data.datasets.some((dataset) => dataset.label === sensorId)) {
+                const color = colors[this.sensorChart.data.datasets.length % colors.length];
+                this.sensorChart.data.datasets.push({
+                  label: sensorId,
+                  data: [],
+                  borderColor: color,
+                  backgroundColor: color,
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  tension: 0.25,
+                });
+              }
+            }
+            this.sensorChart.data.labels.push(label);
+            for (const dataset of this.sensorChart.data.datasets) {
+              dataset.data.push(sensors[dataset.label] ?? null);
+              if (dataset.data.length > 100) {
+                dataset.data.shift();
+              }
+            }
+            if (this.sensorChart.data.labels.length > 100) {
+              this.sensorChart.data.labels.shift();
+            }
+            this.sensorChart.update("none");
+          },
+          async submitPrediction() {
+            this.participant.submitting = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              const payload = JSON.parse(this.participant.submissionPayload);
+              const contestId = this.contestId(this.participant.connectedContest);
+              const response = await this.apiRequest(
+                `/api/v1/contests/${contestId}/submissions`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    task_id: "forecasting",
+                    prediction_from_sequence: this.participant.latestObservation.sequence_id,
+                    payload,
+                  }),
+                }
+              );
+              this.participant.success = `Submission ${response.submission_id} received.`;
+            } catch (error) {
+              this.participant.error = error.message || "Submission failed.";
+            } finally {
+              this.participant.submitting = false;
+            }
+          },
+          async loadMyActivity() {
+            this.participant.loadingActivity = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              await this.loadRegistrations();
+              const registeredContestIds = Array.from(this.participant.registeredContestIds);
+              const contestsResponse = await this.apiRequest("/api/v1/contests");
+              const contestsById = new Map(
+                (contestsResponse.contests || []).map((contest) => [this.contestId(contest), contest])
+              );
+              const activity = [];
+              for (const contestId of registeredContestIds) {
+                let contest = contestsById.get(contestId);
+                if (!contest) {
+                  contest = await this.apiRequest(`/api/v1/contests/${contestId}`);
+                }
+                const submissionsResponse = await this.apiRequest(
+                  `/api/v1/contests/${contestId}/submissions`
+                );
+                const submissions = [];
+                for (const submission of submissionsResponse.submissions || []) {
+                  let score = null;
+                  if (submission.status === "EVALUATED") {
+                    const scoresResponse = await this.apiRequest(
+                      `/api/v1/submissions/${submission.submission_id}/scores`
+                    );
+                    const scores = scoresResponse.scores || [];
+                    if (scores.length > 0) {
+                      score = scores.reduce((total, item) => total + Number(item.value), 0) / scores.length;
+                    }
+                  }
+                  submissions.push({ ...submission, score });
+                }
+                activity.push({ contest, submissions });
+              }
+              this.participant.activity = activity;
+            } catch (error) {
+              this.participant.error = error.message || "Unable to load activity.";
+            } finally {
+              this.participant.loadingActivity = false;
+            }
+          },
+          async loadOrganizerDashboard() {
+            if (this.organizer.dashboardLoaded) {
+              return;
+            }
+            this.organizer.dashboardLoaded = true;
+            await this.loadOrganizerContests();
+          },
+          async setOrganizerTab(tab) {
+            this.organizer.tab = tab;
+            this.organizer.error = "";
+            this.organizer.success = "";
+            if (tab === "contests") {
+              await this.loadOrganizerContests();
+            }
+            if (tab === "new") {
+              await this.loadTemplates();
+            }
+          },
+          async loadOrganizerContests() {
+            this.organizer.loadingContests = true;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/contests");
+              this.organizer.contests = response.contests || [];
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load contests.";
+            } finally {
+              this.organizer.loadingContests = false;
+            }
+          },
+          async updateContestStatus(contest, status) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status }),
+              });
+              this.replaceOrganizerContest(updated);
+              this.organizer.success = `Contest ${status.toLowerCase()} successfully.`;
+            } catch (error) {
+              this.organizer.error = error.message || "Contest update failed.";
+            }
+          },
+          startDeadlineExtension(contest) {
+            this.organizer.extendingContestId = this.contestId(contest);
+            this.organizer.newEndDate = this.toLocalDateTime(contest.end_date);
+            this.organizer.error = "";
+            this.organizer.success = "";
+          },
+          async extendContestDeadline(contest) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  end_date: this.toApiDateTime(this.organizer.newEndDate),
+                }),
+              });
+              this.replaceOrganizerContest(updated);
+              this.organizer.extendingContestId = null;
+              this.organizer.newEndDate = "";
+              this.organizer.success = "Deadline updated successfully.";
+            } catch (error) {
+              this.organizer.error = error.message || "Deadline update failed.";
+            }
+          },
+          replaceOrganizerContest(updated) {
+            const updatedId = this.contestId(updated);
+            this.organizer.contests = this.organizer.contests.map((contest) =>
+              this.contestId(contest) === updatedId ? updated : contest
+            );
+          },
+          async toggleLeaderboard(contest) {
+            const contestId = this.contestId(contest);
+            if (this.organizer.expandedContestId === contestId) {
+              this.organizer.expandedContestId = null;
+              return;
+            }
+            this.organizer.expandedContestId = contestId;
+            if (this.organizer.leaderboards[contestId]) {
+              return;
+            }
+            this.organizer.loadingLeaderboardId = contestId;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest(
+                `/api/v1/contests/${contestId}/leaderboard`
+              );
+              this.organizer.leaderboards = {
+                ...this.organizer.leaderboards,
+                [contestId]: response.entries || [],
+              };
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load leaderboard.";
+              this.organizer.leaderboards = {
+                ...this.organizer.leaderboards,
+                [contestId]: [],
+              };
+            } finally {
+              this.organizer.loadingLeaderboardId = null;
+            }
+          },
+          async loadTemplates() {
+            if (this.organizer.templates.length > 0) {
+              return;
+            }
+            this.organizer.loadingTemplates = true;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/templates");
+              this.organizer.templates = response.templates || [];
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load templates.";
+            } finally {
+              this.organizer.loadingTemplates = false;
+            }
+          },
+          async selectTemplate(template) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const fullTemplate = await this.apiRequest(
+                `/api/v1/templates/${template.template_id}`
+              );
+              const now = new Date();
+              const start = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              const end = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+              this.organizer.selectedTemplate = fullTemplate;
+              this.organizer.form = {
+                name: fullTemplate.name,
+                description: fullTemplate.description,
+                visibility: "PUBLIC",
+                start_date: this.toLocalDateTime(start.toISOString()),
+                end_date: this.toLocalDateTime(end.toISOString()),
+                sampling_rate_hz: fullTemplate.sampling_rate_hz,
+                twin_id: fullTemplate.twin_id,
+                sensor_configs: fullTemplate.sensor_configs || [],
+                fault_schedule: fullTemplate.fault_schedule || [],
+                initial_conditions: fullTemplate.initial_conditions || null,
+                task_type: fullTemplate.task_type || "FORECASTING",
+              };
+              this.organizer.newStep = 2;
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load template.";
+            }
+          },
+          async createContest() {
+            this.organizer.creating = true;
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const request = {
+                name: this.organizer.form.name,
+                description: this.organizer.form.description,
+                visibility: this.organizer.form.visibility,
+                task_type: this.organizer.form.task_type,
+                twin_id: this.organizer.form.twin_id,
+                sensor_configs: this.organizer.form.sensor_configs,
+                fault_schedule: this.organizer.form.fault_schedule,
+                initial_conditions: this.organizer.form.initial_conditions,
+                sampling_rate_hz: Number(this.organizer.form.sampling_rate_hz),
+                start_date: this.toApiDateTime(this.organizer.form.start_date),
+                end_date: this.toApiDateTime(this.organizer.form.end_date),
+              };
+              const created = await this.apiRequest("/api/v1/contests", {
+                method: "POST",
+                body: JSON.stringify(request),
+              });
+              this.organizer.contests = [created, ...this.organizer.contests];
+              this.organizer.success = "Contest created successfully.";
+              this.organizer.newStep = 1;
+              this.organizer.selectedTemplate = null;
+              this.organizer.tab = "contests";
+            } catch (error) {
+              this.organizer.error = error.message || "Contest creation failed.";
+            } finally {
+              this.organizer.creating = false;
+            }
+          },
+          async loadAdminDashboard() {
+            if (this.admin.dashboardLoaded) {
+              return;
+            }
+            this.admin.dashboardLoaded = true;
+            await this.loadAdminOverview();
+          },
+          async setAdminTab(tab) {
+            this.admin.tab = tab;
+            this.admin.error = "";
+            this.admin.success = "";
+            if (tab === "overview") {
+              await this.loadAdminOverview();
+            }
+            if (tab === "users") {
+              await this.loadAdminUsers();
+            }
+          },
+          async loadAdminOverview() {
+            this.admin.loadingOverview = true;
+            this.admin.error = "";
+            try {
+              const [contestsResponse, usersResponse] = await Promise.all([
+                this.apiRequest("/api/v1/contests?limit=1000"),
+                this.apiRequest("/api/v1/users?limit=1000"),
+              ]);
+              this.admin.contests = contestsResponse.contests || [];
+              this.admin.users = usersResponse.users || [];
+              this.admin.totalUsers = usersResponse.total ?? this.admin.users.length;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to load platform overview.";
+            } finally {
+              this.admin.loadingOverview = false;
+            }
+          },
+          async loadAdminUsers() {
+            this.admin.loadingUsers = true;
+            this.admin.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/users?limit=1000");
+              this.admin.users = response.users || [];
+              this.admin.totalUsers = response.total ?? this.admin.users.length;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to load users.";
+            } finally {
+              this.admin.loadingUsers = false;
+            }
+          },
+          contestsByStatus() {
+            return this.admin.contests.reduce((counts, contest) => {
+              counts[contest.status] = (counts[contest.status] || 0) + 1;
+              return counts;
+            }, {});
+          },
+          sortAdminContests(key) {
+            if (this.admin.contestSortKey === key) {
+              this.admin.contestSortDirection =
+                this.admin.contestSortDirection === "asc" ? "desc" : "asc";
+            } else {
+              this.admin.contestSortKey = key;
+              this.admin.contestSortDirection = "asc";
+            }
+          },
+          sortedAdminContests() {
+            const key = this.admin.contestSortKey;
+            const direction = this.admin.contestSortDirection === "asc" ? 1 : -1;
+            return [...this.admin.contests].sort((left, right) => {
+              const leftValue = left[key] ?? "";
+              const rightValue = right[key] ?? "";
+              if (typeof leftValue === "number" && typeof rightValue === "number") {
+                return (leftValue - rightValue) * direction;
+              }
+              return String(leftValue).localeCompare(String(rightValue)) * direction;
+            });
+          },
+          allowedStatusTransitions(status) {
+            const transitions = {
+              DRAFT: ["SCHEDULED", "ACTIVE"],
+              SCHEDULED: ["ACTIVE"],
+              ACTIVE: ["CLOSED"],
+              CLOSED: ["ARCHIVED"],
+              ARCHIVED: [],
+            };
+            return transitions[status] || [];
+          },
+          async transitionAdminContest(contest, status) {
+            if (!status) {
+              return;
+            }
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status }),
+              });
+              this.admin.contests = this.admin.contests.map((item) =>
+                this.contestId(item) === this.contestId(updated) ? updated : item
+              );
+              this.admin.success = `Contest moved to ${status}.`;
+            } catch (error) {
+              this.admin.error = error.message || "Contest transition failed.";
+            }
+          },
+          filteredAdminUsers() {
+            const query = this.admin.userSearch.trim().toLowerCase();
+            if (!query) {
+              return this.admin.users;
+            }
+            return this.admin.users.filter((account) =>
+              `${account.username} ${account.email}`.toLowerCase().includes(query)
+            );
+          },
+          async updateUserRole(account, role) {
+            if (role === account.role) {
+              return;
+            }
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/users/${account.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ role }),
+              });
+              this.replaceAdminUser(updated);
+              this.admin.success = "User role updated.";
+            } catch (error) {
+              this.admin.error = error.message || "User role update failed.";
+            }
+          },
+          async toggleUserActive(account) {
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/users/${account.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ is_active: !account.is_active }),
+              });
+              this.replaceAdminUser(updated);
+              this.admin.success = updated.is_active
+                ? "User account activated."
+                : "User account deactivated.";
+            } catch (error) {
+              this.admin.error = error.message || "User active status update failed.";
+            }
+          },
+          replaceAdminUser(updated) {
+            this.admin.users = this.admin.users.map((account) =>
+              account.id === updated.id ? updated : account
+            );
+          },
+          decodeToken(token) {
+            try {
+              const payload = token.split(".")[1];
+              const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+              const json = decodeURIComponent(
+                atob(base64)
+                  .split("")
+                  .map((char) => "%" + ("00" + char.charCodeAt(0).toString(16)).slice(-2))
+                  .join("")
+              );
+              return JSON.parse(json);
+            } catch (error) {
+              return null;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

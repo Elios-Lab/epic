@@ -1,8 +1,10 @@
 """FastAPI application factory."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from epic_api import dependencies
 from epic_api.errors import register_exception_handlers
@@ -33,6 +35,8 @@ from epic_twins.industrial_pump.plugin import register as register_industrial_pu
 from epic_twins.mass_spring_damper.plugin import register as register_mass_spring_damper
 from epic_twins.rotating_machinery.plugin import register as register_rotating_machinery
 from epic_twins.smart_building.plugin import register as register_smart_building
+
+GUI_DIR = Path(__file__).resolve().parent.parent / "epic_gui"
 
 
 @asynccontextmanager
@@ -81,4 +85,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(twins.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(ws.router, prefix="/api/v1/ws")
+    app.mount("/", StaticFiles(directory=GUI_DIR, html=True), name="epic_gui")
     return app

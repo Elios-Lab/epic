@@ -2,6 +2,16 @@
 
 > A simulation-driven machine learning competition platform based on extensible digital twins, streaming sensor data, forecasting, anomaly detection and predictive maintenance.
 
+## Live Instance
+
+**[https://epic.elioslab.net](https://epic.elioslab.net)**
+
+- Web interface: `https://epic.elioslab.net`
+- API: `https://epic.elioslab.net/api/v1`
+- API documentation (Swagger UI): `https://epic.elioslab.net/docs`
+
+---
+
 ## Overview
 
 EPIC (ELIOS Predictive Intelligence Challenge) is a framework for creating machine learning competitions based on simulated environments and digital twins. Unlike traditional competitions that provide static datasets, EPIC allows participants to interact with digital twins through APIs and real-time streams, generate their own datasets, train models and submit solutions.
@@ -196,10 +206,7 @@ uv run uvicorn epic_api.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
-Interactive documentation is auto-generated at:
-
-- `http://localhost:8000/docs` (Swagger UI)
-- `http://localhost:8000/redoc` (ReDoc)
+Interactive documentation is auto-generated at `http://localhost:8000/docs` (Swagger UI).
 
 ### Run tests
 
@@ -349,21 +356,26 @@ Success criteria:
 
 ---
 
-## Phase 5 – Educational Ecosystem
+## Phase 5 – Educational Ecosystem 🔄
 
 Goal: Make EPIC usable by instructors and researchers without software development.
 
 Deliverables:
 
-- Contest templates with predefined fault schedules and sensor configurations
-- Web-based contest authoring UI
-- Twin catalog with browsable fault and sensor documentation
-- WebSocket client starter kit (Python + Jupyter)
-- Educational dashboards (live simulation visualization)
+- WebSocket client starter kit (`epic_client/` Python package + Jupyter quickstart notebook) ✅
+- Contest templates — predefined configurations for all five twins, exposed via API ✅
+- Twin catalog — browsable documentation of twins, faults, sensors, and templates via API ✅
+- Web frontend — responsive single-page application with role-based dashboards 🔄
+  - Landing page, login, role routing, navigation shell
+  - Participant dashboard: contest listing, live sensor stream, submission, scores
+  - Organizer dashboard: contest creation from templates, management, leaderboard view
+  - Administrator dashboard: platform stats, all contests, user management
 
 Success criteria:
 
 - A professor can create a complete contest through configuration alone, without writing code.
+- A student can connect to a contest, collect data, and submit predictions using the SDK.
+- All roles have a dedicated dashboard accessible from a single entry point.
 
 ---
 
