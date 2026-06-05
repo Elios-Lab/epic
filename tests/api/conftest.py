@@ -25,6 +25,9 @@ def client():
         database_url=database_url,
         secret_key="test-secret-key-32-characters-xx",
         debug=False,
+        admin_username="admin1",
+        admin_email="admin@example.com",
+        admin_password="admin-password",
     )
 
     with test_registry_context():
@@ -36,7 +39,7 @@ def client():
 
 
 @pytest.fixture
-def registered_user(client):
+def registered_user(client, admin_headers):
     response = client.post(
         "/api/v1/users",
         json={
@@ -44,6 +47,7 @@ def registered_user(client):
             "email": "student@example.com",
             "password": "correct-password",
         },
+        headers=admin_headers,
     )
     assert response.status_code == 201
     return response.json()
@@ -62,29 +66,12 @@ def auth_headers(client, registered_user):
 
 @pytest.fixture
 def registered_admin(client):
-    response = client.post(
-        "/api/v1/users",
-        json={
-            "username": "admin1",
-            "email": "admin@example.com",
-            "password": "admin-password",
-        },
-    )
-    assert response.status_code == 201
-
-    async def promote_admin():
-        async with get_session_factory()() as db:
-            result = await db.execute(select(User).where(User.username == "admin1"))
-            user = result.scalar_one()
-            user.role = "ADMINISTRATOR"
-            await db.commit()
-            await db.refresh(user)
-            return user
-
-    asyncio.run(promote_admin())
-    user = response.json()
-    user["role"] = "ADMINISTRATOR"
-    return user
+    return {
+        "username": "admin1",
+        "email": "admin@example.com",
+        "role": "ADMINISTRATOR",
+        "id": None,
+    }
 
 
 @pytest.fixture
@@ -102,7 +89,7 @@ def admin_headers(client, registered_admin):
 
 
 @pytest.fixture
-def registered_organizer(client):
+def registered_organizer(client, admin_headers):
     response = client.post(
         "/api/v1/users",
         json={
@@ -110,6 +97,7 @@ def registered_organizer(client):
             "email": "organizer@example.com",
             "password": "organizer-password",
         },
+        headers=admin_headers,
     )
     assert response.status_code == 201
 

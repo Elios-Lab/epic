@@ -113,6 +113,7 @@ def test_get_returns_only_authenticated_users_registrations(
             "email": "student2@example.com",
             "password": "other-password",
         },
+        headers=admin_headers,
     )
     assert other_user_response.status_code == 201
     login_response = client.post(
@@ -175,7 +176,7 @@ def test_delete_already_withdrawn_registration_returns_409(
 
 
 def test_organizer_can_filter_registrations_for_own_contest(
-    client, organizer_headers, auth_headers
+    client, organizer_headers, auth_headers, admin_headers
 ):
     contest = create_contest(
         client, organizer_headers, "Organizer registration filter", "SCHEDULED"
@@ -192,6 +193,7 @@ def test_organizer_can_filter_registrations_for_own_contest(
             "email": "registration-filter-user@example.com",
             "password": "other-password",
         },
+        headers=admin_headers,
     )
     assert other_user_response.status_code == 201
     login_response = client.post(
@@ -243,6 +245,7 @@ def test_participant_contest_filter_returns_only_own_registrations(
             "email": "participant-filter-user@example.com",
             "password": "other-password",
         },
+        headers=admin_headers,
     )
     assert other_user_response.status_code == 201
     login_response = client.post(

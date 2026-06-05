@@ -24,7 +24,9 @@ from epic_api.routers import (
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.config import Settings, get_settings
 from epic_core.db.base import create_all_tables
+from epic_core.db.bootstrap import seed_admin
 from epic_core.db.session import get_engine as get_db_engine
+from epic_core.db.session import get_session_factory
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
 import epic_core.registry as registry_module
@@ -48,6 +50,8 @@ async def lifespan(app: FastAPI):
     app.state.engine = SimulationEngine(broadcaster=app.state.broadcaster)
     init_db(settings.database_url)
     await create_all_tables(get_db_engine())
+    async with get_session_factory()() as db:
+        await seed_admin(settings, db)
     register_sensors()
     register_mass_spring_damper()
     register_industrial_pump()

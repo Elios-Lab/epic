@@ -356,26 +356,29 @@ Success criteria:
 
 ---
 
-## Phase 5 – Educational Ecosystem 🔄
+## Phase 5 – Educational Ecosystem ✅
 
 Goal: Make EPIC usable by instructors and researchers without software development.
 
 Deliverables:
 
-- WebSocket client starter kit (`epic_client/` Python package + Jupyter quickstart notebook) ✅
+- WebSocket client starter kit (`epic-elios-client` Python package published on PyPI + Jupyter quickstart notebook) ✅
 - Contest templates — predefined configurations for all five twins, exposed via API ✅
 - Twin catalog — browsable documentation of twins, faults, sensors, and templates via API ✅
-- Web frontend — responsive single-page application with role-based dashboards 🔄
-  - Landing page, login, role routing, navigation shell
-  - Participant dashboard: contest listing, live sensor stream, submission, scores
-  - Organizer dashboard: contest creation from templates, management, leaderboard view
-  - Administrator dashboard: platform stats, all contests, user management
+- Web frontend — responsive single-page application with role-based dashboards ✅
+  - Landing page, login, role routing, navigation shell ✅
+  - Participant dashboard: contest listing, live sensor stream, submission, scores ✅
+  - Organizer dashboard: contest creation from templates, management, leaderboard view ✅
+  - Administrator dashboard: platform stats, all contests, user management, user creation ✅
+- Admin bootstrap — first administrator account seeded from environment variables on startup ✅
+- Closed registration — user accounts created by administrators only ✅
+- Task table — contest tasks extracted into a dedicated relational table, enabling multi-task contests ✅
 
 Success criteria:
 
-- A professor can create a complete contest through configuration alone, without writing code.
-- A student can connect to a contest, collect data, and submit predictions using the SDK.
-- All roles have a dedicated dashboard accessible from a single entry point.
+- A professor can create a complete contest through configuration alone, without writing code. ✅
+- A student can connect to a contest, collect data, and submit predictions using the SDK. ✅
+- All roles have a dedicated dashboard accessible from a single entry point. ✅
 
 ---
 
@@ -412,6 +415,12 @@ Possible extensions:
 Success criteria:
 
 - New research domains can be integrated by implementing interfaces alone, without modifying the EPIC Core.
+
+---
+
+# Powered by Elios Lab
+
+EPIC is developed and maintained by [Elios Lab](https://www.elios.unige.it/) at the University of Genoa.
 
 ---
 

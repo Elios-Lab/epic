@@ -51,3 +51,10 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Quickstart Notebook
+
+Download and run the
+[quickstart notebook](https://github.com/Elios-Lab/epic/blob/main/notebooks/quickstart.ipynb)
+for a step-by-step walkthrough: connect, collect observations, plot sensor
+data, and submit a prediction.

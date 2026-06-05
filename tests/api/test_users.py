@@ -1,4 +1,4 @@
-def test_create_user_returns_201_and_user_fields(client):
+def test_create_user_returns_201_and_user_fields(client, admin_headers):
     response = client.post(
         "/api/v1/users",
         json={
@@ -6,6 +6,7 @@ def test_create_user_returns_201_and_user_fields(client):
             "email": "student@example.com",
             "password": "correct-password",
         },
+        headers=admin_headers,
     )
 
     assert response.status_code == 201
@@ -18,7 +19,7 @@ def test_create_user_returns_201_and_user_fields(client):
     assert body["created_at"]
 
 
-def test_create_user_response_excludes_password_fields(client):
+def test_create_user_response_excludes_password_fields(client, admin_headers):
     response = client.post(
         "/api/v1/users",
         json={
@@ -26,6 +27,7 @@ def test_create_user_response_excludes_password_fields(client):
             "email": "student@example.com",
             "password": "correct-password",
         },
+        headers=admin_headers,
     )
 
     assert response.status_code == 201
@@ -34,7 +36,9 @@ def test_create_user_response_excludes_password_fields(client):
     assert "password_hash" not in body
 
 
-def test_create_user_duplicate_username_returns_409(client, registered_user):
+def test_create_user_duplicate_username_returns_409(
+    client, registered_user, admin_headers
+):
     response = client.post(
         "/api/v1/users",
         json={
@@ -42,6 +46,7 @@ def test_create_user_duplicate_username_returns_409(client, registered_user):
             "email": "other@example.com",
             "password": "correct-password",
         },
+        headers=admin_headers,
     )
 
     assert response.status_code == 409
@@ -50,7 +55,9 @@ def test_create_user_duplicate_username_returns_409(client, registered_user):
     assert body["error"]["message"]
 
 
-def test_create_user_duplicate_email_returns_409(client, registered_user):
+def test_create_user_duplicate_email_returns_409(
+    client, registered_user, admin_headers
+):
     response = client.post(
         "/api/v1/users",
         json={
@@ -58,6 +65,7 @@ def test_create_user_duplicate_email_returns_409(client, registered_user):
             "email": registered_user["email"],
             "password": "correct-password",
         },
+        headers=admin_headers,
     )
 
     assert response.status_code == 409

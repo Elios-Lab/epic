@@ -43,6 +43,7 @@ def user_response(user: User) -> dict:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_user(
     request: CreateUserRequest,
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

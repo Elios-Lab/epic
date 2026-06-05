@@ -2,7 +2,7 @@ import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 
-from epic_core.db.models import Contest, SensorObservation, SimulationSession
+from epic_core.db.models import Contest, SensorObservation, SimulationSession, Task
 
 
 def submission_payload(sequence_id: int = 1) -> dict:
@@ -18,10 +18,13 @@ def submission_payload(sequence_id: int = 1) -> dict:
     }
 
 
-def create_user_and_headers(client, username: str, email: str, password: str) -> dict:
+def create_user_and_headers(
+    client, admin_headers, username: str, email: str, password: str
+) -> dict:
     response = client.post(
         "/api/v1/users",
         json={"username": username, "email": email, "password": password},
+        headers=admin_headers,
     )
     assert response.status_code == 201
     login_response = client.post(
@@ -49,6 +52,17 @@ def create_contest_with_observation(db_factory, name: str, status: str = "ACTIVE
                 created_by=None,
             )
             db.add(contest)
+            await db.flush()
+            db.add(
+                Task(
+                    contest_id=contest.id,
+                    task_type="FORECASTING",
+                    name="FORECASTING",
+                    metric_ids=[],
+                    weight=1.0,
+                    configuration={"forecast_horizons": [1, 5]},
+                )
+            )
             await db.commit()
             await db.refresh(contest)
 
@@ -105,13 +119,22 @@ def create_scoring_contest(db_factory):
                 twin_id="mass_spring_damper",
                 sensor_configs=[{"sensor_id": "position"}],
                 sampling_rate_hz=20.0,
-                task_type="FORECASTING",
-                forecast_horizons=[1],
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
                 created_by=None,
             )
             db.add(contest)
+            await db.flush()
+            db.add(
+                Task(
+                    contest_id=contest.id,
+                    task_type="FORECASTING",
+                    name="FORECASTING",
+                    metric_ids=[],
+                    weight=1.0,
+                    configuration={"forecast_horizons": [1]},
+                )
+            )
             await db.commit()
             await db.refresh(contest)
 
@@ -224,7 +247,7 @@ def test_post_with_nonexistent_prediction_sequence_returns_422(
 
 
 def test_get_contest_submissions_returns_only_own_submissions(
-    client, db_factory, auth_headers
+    client, db_factory, auth_headers, admin_headers
 ):
     contest = create_contest_with_observation(db_factory, "Own submissions list")
     register_participant(client, auth_headers, str(contest.id))
@@ -232,7 +255,11 @@ def test_get_contest_submissions_returns_only_own_submissions(
     assert own_response.status_code == 201
 
     other_headers = create_user_and_headers(
-        client, "student2", "student2-submissions@example.com", "other-password"
+        client,
+        admin_headers,
+        "student2",
+        "student2-submissions@example.com",
+        "other-password",
     )
     register_participant(client, other_headers, str(contest.id))
     other_response = submit(client, other_headers, str(contest.id))
@@ -267,14 +294,18 @@ def test_get_submission_returns_submission_for_owner(client, db_factory, auth_he
 
 
 def test_get_submission_by_different_user_returns_403(
-    client, db_factory, auth_headers
+    client, db_factory, auth_headers, admin_headers
 ):
     contest = create_contest_with_observation(db_factory, "Denied submission")
     register_participant(client, auth_headers, str(contest.id))
     submission_response = submit(client, auth_headers, str(contest.id))
     assert submission_response.status_code == 201
     other_headers = create_user_and_headers(
-        client, "student3", "student3-submissions@example.com", "other-password"
+        client,
+        admin_headers,
+        "student3",
+        "student3-submissions@example.com",
+        "other-password",
     )
 
     response = client.get(

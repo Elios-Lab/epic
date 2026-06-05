@@ -245,7 +245,18 @@ Response `201 Created`:
   "start_date": "2027-01-10T00:00:00Z",
   "end_date": "2027-03-01T23:59:59Z",
   "created_by": "u_admin",
-  "created_at": "2027-01-01T12:00:00Z"
+  "created_at": "2027-01-01T12:00:00Z",
+  "tasks": [
+    {
+      "task_id": "...",
+      "task_type": "FORECASTING",
+      "name": "FORECASTING",
+      "weight": 1.0,
+      "configuration": {
+        "forecast_horizons": [1, 5, 10]
+      }
+    }
+  ]
 }
 ```
 
@@ -266,7 +277,18 @@ Response `200 OK`:
   "status": "ACTIVE",
   "visibility": "PUBLIC",
   "start_date": "2027-01-10T00:00:00Z",
-  "end_date": "2027-03-01T23:59:59Z"
+  "end_date": "2027-03-01T23:59:59Z",
+  "tasks": [
+    {
+      "task_id": "...",
+      "task_type": "FORECASTING",
+      "name": "FORECASTING",
+      "weight": 1.0,
+      "configuration": {
+        "forecast_horizons": [1, 5, 10]
+      }
+    }
+  ]
 }
 ```
 
@@ -348,49 +370,13 @@ The server validates allowed transitions.
 
 # Contest Tasks
 
-Tasks belong to contests.
+Tasks are embedded in contest responses under the `tasks` key.
+Each contest currently has exactly one task, created automatically
+when the contest is created.
 
----
-
-## List Contest Tasks
-
-```http
-GET /api/v1/contests/{contest_id}/tasks
-```
-
----
-
-## Create Contest Task
-
-```http
-POST /api/v1/contests/{contest_id}/tasks
-```
-
-ORGANIZER (own contest) or ADMINISTRATOR.
-
----
-
-## Get Contest Task
-
-```http
-GET /api/v1/contests/{contest_id}/tasks/{task_id}
-```
-
----
-
-## Update Contest Task
-
-```http
-PATCH /api/v1/contests/{contest_id}/tasks/{task_id}
-```
-
----
-
-## Delete Contest Task
-
-```http
-DELETE /api/v1/contests/{contest_id}/tasks/{task_id}
-```
+Dedicated task management endpoints
+(`GET /api/v1/contests/{contest_id}/tasks`, etc.)
+are planned for a future phase.
 
 ---
 

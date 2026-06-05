@@ -110,6 +110,38 @@ If either is missing, Pydantic raises a `ValidationError` at startup with a clea
 
 ---
 
+## Admin Bootstrap
+
+To create the first administrator account automatically on startup,
+set the following environment variables:
+
+| Variable         | Required | Description                                      |
+|------------------|----------|--------------------------------------------------|
+| `ADMIN_USERNAME` | No       | Username of the bootstrap administrator account  |
+| `ADMIN_EMAIL`    | No       | Email address (defaults to `username@epic.local`)|
+| `ADMIN_PASSWORD` | No       | Password for the bootstrap account               |
+
+If `ADMIN_USERNAME` is set but the account already exists and is already
+an administrator, startup continues without making any changes.
+
+If `ADMIN_USERNAME` is set and the account exists with a different role,
+the account is promoted to ADMINISTRATOR.
+
+If `ADMIN_USERNAME` is not set, the bootstrap step is skipped entirely.
+
+Example `.env` entry:
+
+```
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@elioslab.it
+ADMIN_PASSWORD=change-me-in-production
+```
+
+Remove or unset these variables after the first deployment if you prefer
+not to re-seed on every restart (the account will persist in the database).
+
+---
+
 # Environment File
 
 Create a `.env` file in the project root for local development:

@@ -4,13 +4,14 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from epic_api.routers.submissions import _score_submission
-from epic_core.db.models import Contest, SensorObservation, SimulationSession
+from epic_core.db.models import Contest, SensorObservation, SimulationSession, Task
 
 
-def create_user_and_headers(client, username: str, email: str, password: str):
+def create_user_and_headers(client, admin_headers, username: str, email: str, password: str):
     response = client.post(
         "/api/v1/users",
         json={"username": username, "email": email, "password": password},
+        headers=admin_headers,
     )
     assert response.status_code == 201
     user = response.json()
@@ -34,13 +35,22 @@ def create_active_contest_with_observations(db_factory, name: str = "Leaderboard
                 twin_id="mass_spring_damper",
                 sensor_configs=[{"sensor_id": "position"}],
                 sampling_rate_hz=20.0,
-                task_type="FORECASTING",
-                forecast_horizons=[1],
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
                 created_by=None,
             )
             db.add(contest)
+            await db.flush()
+            db.add(
+                Task(
+                    contest_id=contest.id,
+                    task_type="FORECASTING",
+                    name="FORECASTING",
+                    metric_ids=[],
+                    weight=1.0,
+                    configuration={"forecast_horizons": [1]},
+                )
+            )
             await db.commit()
             await db.refresh(contest)
 
@@ -103,13 +113,13 @@ def submit_and_score(client, headers, db_factory, contest_id: str, prediction: f
     return submission
 
 
-def leaderboard_setup(client, db_factory):
+def leaderboard_setup(client, db_factory, admin_headers):
     contest = create_active_contest_with_observations(db_factory)
     user1, headers1 = create_user_and_headers(
-        client, "leaderboard1", "leaderboard1@example.com", "password1"
+        client, admin_headers, "leaderboard1", "leaderboard1@example.com", "password1"
     )
     user2, headers2 = create_user_and_headers(
-        client, "leaderboard2", "leaderboard2@example.com", "password2"
+        client, admin_headers, "leaderboard2", "leaderboard2@example.com", "password2"
     )
     register(client, headers1, str(contest.id))
     register(client, headers2, str(contest.id))
@@ -126,8 +136,8 @@ def leaderboard_setup(client, db_factory):
     }
 
 
-def test_get_leaderboard_returns_entries_ordered_by_rank(client, db_factory):
-    setup = leaderboard_setup(client, db_factory)
+def test_get_leaderboard_returns_entries_ordered_by_rank(client, db_factory, admin_headers):
+    setup = leaderboard_setup(client, db_factory, admin_headers)
 
     response = client.get(f"/api/v1/contests/{setup['contest'].id}/leaderboard")
 
@@ -136,8 +146,8 @@ def test_get_leaderboard_returns_entries_ordered_by_rank(client, db_factory):
     assert [entry["rank"] for entry in entries] == [1, 2]
 
 
-def test_participant_with_lower_mae_has_rank_one(client, db_factory):
-    setup = leaderboard_setup(client, db_factory)
+def test_participant_with_lower_mae_has_rank_one(client, db_factory, admin_headers):
+    setup = leaderboard_setup(client, db_factory, admin_headers)
 
     response = client.get(f"/api/v1/contests/{setup['contest'].id}/leaderboard")
 
@@ -146,8 +156,10 @@ def test_participant_with_lower_mae_has_rank_one(client, db_factory):
     assert rank_one["user_id"] == setup["user2"]["id"]
 
 
-def test_better_second_submission_replaces_leaderboard_entry(client, db_factory):
-    setup = leaderboard_setup(client, db_factory)
+def test_better_second_submission_replaces_leaderboard_entry(
+    client, db_factory, admin_headers
+):
+    setup = leaderboard_setup(client, db_factory, admin_headers)
 
     better_submission = submit_and_score(
         client, setup["headers1"], db_factory, str(setup["contest"].id), 0.21
@@ -160,8 +172,8 @@ def test_better_second_submission_replaces_leaderboard_entry(client, db_factory)
     assert rank_one["submission_id"] == better_submission["submission_id"]
 
 
-def test_get_user_leaderboard_entry_returns_entry(client, db_factory):
-    setup = leaderboard_setup(client, db_factory)
+def test_get_user_leaderboard_entry_returns_entry(client, db_factory, admin_headers):
+    setup = leaderboard_setup(client, db_factory, admin_headers)
 
     response = client.get(
         f"/api/v1/contests/{setup['contest'].id}/leaderboard/{setup['user2']['id']}",
@@ -175,9 +187,9 @@ def test_get_user_leaderboard_entry_returns_entry(client, db_factory):
 
 
 def test_get_user_leaderboard_entry_by_different_participant_returns_403(
-    client, db_factory
+    client, db_factory, admin_headers
 ):
-    setup = leaderboard_setup(client, db_factory)
+    setup = leaderboard_setup(client, db_factory, admin_headers)
 
     response = client.get(
         f"/api/v1/contests/{setup['contest'].id}/leaderboard/{setup['user2']['id']}",

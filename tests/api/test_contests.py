@@ -36,10 +36,13 @@ def create_contest(client, admin_headers, **overrides):
     return response.json()
 
 
-def create_user_headers(client, username: str, email: str, password: str) -> dict:
+def create_user_headers(
+    client, admin_headers, username: str, email: str, password: str
+) -> dict:
     response = client.post(
         "/api/v1/users",
         json={"username": username, "email": email, "password": password},
+        headers=admin_headers,
     )
     assert response.status_code == 201
     login_response = client.post(
@@ -50,10 +53,13 @@ def create_user_headers(client, username: str, email: str, password: str) -> dic
     return {"Authorization": f"Bearer {login_response.json()['access_token']}"}
 
 
-def create_organizer_headers(client, username: str, email: str, password: str) -> dict:
+def create_organizer_headers(
+    client, admin_headers, username: str, email: str, password: str
+) -> dict:
     response = client.post(
         "/api/v1/users",
         json={"username": username, "email": email, "password": password},
+        headers=admin_headers,
     )
     assert response.status_code == 201
 
@@ -285,7 +291,7 @@ def test_patch_contest_by_creator_organizer_returns_200(client, organizer_header
 
 
 def test_patch_contest_by_different_organizer_returns_403(
-    client, organizer_headers
+    client, organizer_headers, admin_headers
 ):
     contest = create_contest(
         client,
@@ -294,6 +300,7 @@ def test_patch_contest_by_different_organizer_returns_403(
     )
     other_organizer_headers = create_organizer_headers(
         client,
+        admin_headers,
         "organizer2",
         "organizer2@example.com",
         "organizer2-password",
@@ -411,7 +418,7 @@ def test_patch_active_to_closed_sets_end_date(client, admin_headers):
 
 
 def test_organizer_sees_all_own_contest_submissions_participant_sees_own(
-    client, organizer_headers, auth_headers, db_factory
+    client, organizer_headers, auth_headers, admin_headers, db_factory
 ):
     contest = create_contest(
         client,
@@ -429,6 +436,7 @@ def test_organizer_sees_all_own_contest_submissions_participant_sees_own(
 
     other_headers = create_user_headers(
         client,
+        admin_headers,
         "student-for-organizer-view",
         "student-for-organizer-view@example.com",
         "participant-password",

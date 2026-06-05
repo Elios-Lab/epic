@@ -22,6 +22,7 @@ from epic_core.db.models import (
     SensorObservation,
     SimulationSession,
     Submission,
+    Task,
     User,
 )
 from epic_core.db.session import get_db, get_session_factory
@@ -80,12 +81,20 @@ async def _score_submission(
             select(Contest).where(Contest.id == submission.contest_id)
         )
         contest = contest_result.scalar_one()
-        if contest.task_type != "FORECASTING":
-            submission.status = "EVALUATED"
+        task_result = await db.execute(
+            select(Task).where(Task.contest_id == contest.id)
+        )
+        task = task_result.scalars().first()
+        if task is None or task.task_type != "FORECASTING":
+            submission.status = "FAILED"
+            submission.submission_metadata = {
+                **(submission.submission_metadata or {}),
+                "error": "No forecasting task configured for contest",
+            }
             await db.commit()
             return
 
-        horizons = contest.forecast_horizons or [1, 5, 10]
+        horizons = task.configuration.get("forecast_horizons", [1, 5, 10])
         observations: dict[int, SensorObservation] = {}
         for horizon in horizons:
             result = await db.execute(

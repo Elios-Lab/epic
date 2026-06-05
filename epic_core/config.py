@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    admin_username: str | None = None
+    admin_email: str | None = None
+    admin_password: str | None = None
 
     # Simulation
     max_concurrent_sessions: int = 50

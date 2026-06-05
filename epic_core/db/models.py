@@ -81,12 +81,6 @@ class Contest(Base):
     sampling_rate_hz: Mapped[float] = mapped_column(
         Float, nullable=False, default=10.0
     )
-    task_type: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="FORECASTING"
-    )
-    forecast_horizons: Mapped[list[int] | None] = mapped_column(
-        JSON, nullable=True, default=lambda: [1, 5, 10]
-    )
     start_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -101,6 +95,28 @@ class Contest(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
+    )
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contests.id"), nullable=False, index=True
+    )
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    metric_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    configuration: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

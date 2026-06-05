@@ -31,8 +31,8 @@
       class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,150,199,0.28),transparent_32rem),linear-gradient(135deg,#061a33_0%,#0d3b6e_52%,#04101f_100%)]"
     >
       <template x-if="state === 'landing'">
-        <main class="flex min-h-screen items-center">
-          <section class="mx-auto grid w-full max-w-6xl gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <main class="flex flex-col min-h-screen">
+          <section class="flex-1 flex items-center mx-auto grid w-full max-w-6xl gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div class="space-y-8">
               <div class="inline-flex rounded-md bg-white p-4 shadow-2xl shadow-cyan-950/30">
                 <div class="w-72 max-w-[72vw] sm:w-96">
@@ -68,20 +68,32 @@
             <div class="rounded-lg border border-cyan-300/20 bg-white/8 p-6 shadow-2xl shadow-cyan-950/20 backdrop-blur">
               <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
                 <div class="rounded-md border border-white/10 bg-white/10 p-5">
-                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Digital Twins</div>
-                  <div class="mt-2 text-3xl font-semibold">Live</div>
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Sensor Streams</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">Observe live sensor data from running simulations and build your predictions in real time.</div>
                 </div>
                 <div class="rounded-md border border-white/10 bg-white/10 p-5">
-                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Competitions</div>
-                  <div class="mt-2 text-3xl font-semibold">Real Time</div>
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Open Competitions</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">Organizers publish contests with configurable tasks, schedules, and fault injection scenarios.</div>
                 </div>
                 <div class="rounded-md border border-white/10 bg-white/10 p-5">
-                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Evaluation</div>
-                  <div class="mt-2 text-3xl font-semibold">Scored</div>
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Automatic Scoring</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">Predictions are evaluated continuously as new observations arrive, keeping the leaderboard live.</div>
                 </div>
               </div>
             </div>
           </section>
+          <footer class="pb-6 text-center text-sm text-cyan-200/60">
+            Powered by
+            <a href="https://www.elios.unige.it/" target="_blank" rel="noopener"
+               class="underline underline-offset-2 hover:text-cyan-200 transition">
+              Elios Lab
+            </a>
+            <span class="mx-2">·</span>
+            <a href="https://github.com/Elios-Lab/epic" target="_blank" rel="noopener"
+               class="underline underline-offset-2 hover:text-cyan-200 transition">
+              GitHub
+            </a>
+          </footer>
         </main>
       </template>
 
@@ -777,6 +789,13 @@
                         />
                         <button
                           type="button"
+                          @click="admin.showCreateUser = !admin.showCreateUser"
+                          class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep"
+                        >
+                          New User
+                        </button>
+                        <button
+                          type="button"
                           @click="loadAdminUsers()"
                           class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
                         >
@@ -784,6 +803,70 @@
                         </button>
                       </div>
                     </div>
+                    <form
+                      x-show="admin.showCreateUser"
+                      @submit.prevent="createUser()"
+                      class="rounded-md border border-cyan-200 bg-cyan-50 p-5 space-y-4"
+                    >
+                      <h3 class="text-base font-semibold text-slate-900">New User</h3>
+                      <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Username</span>
+                          <input
+                            x-model="admin.createUserForm.username"
+                            type="text"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Email</span>
+                          <input
+                            x-model="admin.createUserForm.email"
+                            type="email"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Password</span>
+                          <input
+                            x-model="admin.createUserForm.password"
+                            type="password"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Role</span>
+                          <select
+                            x-model="admin.createUserForm.role"
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          >
+                            <option value="PARTICIPANT">PARTICIPANT</option>
+                            <option value="ORGANIZER">ORGANIZER</option>
+                            <option value="ADMINISTRATOR">ADMINISTRATOR</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div class="flex gap-3">
+                        <button
+                          type="submit"
+                          :disabled="admin.creatingUser"
+                          class="rounded-md bg-epic-navy px-5 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:opacity-60"
+                        >
+                          <span x-show="!admin.creatingUser">Create</span>
+                          <span x-show="admin.creatingUser">Creating...</span>
+                        </button>
+                        <button
+                          type="button"
+                          @click="admin.showCreateUser = false"
+                          class="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
                     <p x-show="admin.loadingUsers" class="text-sm text-slate-500">Loading users...</p>
                     <div class="overflow-x-auto rounded-md border border-slate-200">
                       <table class="min-w-full divide-y divide-slate-200 text-sm">
@@ -934,6 +1017,9 @@
             contestSortKey: "name",
             contestSortDirection: "asc",
             userSearch: "",
+            createUserForm: { username: "", email: "", password: "", role: "PARTICIPANT" },
+            creatingUser: false,
+            showCreateUser: false,
             error: "",
             success: "",
           },
@@ -1618,6 +1704,26 @@
             return this.admin.users.filter((account) =>
               `${account.username} ${account.email}`.toLowerCase().includes(query)
             );
+          },
+          async createUser() {
+            this.admin.creatingUser = true;
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const created = await this.apiRequest("/api/v1/users", {
+                method: "POST",
+                body: JSON.stringify(this.admin.createUserForm),
+              });
+              this.admin.users = [created, ...this.admin.users];
+              this.admin.totalUsers += 1;
+              this.admin.success = `User '${created.username}' created successfully.`;
+              this.admin.createUserForm = { username: "", email: "", password: "", role: "PARTICIPANT" };
+              this.admin.showCreateUser = false;
+            } catch (error) {
+              this.admin.error = error.message || "User creation failed.";
+            } finally {
+              this.admin.creatingUser = false;
+            }
           },
           async updateUserRole(account, role) {
             if (role === account.role) {

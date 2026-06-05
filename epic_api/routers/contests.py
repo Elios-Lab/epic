@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import epic_core.registry as registry_module
 from epic_api.dependencies import get_engine, require_organizer_or_admin
 from epic_api.utils import get_contest_or_raise
-from epic_core.db.models import Contest, SimulationSession, User
+from epic_core.db.models import Contest, SimulationSession, Task, User
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.engine import SimulationEngine
 from epic_core.exceptions import (
@@ -54,7 +54,17 @@ class UpdateContestRequest(BaseModel):
     end_date: datetime | None = None
 
 
-def contest_response(contest: Contest) -> dict:
+def task_response(task: Task) -> dict:
+    return {
+        "task_id": str(task.id),
+        "task_type": task.task_type,
+        "name": task.name,
+        "weight": task.weight,
+        "configuration": task.configuration,
+    }
+
+
+def contest_response(contest: Contest, tasks: list[Task] | None = None) -> dict:
     return {
         "contest_id": str(contest.id),
         "name": contest.name,
@@ -70,7 +80,13 @@ def contest_response(contest: Contest) -> dict:
         "end_date": contest.end_date,
         "created_by": str(contest.created_by) if contest.created_by else None,
         "created_at": contest.created_at,
+        "tasks": [task_response(task) for task in tasks or []],
     }
+
+
+async def load_contest_tasks(db: AsyncSession, contest: Contest) -> list[Task]:
+    result = await db.execute(select(Task).where(Task.contest_id == contest.id))
+    return list(result.scalars())
 
 
 def validate_twin_config(
@@ -134,8 +150,6 @@ async def create_contest(
         description=request.description,
         status="DRAFT",
         visibility=request.visibility,
-        task_type=request.task_type,
-        forecast_horizons=request.forecast_horizons,
         twin_id=request.twin_id,
         sensor_configs=request.sensor_configs,
         fault_schedule=request.fault_schedule,
@@ -146,9 +160,20 @@ async def create_contest(
         created_by=current_user.id,
     )
     db.add(contest)
+    await db.flush()
+    task = Task(
+        contest_id=contest.id,
+        task_type=request.task_type,
+        name=request.task_type,
+        metric_ids=[],
+        weight=1.0,
+        configuration={"forecast_horizons": request.forecast_horizons},
+    )
+    db.add(task)
     await db.commit()
     await db.refresh(contest)
-    return contest_response(contest)
+    await db.refresh(task)
+    return contest_response(contest, [task])
 
 
 @router.get("")
@@ -170,9 +195,13 @@ async def list_contests(
 
     total_result = await db.execute(count_query)
     result = await db.execute(query.offset(offset).limit(limit))
+    contests = list(result.scalars())
     return {
         "total": total_result.scalar_one(),
-        "contests": [contest_response(contest) for contest in result.scalars()],
+        "contests": [
+            contest_response(contest, await load_contest_tasks(db, contest))
+            for contest in contests
+        ],
     }
 
 
@@ -182,7 +211,7 @@ async def get_contest(
     db: AsyncSession = Depends(get_db),
 ):
     contest = await get_contest_or_raise(db, contest_id)
-    return contest_response(contest)
+    return contest_response(contest, await load_contest_tasks(db, contest))
 
 
 @router.patch("/{contest_id}")
@@ -246,4 +275,4 @@ async def update_contest(
 
     await db.commit()
     await db.refresh(contest)
-    return contest_response(contest)
+    return contest_response(contest, await load_contest_tasks(db, contest))
