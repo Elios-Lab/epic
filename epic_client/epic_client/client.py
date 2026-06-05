@@ -57,12 +57,14 @@ class EPICClient:
         self._require_token()
         websocket_url = self._websocket_url(f"/api/v1/ws/contests/{contest_id}")
         reconnect_delay = 1.0
+        first_attempt = True
 
         while True:
             try:
                 import websockets
 
                 async with websockets.connect(websocket_url) as websocket:
+                    first_attempt = False
                     async for message in websocket:
                         payload = json.loads(message)
                         yield {
@@ -72,7 +74,11 @@ class EPICClient:
                         }
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
+                if first_attempt:
+                    raise RuntimeError(
+                        f"Could not connect to contest stream: {exc}"
+                    ) from exc
                 await asyncio.sleep(reconnect_delay)
 
     async def collect(
