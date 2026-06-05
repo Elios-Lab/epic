@@ -127,7 +127,7 @@ The platform validates at contest creation that each `sensor_id` is registered a
 
 `start_time` and `end_time` are in seconds from the simulation start (0 = contest start). `severity` is in [0.0, 1.0]. `end_time = null` means the fault is active until the contest ends.
 
-**`initial_conditions`** — optional dict of state variable overrides passed to `twin.create_initial_state()`. Keys match the twin's state field names. Unspecified fields use the twin's defaults.
+**`initial_conditions`** — optional dict of state variable overrides passed to `twin.configure()`. Keys match the twin's state field names. Unspecified fields use the twin's defaults.
 
 Supported statuses:
 

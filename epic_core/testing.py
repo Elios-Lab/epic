@@ -183,9 +183,9 @@ def test_registry_context(
         metric=registry_module.metric_registry,
     )
     fresh = SimpleNamespace(
-        twin=PluginRegistry(DigitalTwin),
-        sensor=PluginRegistry(Sensor),
-        metric=PluginRegistry(ScoringMetric),
+        twin=PluginRegistry(DigitalTwin, "twin_id"),
+        sensor=PluginRegistry(Sensor, "sensor_id"),
+        metric=PluginRegistry(ScoringMetric, "metric_id"),
     )
 
     registry_module.twin_registry = fresh.twin

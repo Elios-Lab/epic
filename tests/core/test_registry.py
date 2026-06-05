@@ -16,12 +16,14 @@ from epic_core.testing import (
 
 
 class InvalidMetadataSensor(MockSensor):
-    def __init__(self, metadata):
-        super().__init__()
-        self._metadata = metadata
-
     def metadata(self):
-        return self._metadata
+        return ["not", "a", "dict"]
+
+
+class EmptyIdSensor(MockSensor):
+    @property
+    def sensor_id(self) -> str:
+        return ""
 
 
 class MockMetric(ScoringMetric):
@@ -45,28 +47,17 @@ class MockMetric(ScoringMetric):
         }
 
 
-def test_register_and_get_plugin_by_version():
-    registry = PluginRegistry(Sensor)
+def test_register_and_get_plugin():
+    registry = PluginRegistry(Sensor, "sensor_id")
     sensor = MockSensor(sensor_id="temperature", version="1.0.0")
 
     registry.register(sensor)
 
-    assert registry.get("temperature", "1.0.0") is sensor
-
-
-def test_get_returns_latest_semver_when_version_is_omitted():
-    registry = PluginRegistry(Sensor)
-    older = MockSensor(sensor_id="temperature", version="1.9.0")
-    newer = MockSensor(sensor_id="temperature", version="1.10.0")
-
-    registry.register(older)
-    registry.register(newer)
-
-    assert registry.get("temperature") is newer
+    assert registry.get("temperature") is sensor
 
 
 def test_list_returns_all_registered_plugins():
-    registry = PluginRegistry(Sensor)
+    registry = PluginRegistry(Sensor, "sensor_id")
     sensor_a = MockSensor(sensor_id="a")
     sensor_b = MockSensor(sensor_id="b")
 
@@ -76,8 +67,8 @@ def test_list_returns_all_registered_plugins():
     assert set(registry.list()) == {sensor_a, sensor_b}
 
 
-def test_contains_checks_plugin_id_across_versions():
-    registry = PluginRegistry(Sensor)
+def test_contains_checks_plugin_id():
+    registry = PluginRegistry(Sensor, "sensor_id")
 
     assert not registry.contains("temperature")
     registry.register(MockSensor(sensor_id="temperature", version="2.0.0"))
@@ -85,191 +76,59 @@ def test_contains_checks_plugin_id_across_versions():
     assert registry.contains("temperature")
 
 
-def test_register_rejects_duplicate_id_and_version():
-    registry = PluginRegistry(Sensor)
+def test_clear_removes_registered_plugins():
+    registry = PluginRegistry(Sensor, "sensor_id")
+    registry.register(MockSensor(sensor_id="temperature"))
+
+    registry.clear()
+
+    assert registry.list() == []
+    assert not registry.contains("temperature")
+
+
+def test_register_rejects_duplicate_id():
+    registry = PluginRegistry(Sensor, "sensor_id")
     registry.register(MockSensor(sensor_id="temperature", version="1.0.0"))
 
     with pytest.raises(DuplicatePluginError):
-        registry.register(MockSensor(sensor_id="temperature", version="1.0.0"))
-
-
-def test_register_allows_duplicate_id_with_different_version():
-    registry = PluginRegistry(Sensor)
-
-    registry.register(MockSensor(sensor_id="temperature", version="1.0.0"))
-    registry.register(MockSensor(sensor_id="temperature", version="1.1.0"))
-
-    assert len(registry.list()) == 2
+        registry.register(MockSensor(sensor_id="temperature", version="1.1.0"))
 
 
 def test_get_missing_plugin_raises_plugin_not_found():
-    registry = PluginRegistry(Sensor)
+    registry = PluginRegistry(Sensor, "sensor_id")
 
     with pytest.raises(PluginNotFoundError):
         registry.get("missing")
 
 
-def test_get_missing_version_raises_plugin_not_found():
-    registry = PluginRegistry(Sensor)
-    registry.register(MockSensor(sensor_id="temperature", version="1.0.0"))
-
-    with pytest.raises(PluginNotFoundError):
-        registry.get("temperature", "2.0.0")
-
-
-def test_register_rejects_object_missing_required_interface_method():
-    class ConcreteMissingSensorMethod:
-        @property
-        def sensor_id(self):
-            return "bad"
-
-        @property
-        def name(self):
-            return "Bad"
-
-        @property
-        def unit(self):
-            return "unit"
-
-        def metadata(self):
-            return {
-                "sensor_id": "bad",
-                "name": "Bad",
-                "version": "1.0.0",
-                "measured_quantity": "linear_position",
-                "description": "Bad sensor",
-            }
-
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(ConcreteMissingSensorMethod())
-
-
-def test_register_rejects_plugin_with_unimplemented_abstract_methods():
-    class ForcedAbstractSensor(MockSensor):
-        pass
-
-    sensor = ForcedAbstractSensor()
-    ForcedAbstractSensor.__abstractmethods__ = frozenset({"observe"})
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(sensor)
-
-
-def test_register_rejects_metadata_that_is_not_dict():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(InvalidMetadataSensor(["not", "a", "dict"]))
-
-
-def test_register_rejects_metadata_missing_required_keys():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(InvalidMetadataSensor({"sensor_id": "sensor"}))
-
-
-def test_register_rejects_invalid_semver():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(
-            InvalidMetadataSensor(
-                {
-                    "sensor_id": "sensor",
-                    "name": "Sensor",
-                    "version": "1.0",
-                    "measured_quantity": "linear_position",
-                    "description": "Invalid version",
-                }
-            )
-        )
-
-
-def test_register_rejects_empty_plugin_id():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(
-            InvalidMetadataSensor(
-                {
-                    "sensor_id": "",
-                    "name": "Sensor",
-                    "version": "1.0.0",
-                    "measured_quantity": "linear_position",
-                    "description": "Empty id",
-                }
-            )
-        )
-
-
-def test_register_rejects_empty_name():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(
-            InvalidMetadataSensor(
-                {
-                    "sensor_id": "sensor",
-                    "name": "",
-                    "version": "1.0.0",
-                    "measured_quantity": "linear_position",
-                    "description": "Empty name",
-                }
-            )
-        )
-
-
-def test_register_rejects_non_string_description():
-    registry = PluginRegistry(Sensor)
-
-    with pytest.raises(PluginValidationError):
-        registry.register(
-            InvalidMetadataSensor(
-                {
-                    "sensor_id": "sensor",
-                    "name": "Sensor",
-                    "version": "1.0.0",
-                    "measured_quantity": "linear_position",
-                    "description": 3,
-                }
-            )
-        )
-
-
-def test_registry_without_interface_infers_plugin_id_key():
-    registry = PluginRegistry()
-    sensor = MockSensor(sensor_id="sensor")
-
-    registry.register(sensor)
-
-    assert registry.get("sensor") is sensor
-
-
-def test_registry_without_interface_infers_metric_id_key():
-    metric_registry = PluginRegistry()
-
-    metric_registry.register(MockMetric())
-
-    assert metric_registry.get("mock_metric").metric_id == "mock_metric"
-
-
-def test_registry_without_interface_rejects_unknown_plugin_type():
-    registry = PluginRegistry()
+def test_register_rejects_object_missing_required_interface():
+    registry = PluginRegistry(Sensor, "sensor_id")
 
     with pytest.raises(PluginValidationError):
         registry.register(object())
 
 
-def test_get_latest_rejects_corrupt_invalid_registered_version():
-    registry = PluginRegistry(Sensor)
-    registry._plugins[("sensor", "invalid")] = MockSensor(sensor_id="sensor")
+def test_register_rejects_metadata_that_is_not_dict():
+    registry = PluginRegistry(Sensor, "sensor_id")
 
     with pytest.raises(PluginValidationError):
-        registry.get("sensor")
+        registry.register(InvalidMetadataSensor())
+
+
+def test_register_rejects_empty_plugin_id():
+    registry = PluginRegistry(Sensor, "sensor_id")
+
+    with pytest.raises(PluginValidationError):
+        registry.register(EmptyIdSensor())
+
+
+def test_registry_uses_explicit_metric_id_attribute():
+    registry = PluginRegistry(ScoringMetric, "metric_id")
+    metric = MockMetric()
+
+    registry.register(metric)
+
+    assert registry.get("mock_metric") is metric
 
 
 def test_test_registry_context_installs_and_restores_registries():

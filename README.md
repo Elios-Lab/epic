@@ -266,9 +266,6 @@ Deliverables:
 - WebSocket streaming of live sensor readings to participants
 - Private server-side observation storage for scoring
 
-> **Note:** Code alignment with the revised architecture (twin-internal fault management,
-> `configure()` / `get_active_faults()` interface) is tracked in `docs/codex-tasks.md`.
-
 Success criteria:
 
 - An admin can create and activate a contest with a specific fault schedule.
@@ -286,7 +283,7 @@ Deliverables:
 - Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT
 - Contest registration (participants join SCHEDULED or ACTIVE contests)
 - Submission management with temporal integrity anchor (`prediction_from_sequence`)
-- MAE scoring against privately stored ground-truth observations
+- MAE scoring for forecasting tasks, F1 scoring for anomaly detection tasks
 - Leaderboards with automatic ranking after each scored submission
 - Deadline extension for organizers and admins
 
@@ -304,45 +301,38 @@ Goal: Improve realism and simulation richness.
 
 Deliverables:
 
-- Sensor noise (Gaussian) ✅
-- Sensor drift (linear accumulation over time) ✅
-- Sensor latency (configurable delay in steps) ✅
-- Sensor quantization ✅
-- Sensor saturation (min/max clipping) ✅
-- False readings and outliers (probabilistic) ✅
-- Multiple simultaneous faults (supported via fault schedule) ✅
-- Gradual fault effects (physical state evolves continuously at each step) ✅
-- Intermittent faults (supported via multiple schedule entries with end_time) ✅
+- Sensor noise, drift, latency, quantization, saturation, false readings, outliers ✅
+- Sensor pipeline fully configurable per sensor in `contest.sensor_configs` ✅
+- Multiple simultaneous faults via fault schedule ✅
+- Gradual fault effects (physical state evolves at each step) ✅
+- Intermittent faults (multiple schedule entries with `end_time`) ✅
 
-> The sensor pipeline is fully implemented in `epic_sensors/base.py`.
-> All pipeline parameters are configurable per sensor in `contest.sensor_configs`.
-
-Remaining enhancements (deferred to Phase 3+):
+Deferred:
 
 - Dynamic severity ramp-up within the twin (e.g. exponential degradation curves)
 - Additional fault types for the mass-spring-damper twin
 
 Success criteria:
 
-- Realistic anomaly detection and forecasting challenges are possible.
-- A student cannot trivially distinguish sensor noise from a genuine fault.
+- Realistic anomaly detection and forecasting challenges are possible. ✅
+- A student cannot trivially distinguish sensor noise from a genuine fault. ✅
 
 ---
 
-## Phase 4 – Industrial Twins
+## Phase 4 – Industrial Twins 🔄
 
 Goal: Introduce realistic industrial systems.
 
-Candidate twins:
+Twins:
 
-- Industrial Pump (pressure, flow, vibration, temperature)
+- Industrial Pump (flow, pressure, vibration, temperature) ✅
 - Electric Motor (current, voltage, RPM, temperature)
 - Rotating Machinery (vibration, bearing temperature)
 - Smart Building (temperature, humidity, occupancy, HVAC)
 
-Candidate sensors and physical quantities:
+Sensors and physical quantities:
 
-- `PRESSURE`, `FLOW_RATE`, `VIBRATION`, `CURRENT`, `VOLTAGE`, `ROTATIONAL_SPEED`
+- `FLOW_RATE`, `PRESSURE`, `VIBRATION` ✅ — `CURRENT`, `VOLTAGE`, `ROTATIONAL_SPEED`
 
 Success criteria:
 

@@ -7,7 +7,6 @@ The API provides access to:
 - Authentication
 - Users
 - Contests
-- Contest Registrations
 - Tasks
 - Digital Twins
 - Sensors
@@ -17,13 +16,6 @@ The API provides access to:
 - Leaderboards
 
 The API follows REST principles and uses JSON payloads.
-
-The API must remain independent from:
-
-- Digital Twin implementations
-- Sensor implementations
-- Fault models
-- Physical domains
 
 ---
 

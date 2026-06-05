@@ -73,12 +73,12 @@ The Core provides test utilities in `epic_core/testing.py`.
 A minimal in-memory digital twin for use in engine and registry tests:
 
 ```python
-from epic_core.testing import MockTwin, MockSensor, MockFault
+from epic_core.testing import MockTwin, MockSensor, MockFaultDescriptor
 
 twin = MockTwin(twin_id="mock_twin")
 ```
 
-`MockTwin` implements the full `DigitalTwin` interface with a trivial oscillating state. Its sensors produce predictable values, making assertions straightforward.
+`MockTwin` implements the full `DigitalTwin` interface. It accepts a fault schedule via `configure()` and manages fault activation internally, exposing active faults through `get_active_faults()`.
 
 ## MockSensor
 
@@ -87,12 +87,12 @@ sensor = MockSensor(sensor_id="mock_sensor", constant_value=5.0)
 # sensor.observe(any_state) always returns 5.0
 ```
 
-## MockFault
+## MockFaultDescriptor
 
 ```python
-fault = MockFault(fault_id="mock_fault")
-# apply() is a no-op; records how many times it was called
-assert fault.apply_count == 3
+fault = MockFaultDescriptor(fault_id="mock_fault")
+# Lightweight FaultDescriptor for registry and interface tests
+assert fault.fault_id == "mock_fault"
 ```
 
 ## TestRegistry

@@ -1,0 +1,35 @@
+<svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" style="">
+
+  <!-- white background -->
+  <rect width="580" height="180" fill="#ffffff" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- ── WAVEFORM ICON ── -->
+
+  <!-- normal operation: smooth sine, navy -->
+  <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" style="fill:none;stroke:rgb(13, 59, 110);color:rgb(0, 0, 0);stroke-width:3px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- fault spike: sharp, cyan -->
+  <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" style="fill:none;stroke:rgb(0, 150, 199);color:rgb(0, 0, 0);stroke-width:3px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- fault dot marker -->
+  <circle cx="96" cy="88" r="4.5" fill="#0096c7" style="fill:rgb(0, 150, 199);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- prediction: dashed sine, muted navy -->
+  <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" style="fill:none;stroke:rgb(13, 59, 110);color:rgb(0, 0, 0);stroke-width:2.5px;stroke-dasharray:6px, 4px;stroke-linecap:round;stroke-linejoin:miter;opacity:0.45;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- ── EPIC WORDMARK ── -->
+  <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e" style="fill:rgb(13, 59, 110);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Segoe UI&quot;, system-ui, sans-serif;font-size:62px;font-weight:900;text-anchor:start;dominant-baseline:auto">EPIC</text>
+
+  <!-- ── THIN VERTICAL DIVIDER ── -->
+  <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(0, 150, 199);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- ── STACKED FULL NAME ── -->
+  <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e" style="fill:rgb(13, 59, 110);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Segoe UI&quot;, system-ui, sans-serif;font-size:20px;font-weight:800;text-anchor:start;dominant-baseline:auto">ELIOS</text>
+
+  <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7" style="fill:rgb(0, 150, 199);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Segoe UI&quot;, system-ui, sans-serif;font-size:15px;font-weight:400;text-anchor:start;dominant-baseline:auto">Predictive</text>
+
+  <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7" style="fill:rgb(0, 150, 199);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Segoe UI&quot;, system-ui, sans-serif;font-size:15px;font-weight:400;text-anchor:start;dominant-baseline:auto">Intelligence</text>
+
+  <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7" style="fill:rgb(0, 150, 199);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Segoe UI&quot;, system-ui, sans-serif;font-size:15px;font-weight:400;text-anchor:start;dominant-baseline:auto">Challenge</text>
+
+</svg>

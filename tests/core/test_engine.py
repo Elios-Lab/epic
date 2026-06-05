@@ -30,6 +30,11 @@ class NoisyMockSensor(MockSensor):
         return float(self._constant_value + np.random.normal(0.0, self.noise_std))
 
 
+class ConfigurableNoisyMockSensor(NoisyMockSensor):
+    def __init__(self, noise_std: float = 0.0) -> None:
+        super().__init__(sensor_id="mock_sensor", noise_std=noise_std)
+
+
 MOCK_FAULT_SCHEDULE = [
     {
         "fault_id": "mock_fault",
@@ -198,6 +203,28 @@ async def test_run_session_sets_failed_when_twin_step_raises(engine_db_factory):
     failed = await _get_session(engine_db_factory, session.id)
     assert failed.status == "FAILED"
     assert "error" in failed.session_metadata
+
+
+@pytest.mark.asyncio
+async def test_run_session_applies_sensor_config_overrides(engine_db_factory):
+    _, session = await _create_contest_and_session(
+        engine_db_factory,
+        "sensor-overrides",
+        sensor_configs=[{"sensor_id": "mock_sensor", "noise_std": 10.0}],
+        seed=42,
+    )
+
+    with registry_context(
+        twins=[MockTwin(twin_id="mock_twin")],
+        sensors=[ConfigurableNoisyMockSensor()],
+    ):
+        await SimulationEngine().run_session(str(session.id), engine_db_factory)
+
+    observations = await _get_observations(engine_db_factory, session.id)
+    values = [observation.sensors["mock_sensor"] for observation in observations]
+
+    assert len(values) > 1
+    assert len(set(values)) > 1
 
 
 @pytest.mark.asyncio

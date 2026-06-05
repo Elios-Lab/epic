@@ -1,9 +1,15 @@
 from epic_core.quantities import PhysicalQuantity
 from epic_core.testing import MockState
 from epic_sensors.acceleration import AccelerationSensor
+from epic_sensors.current import CurrentSensor
+from epic_sensors.flow_rate import FlowRateSensor
 from epic_sensors.position import PositionSensor
+from epic_sensors.pressure import PressureSensor
+from epic_sensors.rotational_speed import RotationalSpeedSensor
 from epic_sensors.temperature import TemperatureSensor
 from epic_sensors.velocity import VelocitySensor
+from epic_sensors.vibration import VibrationSensor
+from epic_sensors.voltage import VoltageSensor
 
 
 def test_sensor_properties_and_metadata():
@@ -17,6 +23,17 @@ def test_sensor_properties_and_metadata():
             PhysicalQuantity.LINEAR_ACCELERATION,
         ),
         (TemperatureSensor(), "temperature", "°C", PhysicalQuantity.TEMPERATURE),
+        (FlowRateSensor(), "flow_rate", "m³/h", PhysicalQuantity.FLOW_RATE),
+        (PressureSensor(), "pressure", "bar", PhysicalQuantity.PRESSURE),
+        (VibrationSensor(), "vibration", "mm/s", PhysicalQuantity.VIBRATION),
+        (CurrentSensor(), "current", "A", PhysicalQuantity.CURRENT),
+        (VoltageSensor(), "voltage", "V", PhysicalQuantity.VOLTAGE),
+        (
+            RotationalSpeedSensor(),
+            "rotational_speed",
+            "RPM",
+            PhysicalQuantity.ROTATIONAL_SPEED,
+        ),
     ]
 
     for sensor, sensor_id, unit, quantity in sensors:

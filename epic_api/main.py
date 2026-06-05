@@ -24,8 +24,10 @@ from epic_core.db.session import get_engine as get_db_engine
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
 import epic_core.registry as registry_module
-from epic_core.scoring import MAE
+from epic_core.scoring import F1Score, MAE
 from epic_sensors.plugin import register as register_sensors
+from epic_twins.electric_motor.plugin import register as register_electric_motor
+from epic_twins.industrial_pump.plugin import register as register_industrial_pump
 from epic_twins.mass_spring_damper.plugin import register as register_mass_spring_damper
 
 
@@ -40,8 +42,12 @@ async def lifespan(app: FastAPI):
     await create_all_tables(get_db_engine())
     register_sensors()
     register_mass_spring_damper()
+    register_industrial_pump()
+    register_electric_motor()
     if not registry_module.metric_registry.contains("mae"):
         registry_module.metric_registry.register(MAE())
+    if not registry_module.metric_registry.contains("f1"):
+        registry_module.metric_registry.register(F1Score())
     yield
 
 

@@ -11,6 +11,7 @@ class PhysicalQuantity(Enum):
     ANGULAR_POSITION = "angular_position"
     ANGULAR_VELOCITY = "angular_velocity"
     ANGULAR_ACCELERATION = "angular_acceleration"
+    ROTATIONAL_SPEED = "rotational_speed"
 
     TEMPERATURE = "temperature"
     HEAT_FLUX = "heat_flux"

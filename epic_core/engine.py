@@ -60,21 +60,10 @@ class SimulationEngine:
                 f"twin '{session.twin_id}' could not be loaded"
             ) from exc
 
-        contest_sensors = []
         supported = twin.supported_quantities()
+        contest_sensors = []
         for cfg in contest.sensor_configs:
-            sensor_id = cfg.get("sensor_id")
-            try:
-                sensor = registry_module.sensor_registry.get(sensor_id)
-            except PluginNotFoundError as exc:
-                raise PluginExecutionError(
-                    f"sensor '{sensor_id}' could not be loaded"
-                ) from exc
-            if sensor.measured_quantity not in supported:
-                raise PluginExecutionError(
-                    f"sensor '{sensor_id}' is not compatible with twin '{twin.twin_id}'"
-                )
-            contest_sensors.append(sensor)
+            contest_sensors.append(self._build_configured_sensor(cfg, twin, supported))
 
         available_faults = {fault.fault_id for fault in twin.get_faults()}
         for entry in contest.fault_schedule:
@@ -122,7 +111,7 @@ class SimulationEngine:
                 sensors = {}
                 for sensor in contest_sensors:
                     sensors[sensor.sensor_id] = self._call_plugin(
-                        sensor.sensor_id, "observe", sensor.observe, new_state
+                        sensor.sensor_id, "observe", sensor.observe, new_state, dt
                     )
 
                 active_faults = twin.get_active_faults()
@@ -189,6 +178,34 @@ class SimulationEngine:
         if contest is None:
             raise PluginExecutionError(f"contest '{contest_id}' does not exist")
         return contest
+
+    def _build_configured_sensor(self, config: dict, twin, supported_quantities):
+        sensor_id = config.get("sensor_id")
+        if not sensor_id:
+            raise PluginExecutionError("sensor config is missing sensor_id")
+
+        try:
+            registered_sensor = registry_module.sensor_registry.get(sensor_id)
+        except PluginNotFoundError as exc:
+            raise PluginExecutionError(
+                f"sensor '{sensor_id}' could not be loaded"
+            ) from exc
+
+        if registered_sensor.measured_quantity not in supported_quantities:
+            raise PluginExecutionError(
+                f"sensor '{sensor_id}' is not compatible with twin '{twin.twin_id}'"
+            )
+
+        overrides = {key: value for key, value in config.items() if key != "sensor_id"}
+        sensor_class = registered_sensor.__class__
+        try:
+            configured_sensor = sensor_class(**overrides)
+        except TypeError as exc:
+            raise PluginExecutionError(
+                f"sensor '{sensor_id}' could not be configured"
+            ) from exc
+
+        return configured_sensor
 
     async def _broadcast(self, contest_id: str, payload: dict) -> None:
         if self._broadcaster:
