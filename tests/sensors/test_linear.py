@@ -1,8 +1,11 @@
 from epic_core.quantities import PhysicalQuantity
 from epic_core.testing import MockState
 from epic_sensors.acceleration import AccelerationSensor
+from epic_sensors.co2_concentration import CO2ConcentrationSensor
 from epic_sensors.current import CurrentSensor
 from epic_sensors.flow_rate import FlowRateSensor
+from epic_sensors.occupancy import OccupancySensor
+from epic_sensors.power import PowerSensor
 from epic_sensors.position import PositionSensor
 from epic_sensors.pressure import PressureSensor
 from epic_sensors.rotational_speed import RotationalSpeedSensor
@@ -34,6 +37,14 @@ def test_sensor_properties_and_metadata():
             "RPM",
             PhysicalQuantity.ROTATIONAL_SPEED,
         ),
+        (
+            CO2ConcentrationSensor(),
+            "co2_concentration",
+            "ppm",
+            PhysicalQuantity.CO2_CONCENTRATION,
+        ),
+        (OccupancySensor(), "occupancy", "people", PhysicalQuantity.OCCUPANCY),
+        (PowerSensor(), "power", "W", PhysicalQuantity.POWER),
     ]
 
     for sensor, sensor_id, unit, quantity in sensors:

@@ -2,8 +2,11 @@
 
 import epic_core.registry as registry_module
 from epic_sensors.acceleration import AccelerationSensor
+from epic_sensors.co2_concentration import CO2ConcentrationSensor
 from epic_sensors.current import CurrentSensor
 from epic_sensors.flow_rate import FlowRateSensor
+from epic_sensors.occupancy import OccupancySensor
+from epic_sensors.power import PowerSensor
 from epic_sensors.position import PositionSensor
 from epic_sensors.pressure import PressureSensor
 from epic_sensors.rotational_speed import RotationalSpeedSensor
@@ -24,3 +27,6 @@ def register():
     registry_module.sensor_registry.register(CurrentSensor())
     registry_module.sensor_registry.register(VoltageSensor())
     registry_module.sensor_registry.register(RotationalSpeedSensor())
+    registry_module.sensor_registry.register(CO2ConcentrationSensor())
+    registry_module.sensor_registry.register(OccupancySensor())
+    registry_module.sensor_registry.register(PowerSensor())

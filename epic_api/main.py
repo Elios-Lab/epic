@@ -29,6 +29,8 @@ from epic_sensors.plugin import register as register_sensors
 from epic_twins.electric_motor.plugin import register as register_electric_motor
 from epic_twins.industrial_pump.plugin import register as register_industrial_pump
 from epic_twins.mass_spring_damper.plugin import register as register_mass_spring_damper
+from epic_twins.rotating_machinery.plugin import register as register_rotating_machinery
+from epic_twins.smart_building.plugin import register as register_smart_building
 
 
 @asynccontextmanager
@@ -44,6 +46,8 @@ async def lifespan(app: FastAPI):
     register_mass_spring_damper()
     register_industrial_pump()
     register_electric_motor()
+    register_smart_building()
+    register_rotating_machinery()
     if not registry_module.metric_registry.contains("mae"):
         registry_module.metric_registry.register(MAE())
     if not registry_module.metric_registry.contains("f1"):

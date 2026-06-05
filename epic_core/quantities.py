@@ -30,6 +30,8 @@ class PhysicalQuantity(Enum):
 
     HUMIDITY = "humidity"
     ILLUMINANCE = "illuminance"
+    CO2_CONCENTRATION = "co2_concentration"
+    OCCUPANCY = "occupancy"
 
     PACKET_RATE = "packet_rate"
     LATENCY = "latency"
