@@ -6,8 +6,10 @@ from sqlalchemy import select
 
 from epic_api.main import create_app
 from epic_core.config import Settings
+from epic_core.db.base import create_all_tables
 from epic_core.db.models import User
 import epic_core.db.session as db_session_module
+from epic_core.db.session import get_engine
 from epic_core.db.session import get_session_factory
 from epic_core.testing import test_registry_context
 
@@ -31,6 +33,12 @@ def client():
     )
 
     with test_registry_context():
+        db_session_module.init_db(database_url)
+
+        async def _setup_tables():
+            await create_all_tables(get_engine())
+
+        asyncio.run(_setup_tables())
         with TestClient(create_app(settings=settings)) as test_client:
             yield test_client
         if db_session_module._engine is not None:
