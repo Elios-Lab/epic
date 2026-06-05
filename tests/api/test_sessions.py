@@ -8,8 +8,8 @@ async def _create_contest(db_factory, name: str = "API Contest") -> Contest:
     async with db_factory() as db:
         contest = Contest(
             name=name,
-            twin_id="mechanical_system",
-            scenario_id="normal_operation",
+            twin_id="mass_spring_damper",
+            sensor_configs=[{"sensor_id": "position"}],
             sampling_rate_hz=10.0,
             end_date=datetime.now(timezone.utc) + timedelta(seconds=1),
         )
@@ -24,7 +24,6 @@ async def _create_session(db_factory, contest: Contest) -> SimulationSession:
         session = SimulationSession(
             contest_id=contest.id,
             twin_id=contest.twin_id,
-            scenario_id=contest.scenario_id,
             sampling_rate_hz=contest.sampling_rate_hz,
         )
         db.add(session)
@@ -62,8 +61,7 @@ def test_get_contest_session_after_session_created_returns_200(
     body = response.json()
     assert body["session_id"] == str(session.id)
     assert body["contest_id"] == str(contest.id)
-    assert body["twin_id"] == "mechanical_system"
-    assert body["scenario_id"] == "normal_operation"
+    assert body["twin_id"] == "mass_spring_damper"
     assert body["sampling_rate_hz"] == 10.0
     assert body["status"] == "CREATED"
     assert body["started_at"] is None

@@ -18,7 +18,8 @@ from epic_core.exceptions import (
     SubmissionError,
 )
 from epic_core.testing import test_registry_context as registry_context
-from epic_twins.mechanical.plugin import register
+from epic_sensors.plugin import register as register_sensors
+from epic_twins.mass_spring_damper.plugin import register
 
 
 def test_list_twins_returns_registered_twin_metadata(client):
@@ -27,15 +28,15 @@ def test_list_twins_returns_registered_twin_metadata(client):
     assert response.status_code == 200
     body = response.json()
     assert "twins" in body
-    assert any(twin["twin_id"] == "mechanical_system" for twin in body["twins"])
+    assert any(twin["twin_id"] == "mass_spring_damper" for twin in body["twins"])
 
 
 def test_get_twin_returns_metadata(client):
-    response = client.get("/api/v1/twins/mechanical_system")
+    response = client.get("/api/v1/twins/mass_spring_damper")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["twin_id"] == "mechanical_system"
+    assert body["twin_id"] == "mass_spring_damper"
     assert body["name"]
     assert body["version"]
     assert body["description"]
@@ -51,33 +52,23 @@ def test_get_nonexistent_twin_returns_standard_404_error(client):
 
 
 def test_list_twin_sensors_returns_sensor_metadata(client):
-    response = client.get("/api/v1/twins/mechanical_system/sensors")
+    response = client.get("/api/v1/twins/mass_spring_damper/sensors")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["twin_id"] == "mechanical_system"
+    assert body["twin_id"] == "mass_spring_damper"
     assert body["sensors"]
     assert all("sensor_id" in sensor for sensor in body["sensors"])
 
 
 def test_list_twin_faults_returns_fault_metadata(client):
-    response = client.get("/api/v1/twins/mechanical_system/faults")
+    response = client.get("/api/v1/twins/mass_spring_damper/faults")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["twin_id"] == "mechanical_system"
+    assert body["twin_id"] == "mass_spring_damper"
     assert body["faults"]
     assert all("fault_id" in fault for fault in body["faults"])
-
-
-def test_list_twin_scenarios_returns_scenario_metadata(client):
-    response = client.get("/api/v1/twins/mechanical_system/scenarios")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["twin_id"] == "mechanical_system"
-    assert body["scenarios"]
-    assert all("scenario_id" in scenario for scenario in body["scenarios"])
 
 
 @pytest.mark.parametrize(
@@ -116,8 +107,10 @@ def test_unknown_epic_error_maps_to_internal_error():
     assert error_to_code(exception) == "INTERNAL_ERROR"
 
 
-def test_mechanical_register_populates_twin_registry():
+def test_mass_spring_damper_register_populates_twin_registry():
     with registry_context():
+        register_sensors()
         register()
 
-        assert registry_module.twin_registry.contains("mechanical_system")
+        assert registry_module.twin_registry.contains("mass_spring_damper")
+        assert registry_module.sensor_registry.contains("position")

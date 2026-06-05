@@ -21,7 +21,6 @@ def session_response(session: SimulationSession) -> dict:
         "session_id": str(session.id),
         "contest_id": str(session.contest_id),
         "twin_id": session.twin_id,
-        "scenario_id": session.scenario_id,
         "sampling_rate_hz": session.sampling_rate_hz,
         "status": session.status,
         "started_at": session.started_at,

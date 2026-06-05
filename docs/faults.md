@@ -1,675 +1,231 @@
 # Fault Framework
 
-> Related: [Plugin System](plugin-system.md) — canonical `Fault` and `SensorFault` interfaces · [Sensors](sensors.md) · [Digital Twins](digital-twins.md)
+> Related: [Digital Twins](digital-twins.md) · [Sensors](sensors.md) · [Contest Authoring](contest-authoring.md)
 
-The Fault Framework provides a generic mechanism for introducing abnormal conditions into a digital twin.
+Faults model physical degradations of a simulated system — mechanical wear, parameter drift, electrical failures, environmental disturbances. They are the primary source of machine learning challenges in EPIC: participants must detect, classify, forecast, or anticipate system degradation from sensor observations alone.
 
-Faults are one of the primary sources of machine learning challenges in EPIC.
+**Faults are entirely owned and managed by the digital twin.** The engine never touches fault objects. The contest configuration specifies which faults to inject and when; the twin receives this schedule and handles everything internally.
 
-They create deviations from normal behavior that participants must detect, classify, forecast or anticipate.
-
-The framework must support a wide range of application domains while remaining independent from any specific physical system.
-
-Examples include:
-
-- Mechanical wear
-- Electrical failures
-- Sensor degradation
-- Environmental disturbances
-- Communication failures
-- Software anomalies
-
-The EPIC Core must treat all faults generically.
+**Sensor degradations are not faults.** False readings, outliers, stuck values, and dropout are intrinsic sensor properties modelled as sensor parameters. See [Sensors](sensors.md).
 
 ---
 
 # Design Philosophy
 
-A fault is an object that modifies the behavior of a system.
+A fault modifies how the twin computes its dynamics. It always acts inside `twin.step()`, before sensors observe the state.
 
-A fault may affect:
-
-- The latent state
-- The system parameters
-- The operating profile
-- The sensor outputs
-
-The platform should not assume any particular fault type.
-
----
-
-# Objectives
-
-The Fault Framework must support:
-
-- Fault injection
-- Fault scheduling
-- Fault evolution
-- Fault composition
-- Fault metadata
-- Fault reproducibility
-
-The same fault should be reusable across multiple digital twins whenever possible.
-
----
-
-# Fault Interface
-
-All faults must implement the `Fault` abstract class defined in [Plugin System](plugin-system.md).
-
-The interface requires implementing: `fault_id`, `name`, `current_severity`, `activate(initial_severity)`, `deactivate()`, `apply(state, dt)`, and `metadata()`.
-
-Faults that corrupt sensor measurements rather than the latent state must extend `SensorFault` instead of `Fault` directly, and implement `target_sensor_ids` and `apply_to_measurement(measurement)`. See [Plugin System](plugin-system.md) for the full interface definitions and the simulation engine's application order.
-
----
-
-# Fault Metadata
-
-Every fault should expose metadata.
-
-Example:
-
-```python
-{
-    "fault_id": "increased_damping",
-    "name": "Increased Damping",
-    "version": "1.0.0",
-    "description": "Gradual increase in damping coefficient"
-}
+```text
+twin.step(state, dt)
+      ↓
+  1. advance internal time
+  2. activate / deactivate faults per schedule
+  3. compute dynamics
+  4. apply active fault effects
+  5. return new state
+      ↓
+sensor.observe(new_state, dt)
 ```
 
-Metadata is used for:
+The engine never calls `fault.activate()`, `fault.apply()`, or any other fault method. The twin manages the full lifecycle.
 
-- APIs
-- Documentation
-- Contest configuration
-- Scenario generation
+---
+
+# FaultDescriptor Interface
+
+The only fault interface visible to the Core is `FaultDescriptor`. It exists for two purposes: API listing and contest validation.
+
+```python
+class FaultDescriptor(ABC):
+
+    @property
+    @abstractmethod
+    def fault_id(self) -> str:
+        """Unique identifier within this twin, e.g. 'increased_damping'."""
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
+        """
+        Return fault metadata. Must include at minimum:
+            {
+                "fault_id": str,
+                "name": str,
+                "description": str
+            }
+        """
+        pass
+```
+
+`FaultDescriptor` instances are returned by `twin.get_faults()`. The engine uses them only to validate that a contest's `fault_schedule` references real fault IDs. The API uses them to let contest authors browse available faults.
+
+---
+
+# Implementing Faults Inside a Twin
+
+Fault implementations are private to the twin package. There is no required base class beyond what the twin author chooses to use internally.
+
+A simple approach: store fault state inside the twin itself.
+
+```python
+# Inside MechanicalTwin
+
+class IncreasedDampingFault(FaultDescriptor):
+    fault_id = "increased_damping"
+    name = "Increased Damping"
+
+    def metadata(self):
+        return {
+            "fault_id": self.fault_id,
+            "name": self.name,
+            "description": "Gradually increases the damping coefficient.",
+        }
+
+
+class MechanicalTwin(DigitalTwin):
+
+    def __init__(self):
+        self._faults = [IncreasedDampingFault(), ...]
+        self._active_faults: dict[str, float] = {}
+        self._fault_schedule: list[dict] = []
+        self._t = 0.0
+
+    def get_faults(self):
+        return self._faults
+
+    def configure(self, initial_conditions, fault_schedule):
+        self._t = 0.0
+        self._fault_schedule = fault_schedule or []
+        self._active_faults = {}
+        return self._build_state(initial_conditions)
+
+    def step(self, state, dt):
+        self._t += dt
+        self._tick_fault_schedule()
+        new_state = self._compute_dynamics(state, dt)
+        self._apply_faults(new_state, dt)
+        return new_state
+
+    def _tick_fault_schedule(self):
+        for entry in self._fault_schedule:
+            fid = entry["fault_id"]
+            active = (
+                self._t >= entry["start_time"]
+                and (entry["end_time"] is None or self._t < entry["end_time"])
+            )
+            if active:
+                self._active_faults[fid] = entry["severity"]
+            else:
+                self._active_faults.pop(fid, None)
+
+    def _apply_faults(self, state, dt):
+        if "increased_damping" in self._active_faults:
+            severity = self._active_faults["increased_damping"]
+            state.damping *= (1.0 + severity)
+
+    def get_active_faults(self):
+        return [
+            {"fault_id": fid, "severity": sev}
+            for fid, sev in self._active_faults.items()
+        ]
+```
+
+The implementation is completely free. The twin author decides how severities translate into physical effects, whether faults interact, and whether degradation is gradual or abrupt. The Core never constrains this.
 
 ---
 
 # Fault Categories
 
-Faults can be classified according to what they affect.
+Faults typically fall into one of two categories:
 
----
+**Parameter faults** — alter system parameters, changing dynamics without directly modifying state variables.
 
-## State Faults
-
-Modify latent state variables.
-
-Examples:
-
-- Increased temperature
-- Accelerated wear
-- Battery discharge
-
-Example:
+Examples: increased damping, reduced stiffness, added friction.
 
 ```python
-state.temperature += 0.5
+# Increased damping: higher damping coefficient → faster energy dissipation
+state.damping = nominal_damping * (1.0 + severity)
 ```
 
----
+**State faults** — directly modify state variables.
 
-## Parameter Faults
-
-Modify model parameters.
-
-Examples:
-
-- Increased damping
-- Reduced stiffness
-- Reduced efficiency
-
-Example:
+Examples: temperature spike, accelerated wear, sudden position offset.
 
 ```python
-state.damping *= 1.05
+# Temperature rise fault
+state.temperature += severity * 50.0 * dt
 ```
+
+Both types are handled identically from the engine's perspective — the twin applies them inside `step()`.
 
 ---
 
-## Sensor Faults
-
-Modify observations.
-
-Examples:
-
-- Bias
-- Drift
-- Increased noise
-- Stuck values
-
-These are typically applied after the measurement process.
-
----
-
-## Environmental Faults
-
-Modify operating conditions.
-
-Examples:
-
-- External disturbances
-- Ambient temperature changes
-- Communication disruptions
-
----
-
-# Fault Lifecycle
-
-Every fault follows a lifecycle.
-
-```text
-INACTIVE
-    ↓
-ACTIVE
-    ↓
-EVOLVING
-    ↓
-TERMINATED
-```
-
-Some faults may remain active indefinitely.
-
-Others may be temporary.
-
----
-
-# Fault Activation
-
-Faults may activate:
-
-- Immediately
-- At a scheduled time
-- Randomly
-- Based on state conditions
-
-Example:
-
-```text
-Activate after 100 seconds
-```
-
-or
-
-```text
-Activate when temperature > 80°C
-```
-
----
-
-# Fault Scheduling
-
-Fault scheduling is controlled by scenarios.
-
-Example:
-
-```text
-0s      Normal operation
-120s    Increased damping begins
-300s    Sensor bias begins
-```
-
-The fault itself should not decide when it starts.
-
-The scenario should.
-
----
-
-# Fault Evolution
-
-Faults may evolve over time.
-
-Three fundamental modes should be supported.
-
----
-
-## Sudden Faults
-
-Immediate change.
-
-Example:
-
-```text
-Bearing breaks
-```
-
-Behavior:
-
-```text
-Normal
-↓
-Faulty
-```
-
----
-
-## Gradual Faults
-
-Progressive degradation.
-
-Example:
-
-```text
-Bearing wear
-```
-
-Behavior:
-
-```text
-Healthy
-↓
-Slight degradation
-↓
-Moderate degradation
-↓
-Severe degradation
-```
-
----
-
-## Intermittent Faults
-
-Appear and disappear.
-
-Example:
-
-```text
-Loose electrical connection
-```
-
-Behavior:
-
-```text
-Normal
-↓
-Fault
-↓
-Normal
-↓
-Fault
-```
-
----
-
-# Fault Severity
-
-Faults may have severity levels.
-
-Example:
-
-```python
-severity = 0.0
-```
-
-means:
-
-```text
-No fault
-```
-
-while:
-
-```python
-severity = 1.0
-```
-
-means:
-
-```text
-Maximum severity
-```
-
-Severity can evolve over time.
-
----
-
-# Fault Composition
-
-Multiple faults may coexist.
-
-Example:
-
-```text
-Bearing Wear
-+
-Sensor Bias
-+
-External Disturbance
-```
-
-The framework should allow fault composition.
-
----
-
-# Fault Composition Example
-
-```python
-faults = [
-    BearingWear(),
-    SensorBias(),
-    ExternalDisturbance()
+# Fault Schedule Format
+
+A contest's `fault_schedule` is a list of activation entries. Each entry specifies a fault by ID, a time window (in seconds from simulation start), and a severity level.
+
+```json
+[
+  {
+    "fault_id": "increased_damping",
+    "start_time": 3600.0,
+    "end_time": null,
+    "severity": 0.3
+  },
+  {
+    "fault_id": "reduced_stiffness",
+    "start_time": 7200.0,
+    "end_time": 10800.0,
+    "severity": 0.5
+  }
 ]
 ```
 
-All active faults are applied sequentially.
+`start_time` and `end_time` are in seconds from simulation start (0 = contest start). `end_time: null` means the fault remains active until the session ends. `severity` is a float in [0.0, 1.0].
+
+Multiple simultaneous faults are supported. The twin is responsible for applying them all correctly.
+
+The platform validates at contest creation that every `fault_id` in the schedule is present in `twin.get_faults()`.
 
 ---
 
-# Fault Labels
+# Fault Validation at Contest Creation
 
-During training, labels may be exposed.
+The engine validates the fault schedule against the twin before a contest can become ACTIVE:
 
-Example:
+```python
+available = {f.fault_id for f in twin.get_faults()}
+for entry in contest.fault_schedule:
+    if entry["fault_id"] not in available:
+        raise EPICValidationError(
+            f"fault '{entry['fault_id']}' is not available for twin '{twin.twin_id}'"
+        )
+```
+
+If validation fails, the contest cannot be activated.
+
+---
+
+# Labels
+
+After each `step()`, the engine calls `twin.get_active_faults()` to build ground-truth labels:
 
 ```json
 {
   "is_anomaly": true,
-  "fault_type": "bearing_wear"
+  "fault_ids": ["increased_damping"],
+  "severities": {"increased_damping": 0.3}
 }
 ```
 
----
-
-# Hidden Faults
-
-During evaluation:
-
-```text
-Validation
-Test
-```
-
-fault labels may be hidden.
-
-Participants must infer them from observations.
+Labels are stored privately in every `SensorObservation` record and used by the scoring engine to evaluate anomaly detection and fault classification submissions. They are never sent to participants.
 
 ---
 
-# Fault Registry
+# Reproducibility
 
-Faults should be discoverable.
-
-Example:
-
-```python
-fault_registry.register(IncreasedDampingFault())
-
-fault_registry.register(SensorBiasFault())
-```
-
-The registry enables:
-
-- Discovery
-- Metadata retrieval
-- Validation
-
----
-
-# Reference Faults
-
-The first EPIC implementation should include a minimal set of reusable faults.
-
----
-
-## Increased Damping
-
-Target:
-
-```text
-Mechanical Twin
-```
-
-Effect:
-
-```text
-Higher damping coefficient
-```
-
-Expected observations:
-
-- Reduced oscillation amplitude
-- Slower dynamics
-
----
-
-## Reduced Stiffness
-
-Target:
-
-```text
-Mechanical Twin
-```
-
-Effect:
-
-```text
-Lower stiffness coefficient
-```
-
-Expected observations:
-
-- Lower oscillation frequency
-- Different transient response
-
----
-
-## Increased Friction
-
-Target:
-
-```text
-Mechanical Twin
-```
-
-Effect:
-
-```text
-Additional energy dissipation
-```
-
-Expected observations:
-
-- Faster decay
-- Temperature increase
-
----
-
-## Sensor Bias
-
-Target:
-
-```text
-Any Sensor
-```
-
-Effect:
-
-```text
-measurement += bias
-```
-
-Expected observations:
-
-- Persistent offset
-
----
-
-## Increased Noise
-
-Target:
-
-```text
-Any Sensor
-```
-
-Effect:
-
-```text
-noise_std *= factor
-```
-
-Expected observations:
-
-- Reduced signal quality
-
----
-
-## Stuck Sensor
-
-Target:
-
-```text
-Any Sensor
-```
-
-Effect:
-
-```text
-Measurement frozen
-```
-
-Expected observations:
-
-- Constant value
-
----
-
-# Fault Hierarchy
-
-Recommended implementation:
-
-```python
-Fault                        # apply(state, dt) — modifies latent state or parameters
-├── StateFault               # e.g. temperature increase, accelerated wear
-├── ParameterFault           # e.g. increased damping, reduced stiffness
-├── SensorFault              # apply_to_measurement(measurement) — corrupts observations
-│   ├── BiasFault
-│   ├── DriftFault
-│   ├── StuckSensorFault
-│   └── IncreasedNoiseFault
-└── EnvironmentalFault       # e.g. external disturbances, ambient changes
-```
-
-`SensorFault` overrides `apply(state, dt)` as a no-op and adds `apply_to_measurement()`. All subclasses are registered in the same fault registry and participate in the same lifecycle. The simulation engine distinguishes the application point using `isinstance(fault, SensorFault)` — no other Core change is required when new fault types are added.
-
----
-
-# Fault Persistence
-
-Fault metadata should be persisted.
-
-Example:
-
-```python
-{
-    "fault_id": "sensor_bias",
-    "start_time": 120.0,
-    "severity": 0.4
-}
-```
-
-This supports:
-
-- Reproducibility
-- Auditing
-- Research experiments
-
----
-
-# Contest Usage
-
-Faults are the foundation of several EPIC tasks.
-
-Examples:
-
-## Anomaly Detection
-
-Detect the presence of faults.
-
----
-
-## Fault Classification
-
-Identify the fault type.
-
----
-
-## Fault Forecasting
-
-Predict future fault evolution.
-
----
-
-## Remaining Useful Life
-
-Estimate time-to-failure.
-
----
-
-# Future Fault Library
-
-Potential future additions:
-
-## Industrial
-
-- Bearing Wear
-- Cavitation
-- Filter Obstruction
-- Shaft Misalignment
-- Motor Overheating
-
----
-
-## Electrical
-
-- Voltage Sag
-- Current Imbalance
-- Insulation Degradation
-
----
-
-## Environmental
-
-- Sensor Contamination
-- Humidity Drift
-
----
-
-## Network
-
-- Packet Loss
-- Latency Spikes
-- Congestion Events
-
----
-
-## Biomedical
-
-- Motion Artifacts
-- Sensor Detachment
-- Arrhythmias
-
----
-
-# Design Requirement
-
-A fault should be reusable.
-
-For example:
-
-```text
-Sensor Bias
-```
-
-should work identically for:
-
-- Position Sensors
-- Temperature Sensors
-- Pressure Sensors
-- ECG Sensors
-
-without modifications.
-
-The ability to reuse fault models across domains is a key measure of success for the EPIC Fault Framework.
+If a session has a seed, the engine seeds the global random state before starting the loop. Fault implementations that use probabilistic effects (intermittent faults, jitter in activation time) must use `random` or `numpy.random` module-level functions — not private RNG instances — so that seeding produces reproducible results.

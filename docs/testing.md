@@ -1,8 +1,8 @@
 # Testing Strategy
 
-> Related: [Plugin System](plugin-system.md) · [Simulation Engine](simulation-engine.md) · [Error Handling](error-handling.md)
+> Related: [Simulation Engine](simulation-engine.md) · [Digital Twins](digital-twins.md) · [Error Handling](error-handling.md)
 
-This document defines the testing strategy for the EPIC platform and its plugins.
+This document defines the testing strategy for the EPIC platform.
 
 ---
 
@@ -22,10 +22,13 @@ tests/
 │   ├── test_sessions.py
 │   └── test_submissions.py
 ├── twins/
-│   └── mechanical/
+│   └── mass_spring_damper/
 │       ├── test_twin.py
-│       ├── test_sensors.py
 │       └── test_faults.py
+├── sensors/
+│   ├── test_position_sensor.py
+│   ├── test_velocity_sensor.py
+│   └── test_temperature_sensor.py
 └── conftest.py
 ```
 
@@ -40,7 +43,6 @@ Test individual classes in isolation.
 Examples:
 - Test a sensor's measurement pipeline with a known state
 - Test a fault's `apply()` against a known state and dt
-- Test a scenario's `get_fault_schedule()` output
 
 Unit tests must not touch the database, the API, or the simulation engine.
 
@@ -56,9 +58,9 @@ Integration tests use SQLite (`sqlite+aiosqlite:///:memory:`) to avoid external 
 
 ## Contract Tests
 
-Verify that a plugin correctly implements an interface.
+Verify that a twin or sensor correctly implements its interface.
 
-The EPIC Core provides a reusable contract test suite for each plugin type. Plugin authors run the contract tests against their implementation to confirm correctness before integration.
+The EPIC Core provides a reusable contract test suite for each interface type. Authors run the contract tests against their implementation to confirm correctness before integration.
 
 ---
 
@@ -71,7 +73,7 @@ The Core provides test utilities in `epic_core/testing.py`.
 A minimal in-memory digital twin for use in engine and registry tests:
 
 ```python
-from epic_core.testing import MockTwin, MockScenario, MockSensor, MockFault
+from epic_core.testing import MockTwin, MockSensor, MockFault
 
 twin = MockTwin(twin_id="mock_twin")
 ```
@@ -93,17 +95,6 @@ fault = MockFault(fault_id="mock_fault")
 assert fault.apply_count == 3
 ```
 
-## MockScenario
-
-```python
-scenario = MockScenario(
-    scenario_id="normal",
-    fault_schedule=[
-        {"fault_id": "mock_fault", "start_time": 10.0, "end_time": None, "severity": 1.0}
-    ]
-)
-```
-
 ## TestRegistry
 
 A pre-populated registry for test environments:
@@ -111,8 +102,8 @@ A pre-populated registry for test environments:
 ```python
 from epic_core.testing import test_registry_context
 
-with test_registry_context(twins=[MockTwin()], faults=[MockFault()]) as registries:
-    # registries.twin, registries.sensor, registries.fault, registries.metric
+with test_registry_context(twins=[MockTwin()], sensors=[MockSensor()]) as registries:
+    # registries.twin, registries.sensor, registries.metric
     pass
 ```
 
@@ -120,45 +111,44 @@ with test_registry_context(twins=[MockTwin()], faults=[MockFault()]) as registri
 
 ---
 
-# Plugin Contract Tests
+# Contract Tests
 
-The Core provides a base contract test class for each plugin type.
-
-Plugin authors inherit from the relevant base class and provide their implementation. The contract tests run automatically.
+The Core provides a base contract test class for each interface type. Inherit from the relevant base class and provide your implementation.
 
 ## DigitalTwinContractTests
 
 ```python
 from epic_core.testing.contracts import DigitalTwinContractTests
-from epic_twins.mechanical import MechanicalTwin
+from epic_twins.mechanical.twin import MechanicalTwin
 
 class TestMechanicalTwin(DigitalTwinContractTests):
-    plugin = MechanicalTwin()
+    twin = MechanicalTwin()
 ```
 
 Contract tests verify:
 
-- `twin_id` is a non-empty string
-- `name` is a non-empty string
-- `metadata()` contains required keys with correct types
-- `create_initial_state()` returns a `SimulationState`
-- `create_initial_state(initial_conditions={...})` applies overrides
-- `step(state, dt)` returns a new `SimulationState`, does not modify `state`
+- `twin_id` and `name` are non-empty strings
+- `metadata()` contains required keys
+- `configure(None, [])` returns a `SimulationState`
+- `configure(initial_conditions={...}, fault_schedule=[...])` applies overrides
+- `step(state, dt)` returns a new `SimulationState`, does not modify `state` in place
 - `step()` is called 100 times without raising exceptions
-- `get_sensors()` returns a non-empty list of `Sensor` instances
-- `get_faults()` returns a list of `Fault` instances
-- `get_scenarios()` returns a non-empty list of `Scenario` instances
+- `get_active_faults()` returns a list of dicts with `fault_id` and `severity` keys
+- `supported_quantities()` returns a non-empty `set[PhysicalQuantity]`
+- `get_faults()` returns a list of `FaultDescriptor` instances
 
 ## SensorContractTests
 
 ```python
 from epic_core.testing.contracts import SensorContractTests
-from epic_twins.mechanical.sensors import PositionSensor
+from epic_sensors.linear.position import PositionSensor
+from epic_twins.mechanical.twin import MechanicalState
 
 class TestPositionSensor(SensorContractTests):
-    plugin = PositionSensor()
+    sensor = PositionSensor()
     sample_state = MechanicalState(position=0.5, velocity=1.0,
-                                   acceleration=0.0, temperature=25.0)
+                                   acceleration=0.0, temperature=25.0,
+                                   mass=1.0, stiffness=10.0, damping=0.5)
 ```
 
 Contract tests verify:
@@ -167,30 +157,6 @@ Contract tests verify:
 - `metadata()` contains required keys
 - `observe(sample_state)` returns a `float`
 - `observe()` is called 1000 times without raising exceptions
-
-## FaultContractTests
-
-```python
-from epic_core.testing.contracts import FaultContractTests
-from epic_twins.mechanical.faults import IncreasedDampingFault
-
-class TestIncreasedDampingFault(FaultContractTests):
-    plugin = IncreasedDampingFault()
-    sample_state = MechanicalState(position=0.5, velocity=1.0,
-                                   acceleration=0.0, temperature=25.0)
-```
-
-Contract tests verify:
-
-- `fault_id` and `name` are non-empty strings
-- `metadata()` contains required keys
-- `current_severity` is `0.0` before activation
-- `activate(0.5)` sets `current_severity` to `0.5`
-- `deactivate()` resets `current_severity` to `0.0`
-- `apply(state, dt)` does not raise exceptions
-- `apply()` does not replace the state object (modifies in place)
-- For `SensorFault`: `apply_to_measurement(1.0)` returns a `float`
-- For `SensorFault`: `target_sensor_ids` is a list
 
 ---
 
@@ -237,7 +203,7 @@ uv run pytest tests/api
 uv run pytest --cov=epic_core --cov=epic_api --cov-report=term-missing
 
 # A specific contract test suite
-uv run pytest tests/twins/mechanical/test_twin.py -v
+uv run pytest tests/twins/mass_spring_damper/test_twin.py -v
 ```
 
 ---
@@ -247,7 +213,7 @@ uv run pytest tests/twins/mechanical/test_twin.py -v
 The CI pipeline must run:
 
 - All unit tests
-- All contract tests for every registered plugin
+- All contract tests for every registered twin and sensor
 - All API integration tests
 - Coverage must not drop below 80% for `epic_core`
 

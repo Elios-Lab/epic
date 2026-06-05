@@ -14,8 +14,10 @@ def contest_payload(**overrides):
         "name": "EPIC Forecasting Challenge 2027",
         "description": "Test contest",
         "visibility": "PUBLIC",
-        "twin_id": "mechanical_system",
-        "scenario_id": "normal_operation",
+        "twin_id": "mass_spring_damper",
+        "sensor_configs": [{"sensor_id": "position"}],
+        "fault_schedule": [],
+        "initial_conditions": {"position": 0.1},
         "sampling_rate_hz": 20.0,
         "start_date": now.isoformat(),
         "end_date": (now + timedelta(seconds=1)).isoformat(),
@@ -128,8 +130,8 @@ def test_create_contest_as_admin_returns_draft(client, admin_headers):
     assert body["status"] == "DRAFT"
     assert body["description"] == "Test contest"
     assert body["visibility"] == "PUBLIC"
-    assert body["twin_id"] == "mechanical_system"
-    assert body["scenario_id"] == "normal_operation"
+    assert body["twin_id"] == "mass_spring_damper"
+    assert body["sensor_configs"] == [{"sensor_id": "position"}]
 
 
 def test_create_contest_as_participant_returns_403(client, auth_headers):
@@ -168,15 +170,15 @@ def test_create_contest_with_unknown_twin_returns_404(client, admin_headers):
     assert response.json()["error"]["code"] == "PLUGIN_NOT_FOUND"
 
 
-def test_create_contest_with_unknown_scenario_returns_422(client, admin_headers):
+def test_create_contest_with_unknown_sensor_returns_404(client, admin_headers):
     response = client.post(
         "/api/v1/contests",
-        json=contest_payload(scenario_id="unknown_scenario"),
+        json=contest_payload(sensor_configs=[{"sensor_id": "unknown_sensor"}]),
         headers=admin_headers,
     )
 
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "PLUGIN_NOT_FOUND"
 
 
 def test_create_contest_with_invalid_visibility_returns_422(client, admin_headers):

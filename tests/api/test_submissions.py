@@ -41,8 +41,8 @@ def create_contest_with_observation(db_factory, name: str, status: str = "ACTIVE
                 description="Submission test contest",
                 status=status,
                 visibility="PUBLIC",
-                twin_id="mechanical_system",
-                scenario_id="normal_operation",
+                twin_id="mass_spring_damper",
+                sensor_configs=[{"sensor_id": "position"}],
                 sampling_rate_hz=20.0,
                 start_date=now,
                 end_date=now + timedelta(seconds=10),
@@ -55,7 +55,6 @@ def create_contest_with_observation(db_factory, name: str, status: str = "ACTIVE
             session = SimulationSession(
                 contest_id=contest.id,
                 twin_id=contest.twin_id,
-                scenario_id=contest.scenario_id,
                 sampling_rate_hz=contest.sampling_rate_hz,
                 status="RUNNING",
             )
@@ -103,8 +102,8 @@ def create_scoring_contest(db_factory):
                 description="Scoring test contest",
                 status="ACTIVE",
                 visibility="PUBLIC",
-                twin_id="mechanical_system",
-                scenario_id="normal_operation",
+                twin_id="mass_spring_damper",
+                sensor_configs=[{"sensor_id": "position"}],
                 sampling_rate_hz=20.0,
                 task_type="FORECASTING",
                 forecast_horizons=[1],
@@ -119,7 +118,6 @@ def create_scoring_contest(db_factory):
             session = SimulationSession(
                 contest_id=contest.id,
                 twin_id=contest.twin_id,
-                scenario_id=contest.scenario_id,
                 sampling_rate_hz=contest.sampling_rate_hz,
                 status="RUNNING",
             )

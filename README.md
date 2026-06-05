@@ -55,16 +55,15 @@ This allows new digital twins, sensors and fault models to be added without modi
 
 ### Digital Twin Framework
 
-- Plugin-based architecture
-- Domain-independent design
-- Multiple digital twins
-- Scenario management
-- Fault injection
+- Interface-driven, domain-independent design
+- Multiple digital twins with self-contained fault management
+- Fault injection via contest configuration (start time, end time, severity)
+- Reusable sensors decoupled from specific twins via physical quantity ontology
 
 ### Dataset Generation
 
 - Historical data generation
-- Configurable scenarios
+- Configurable fault schedules and initial conditions
 - Multiple seeds
 - Export to CSV and JSONL
 
@@ -126,18 +125,23 @@ Future twins may include:
 ```text
 epic/
 ├── epic_core/          ← interfaces, registry, engine, broadcaster, db models, auth
-│   └── db/             ← SQLAlchemy models and session management
+│   ├── db/             ← SQLAlchemy models and session management
+│   └── quantities.py   ← PhysicalQuantity ontology (shared by sensors and twins)
 ├── epic_api/           ← FastAPI application, routers, dependencies, error handling
-│   └── routers/        ← twins, auth, users, contests, registrations, submissions, ws
-├── epic_twins/         ← digital twin plugins
-│   └── mechanical/     ← mass-spring-damper twin, sensors, faults, scenarios
+│   └── routers/        ← twins, sensors, auth, users, contests, registrations, submissions, ws
+├── epic_twins/         ← digital twin plugins (declare supported quantities and faults)
+│   └── mass_spring_damper/  ← mass-spring-damper twin with self-contained fault management
+├── epic_sensors/       ← sensor plugins (independent of twins, reusable across domains)
+│   ├── linear/         ← position, velocity, acceleration sensors
+│   └── thermal/        ← temperature sensor
 ├── alembic/            ← database migrations
 │   └── versions/
 ├── docs/               ← architecture and API documentation
 └── tests/              ← unit, integration, and API tests
     ├── core/
     ├── api/
-    └── twins/
+    ├── twins/
+    └── sensors/
 ```
 
 ---
@@ -150,17 +154,16 @@ Detailed documentation is available in the `docs/` directory.
 |---|---|
 | [Architecture](docs/architecture.md) | High-level system architecture and layers |
 | [Domain Model](docs/domain-model.md) | Canonical entity definitions and database schema |
-| [Plugin System](docs/plugin-system.md) | Canonical interface definitions for all plugin types |
-| [Plugin Registry](docs/plugin-registry.md) | Registry specification, discovery, and versioning |
+| [Physical Quantities](docs/quantities.md) | Ontology shared between sensors and digital twins |
 | [Simulation Engine](docs/simulation-engine.md) | Simulation loop, concurrency, WebSocket streaming |
 | [API Specification](docs/api-specification.md) | REST and WebSocket API reference |
 | [Authentication](docs/authentication.md) | Auth, JWT, and role-based access control |
 | [Configuration](docs/configuration.md) | Environment variables and settings reference |
 | [Error Handling](docs/error-handling.md) | Exception hierarchy and API error mapping |
 | [Testing](docs/testing.md) | Testing strategy, utilities, and contract tests |
-| [Digital Twins](docs/digital-twins.md) | Guide for implementing digital twin plugins |
-| [Sensors](docs/sensors.md) | Guide for implementing sensor plugins |
-| [Faults](docs/faults.md) | Guide for implementing fault plugins |
+| [Digital Twins](docs/digital-twins.md) | Guide for implementing digital twins |
+| [Sensors](docs/sensors.md) | Guide for implementing sensors |
+| [Faults](docs/faults.md) | Guide for implementing fault models |
 | [Scoring](docs/scoring.md) | Metrics, scoring policies and leaderboards |
 | [Contest Management](docs/contest-management.md) | Contest lifecycle, submissions and rankings |
 | [Contest Authoring](docs/contest-authoring.md) | Configuration-driven contest creation guide |
@@ -204,7 +207,7 @@ uv run pytest
 
 ### Register a digital twin
 
-Create a twin by implementing the `DigitalTwin` interface (see [Digital Twins](docs/digital-twins.md) and [Plugin System](docs/plugin-system.md)), then register it in your application startup:
+Create a twin by implementing the `DigitalTwin` interface (see [Digital Twins](docs/digital-twins.md)), then register it in your application startup:
 
 ```python
 from epic_core.registry import twin_registry
@@ -219,11 +222,11 @@ No API changes are required. The new twin will appear automatically at `GET /api
 
 # Development Roadmap
 
-The development of EPIC will follow an incremental approach.
+The development of EPIC follows an incremental approach.
 
 The primary objective is not simulation realism, but architectural validation and extensibility.
 
-Each phase should produce a fully working system before increasing complexity.
+Each phase produces a fully working system before increasing complexity.
 
 ---
 
@@ -235,14 +238,14 @@ Deliverables:
 
 - Repository structure
 - Documentation
-- Core interfaces
-- Plugin registries
+- Core interfaces (`DigitalTwin`, `Sensor`, `FaultDescriptor`, `ScoringMetric`)
+- Registries for twins, sensors, and scoring metrics
 - Configuration system
 - Development environment
 
 Success criteria:
 
-- The platform can discover plugins.
+- The platform can register and look up twins and sensors.
 - The architecture is stable enough to support future extensions.
 
 ---
@@ -255,17 +258,20 @@ Deliverables:
 
 - FastAPI backend
 - User management and JWT authentication
-- Mechanical digital twin (mass-spring-damper)
+- Mass-spring-damper digital twin with self-contained fault management
 - Position, velocity, acceleration, temperature sensors
-- Normal operation and fault scenarios
+- Fault injection via contest fault schedule (fault ID, start time, end time, severity)
 - Contest lifecycle management (DRAFT → ACTIVE → CLOSED)
 - Shared real-time simulation per contest (wall-clock time)
 - WebSocket streaming of live sensor readings to participants
 - Private server-side observation storage for scoring
 
+> **Note:** Code alignment with the revised architecture (twin-internal fault management,
+> `configure()` / `get_active_faults()` interface) is tracked in `docs/codex-tasks.md`.
+
 Success criteria:
 
-- An admin can create and activate a contest.
+- An admin can create and activate a contest with a specific fault schedule.
 - Participants can connect via WebSocket and receive live sensor readings.
 - The simulation runs in real wall-clock time and stops when the contest closes.
 
@@ -279,7 +285,7 @@ Deliverables:
 
 - Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT
 - Contest registration (participants join SCHEDULED or ACTIVE contests)
-- Submission management with temporal integrity anchor (prediction_from_sequence)
+- Submission management with temporal integrity anchor (`prediction_from_sequence`)
 - MAE scoring against privately stored ground-truth observations
 - Leaderboards with automatic ranking after each scored submission
 - Deadline extension for organizers and admins
@@ -292,23 +298,33 @@ Success criteria:
 
 ---
 
-## Phase 3 – Advanced Simulation
+## Phase 3 – Advanced Simulation ✅
 
 Goal: Improve realism and simulation richness.
 
 Deliverables:
 
-- Sensor drift (linear, random walk)
-- Sensor latency
-- Sensor quantization and filtering
-- Multiple simultaneous faults
-- Fault severity evolution models (sudden, gradual, intermittent)
-- Scenario composition (combine multiple fault schedules)
-- Additional fault types for the mechanical twin
+- Sensor noise (Gaussian) ✅
+- Sensor drift (linear accumulation over time) ✅
+- Sensor latency (configurable delay in steps) ✅
+- Sensor quantization ✅
+- Sensor saturation (min/max clipping) ✅
+- False readings and outliers (probabilistic) ✅
+- Multiple simultaneous faults (supported via fault schedule) ✅
+- Gradual fault effects (physical state evolves continuously at each step) ✅
+- Intermittent faults (supported via multiple schedule entries with end_time) ✅
+
+> The sensor pipeline is fully implemented in `epic_sensors/base.py`.
+> All pipeline parameters are configurable per sensor in `contest.sensor_configs`.
+
+Remaining enhancements (deferred to Phase 3+):
+
+- Dynamic severity ramp-up within the twin (e.g. exponential degradation curves)
+- Additional fault types for the mass-spring-damper twin
 
 Success criteria:
 
-- Realistic anomaly detection and forecasting challenges become possible.
+- Realistic anomaly detection and forecasting challenges are possible.
 - A student cannot trivially distinguish sensor noise from a genuine fault.
 
 ---
@@ -319,22 +335,19 @@ Goal: Introduce realistic industrial systems.
 
 Candidate twins:
 
-- Industrial Pump
-- Electric Motor
-- Rotating Machinery
-- Smart Building
+- Industrial Pump (pressure, flow, vibration, temperature)
+- Electric Motor (current, voltage, RPM, temperature)
+- Rotating Machinery (vibration, bearing temperature)
+- Smart Building (temperature, humidity, occupancy, HVAC)
 
-Candidate sensors:
+Candidate sensors and physical quantities:
 
-- Pressure
-- Flow
-- Current
-- Voltage
-- Vibration
+- `PRESSURE`, `FLOW_RATE`, `VIBRATION`, `CURRENT`, `VOLTAGE`, `ROTATIONAL_SPEED`
 
 Success criteria:
 
 - EPIC supports industrial predictive maintenance challenges.
+- A new twin can be integrated by implementing `DigitalTwin` alone, with no Core changes.
 
 ---
 
@@ -344,9 +357,9 @@ Goal: Support more sophisticated machine learning competitions.
 
 Deliverables:
 
-- Fault classification tasks
+- Fault classification tasks (predict which fault, not just anomaly/normal)
 - Remaining Useful Life estimation
-- Multi-task contests
+- Multi-task contests (combined forecasting + anomaly detection scoring)
 - Hidden evaluation datasets
 - Public and private leaderboards
 
@@ -362,15 +375,15 @@ Goal: Make EPIC usable by instructors without software development.
 
 Deliverables:
 
-- Contest templates
-- Web-based contest authoring
-- Twin catalog
-- WebSocket client starter kit
-- Educational dashboards
+- Contest templates with predefined fault schedules and sensor configurations
+- Web-based contest authoring UI
+- Twin catalog with browsable fault and sensor documentation
+- WebSocket client starter kit (Python + Jupyter)
+- Educational dashboards (live simulation visualization)
 
 Success criteria:
 
-- A professor can create a complete contest through configuration alone.
+- A professor can create a complete contest through configuration alone, without writing code.
 
 ---
 
@@ -388,7 +401,7 @@ Possible extensions:
 
 Success criteria:
 
-- New research domains can be integrated as plugins without modifying the EPIC Core.
+- New research domains can be integrated by implementing interfaces alone, without modifying the EPIC Core.
 
 ---
 
@@ -398,6 +411,4 @@ EPIC should evolve into a domain-independent framework for simulation-driven mac
 
 Digital twins, sensors, fault models and contest types should become interchangeable building blocks.
 
-The ultimate measure of success is architectural flexibility:
-
-A new machine learning competition should be creatable primarily through configuration, while a new application domain should be introducible by implementing a small set of well-defined interfaces.
+The ultimate measure of success is architectural flexibility: a new machine learning competition should be creatable primarily through configuration, while a new application domain should be introducible by implementing a small set of well-defined interfaces.

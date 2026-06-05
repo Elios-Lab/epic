@@ -59,7 +59,6 @@ A contest contains:
 - tasks
 - scoring configuration
 - allowed digital twins
-- allowed scenarios
 - leaderboard configuration
 
 ---
@@ -90,7 +89,7 @@ class Contest:
     updated_at: datetime
 ```
 
-Tasks, allowed twins, allowed scenarios, and scoring configuration are linked entities managed separately. See [Domain Model](domain-model.md) for the full relational structure.
+Tasks and scoring configuration are linked entities managed separately. See [Domain Model](domain-model.md) for the full relational structure.
 
 ---
 
@@ -231,7 +230,6 @@ Organizers and administrators must be able to configure:
 - scoring policies
 - visibility
 - digital twins
-- scenarios
 
 ---
 
@@ -531,19 +529,6 @@ allowed_twins = [
 ```
 
 ---
-
-# Contest-Specific Scenarios
-
-A contest may expose only a subset of scenarios.
-
-Example:
-
-```python
-allowed_scenarios = [
-    "normal_operation",
-    "bearing_wear"
-]
-```
 
 ---
 

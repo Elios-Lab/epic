@@ -29,7 +29,6 @@ Submission
 Score
 LeaderboardEntry
 DigitalTwinMetadata
-ScenarioMetadata
 SensorMetadata
 SimulationSession
 SensorObservation
@@ -64,7 +63,7 @@ PARTICIPANT     ← registers for contests and submits predictions
 Future roles (Phase 4+):
 
 ```text
-EXPERT          ← registers digital twin and sensor plugins at runtime
+EXPERT          ← registers new digital twins and sensors at runtime
 ```
 
 Relationships:
@@ -87,12 +86,48 @@ class Contest:
     description: str
     status: ContestStatus
     visibility: ContestVisibility
+    twin_id: str                    # which digital twin to simulate
+    initial_conditions: dict | None # override twin defaults (e.g. position, velocity)
+    sensor_configs: list[dict]      # sensors and their parameters
+    fault_schedule: list[dict]      # faults and their activation parameters
+    sampling_rate_hz: float
+    task_type: str                  # e.g. "FORECASTING"
+    forecast_horizons: list[int]
     start_date: datetime
     end_date: datetime
-    created_by: str
+    created_by: uuid                # FK to users.id
     created_at: datetime
     updated_at: datetime
 ```
+
+**`sensor_configs`** — a list of sensor configurations. Each entry specifies a sensor from `sensor_registry` and overrides for its measurement pipeline parameters:
+
+```json
+[
+  {"sensor_id": "position",    "noise_std": 0.005},
+  {"sensor_id": "velocity",    "noise_std": 0.01, "drift_rate": 0.001},
+  {"sensor_id": "temperature", "noise_std": 0.2,  "p_outlier": 0.002}
+]
+```
+
+The platform validates at contest creation that each `sensor_id` is registered and that its `measured_quantity` is in `twin.supported_quantities()`.
+
+**`fault_schedule`** — a list of fault activation entries. Each entry specifies a fault from `twin.get_faults()` and its activation timing and strength:
+
+```json
+[
+  {
+    "fault_id":   "increased_damping",
+    "start_time": 3600.0,
+    "end_time":   null,
+    "severity":   0.3
+  }
+]
+```
+
+`start_time` and `end_time` are in seconds from the simulation start (0 = contest start). `severity` is in [0.0, 1.0]. `end_time = null` means the fault is active until the contest ends.
+
+**`initial_conditions`** — optional dict of state variable overrides passed to `twin.create_initial_state()`. Keys match the twin's state field names. Unspecified fields use the twin's defaults.
 
 Supported statuses:
 
@@ -119,7 +154,6 @@ Contest 1 -> N ContestRegistration
 Contest 1 -> N Submission
 Contest 1 -> N Task
 Contest N -> N DigitalTwinMetadata
-Contest N -> N ScenarioMetadata
 ```
 
 ---
@@ -277,11 +311,7 @@ Therefore, leaderboard entries can be treated as derived data.
 
 # DigitalTwinMetadata
 
-Represents metadata for a registered digital twin.
-
-This is not the digital twin implementation itself.
-
-The implementation lives in the plugin system.
+Represents metadata for a registered digital twin. Returned by `GET /api/v1/twins` and related endpoints.
 
 ```python
 class DigitalTwinMetadata:
@@ -289,9 +319,7 @@ class DigitalTwinMetadata:
     name: str
     version: str
     description: str
-    plugin_path: str
     metadata: dict
-    is_active: bool
 ```
 
 Examples:
@@ -304,31 +332,6 @@ smart_building
 
 ---
 
-# ScenarioMetadata
-
-Represents metadata for scenarios exposed by a digital twin.
-
-```python
-class ScenarioMetadata:
-    scenario_id: str
-    twin_id: str
-    name: str
-    description: str
-    difficulty_level: int
-    metadata: dict
-```
-
-Examples:
-
-```text
-normal_operation
-increased_damping
-sensor_bias
-intermittent_disturbance
-```
-
----
-
 # SensorMetadata
 
 Represents metadata for sensors exposed by a digital twin.
@@ -336,13 +339,11 @@ Represents metadata for sensors exposed by a digital twin.
 ```python
 class SensorMetadata:
     sensor_id: str
-    twin_id: str
     name: str
     unit: str
-    sampling_rate_hz: float
-    nominal_range_min: float
-    nominal_range_max: float
-    metadata: dict
+    measured_quantity: str    # PhysicalQuantity.value
+    version: str
+    description: str
 ```
 
 The platform must not assume fixed sensor names.
@@ -362,7 +363,6 @@ class SimulationSession:
     session_id: str
     contest_id: str         # FK to Contest, unique (1:1 relationship)
     twin_id: str
-    scenario_id: str
     sampling_rate_hz: float
     seed: int | None
     status: SessionStatus
@@ -450,7 +450,6 @@ Contest
  └── SimulationSession (1:1)
 
 DigitalTwinMetadata
- ├── ScenarioMetadata
  └── SensorMetadata
 
 SimulationSession
@@ -475,8 +474,6 @@ submissions
 scores
 leaderboard_entries
 digital_twins
-scenarios
-sensors
 simulation_sessions
 sensor_observations
 ```
@@ -485,12 +482,11 @@ For many-to-many relationships:
 
 ```text
 contest_allowed_twins       (contest_id, twin_id, twin_version)
-contest_allowed_scenarios   (contest_id, scenario_id, twin_id)
 ```
 
-`twin_version` in `contest_allowed_twins` pins the specific plugin version the contest uses, ensuring reproducibility if a twin is updated after the contest is published. If `twin_version` is `NULL`, the latest registered version is used.
+`twin_version` in `contest_allowed_twins` pins the specific twin version the contest uses, ensuring reproducibility if a twin is updated after the contest is published. If `twin_version` is `NULL`, the latest registered version is used.
 
-**Phase 1 note:** these junction tables are not implemented in Phase 1. Each `Contest` record directly stores `twin_id`, `scenario_id`, and `sampling_rate_hz`, implying exactly one twin and one scenario per contest. The junction tables and multi-twin support are Phase 2 work.
+**Phase 3 note:** the `contest_allowed_twins` junction table is not yet implemented. Each Contest record directly stores `twin_id`. Multi-twin contests and version pinning are deferred to a future phase.
 
 ---
 
@@ -503,7 +499,6 @@ metadata
 configuration
 payload
 details
-sensors
 labels
 ```
 
@@ -517,7 +512,7 @@ For PostgreSQL, use `JSONB`.
 
 The database should persist metadata and results.
 
-The actual Python implementation of digital twins, sensors and faults should remain in the plugin system.
+The actual Python implementation of digital twins, sensors and faults lives in `epic_twins/` and `epic_sensors/`.
 
 Do not persist executable logic in the database.
 
@@ -556,9 +551,8 @@ ContestRegistration(user_id, contest_id) unique
 
 DigitalTwinMetadata(twin_id, version) unique
 
-ScenarioMetadata(twin_id, scenario_id) unique
 
-SensorMetadata(twin_id, sensor_id) unique
+SensorMetadata(sensor_id) unique
 
 SimulationSession(contest_id) unique   ← one session per contest
 
@@ -605,8 +599,6 @@ For reproducibility, store:
 
 - twin_id;
 - twin version;
-- scenario_id;
-- scenario version, if available;
 - seed;
 - simulation configuration;
 - contest configuration;
@@ -648,9 +640,7 @@ For the first implementation, create persistence support for:
 5. Submission
 6. Score
 7. DigitalTwinMetadata
-8. ScenarioMetadata
-9. SensorMetadata
-10. SimulationSession
+8. SimulationSession
 11. SensorObservation
 
 Keep the schema simple but extensible.

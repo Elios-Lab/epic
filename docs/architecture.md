@@ -1,14 +1,12 @@
 # EPIC Architecture
 
-> Related: [Plugin System](plugin-system.md) · [Plugin Registry](plugin-registry.md) · [Simulation Engine](simulation-engine.md) · [Domain Model](domain-model.md)
+> Related: [Simulation Engine](simulation-engine.md) · [Domain Model](domain-model.md) · [Digital Twins](digital-twins.md) · [Sensors](sensors.md)
 
-The platform is designed around a central principle:
+The platform is designed around one central principle:
 
 > The competition infrastructure must be independent from the simulated domain.
 
-Digital twins, sensors, fault models and scenarios are treated as plugins.
-
-The EPIC Core provides orchestration, contest management, evaluation and data streaming.
+Digital twins, sensors, and fault models implement well-defined interfaces. The EPIC Core orchestrates them without knowing anything about their domain logic.
 
 ---
 
@@ -23,234 +21,159 @@ The EPIC Core provides orchestration, contest management, evaluation and data st
                  +----------------------+
                  |      REST API        |
                  |    WebSocket API     |
-                 +----------+-----------+
+                 +----------+----------+
                             |
                             v
                  +----------------------+
                  |    Contest Layer     |
-                 +----------+-----------+
+                 +----------+----------+
                             |
                             v
                  +----------------------+
-                 |      EPIC Core       |
-                 +----------+-----------+
+                 |   Simulation Engine  |
+                 |    (EPIC Core)       |
+                 +----------+----------+
                             |
-        +-------------------+-------------------+
-        |                   |                   |
-        v                   v                   v
-+---------------+ +---------------+ +---------------+
-| Twin Registry | |Sensor Registry| |Fault Registry |
-+---------------+ +---------------+ +---------------+
-        |
-        v
-+--------------------------------------+
-|        Digital Twin Plugins          |
-+--------------------------------------+
+              +-------------+-------------+
+              |                           |
+              v                           v
+  +--------------------+     +--------------------+
+  |   Digital Twin     |     |      Sensors       |
+  |  (owns its faults) |     | (epic_sensors/)    |
+  +--------------------+     +--------------------+
 ```
 
 ---
 
 # Architectural Layers
 
-The system is divided into several layers.
-
 ## EPIC Core
 
-The Core contains all domain-independent logic.
+Contains all domain-independent logic.
 
 Responsibilities:
 
 - simulation orchestration
 - session lifecycle
-- registry management
-- scheduling
-- clock management
-- plugin discovery
+- twin and sensor registration
+- WebSocket broadcasting
+- contest management
+- scoring
 
-The Core must not know anything about:
-
-- pumps
-- motors
-- batteries
-- buildings
-- biomedical systems
-
-The Core only interacts through interfaces.
+The Core must not contain knowledge of any specific domain. It interacts with twins and sensors exclusively through the interfaces defined in `epic_core/interfaces.py`.
 
 ---
 
 ## Contest Layer
 
-The Contest Layer manages competitions.
+Manages machine learning competitions.
 
 Responsibilities:
 
-- contest lifecycle
-- registrations
-- submissions
-- scoring
-- rankings
-- leaderboards
+- contest lifecycle (DRAFT → SCHEDULED → ACTIVE → CLOSED → ARCHIVED)
+- participant registration
+- submission intake
+- scoring and leaderboards
 
-The Contest Layer should not depend on any specific digital twin.
+The Contest Layer never depends on a specific digital twin.
 
 ---
 
 ## Digital Twin Layer
 
-Digital twins implement simulated systems.
+A digital twin represents a simulated physical system. It is a self-contained unit responsible for:
 
-Examples:
+- maintaining and evolving its internal latent state
+- managing its own faults — activating them at the scheduled times and incorporating their effects directly into state evolution
+- exposing metadata about available faults for contest configuration and API listing
 
-- Mechanical System
-- Industrial Pump
-- Electric Motor
-- Smart Building
-- Power Grid
+Twins live in `epic_twins/`. Each twin is a Python package that implements the `DigitalTwin` interface.
 
-A digital twin contains:
-
-- latent state
-- dynamics
-- sensors
-- faults
-- scenarios
+**The twin is the only place where fault logic lives.** The engine never calls any fault method directly.
 
 ---
 
 ## Sensor Layer
 
-Sensors transform latent state variables into measurements.
+Sensors live in `epic_sensors/` and are reusable across any twin that exposes the right physical quantity.
 
-Sensors are reusable components.
+A sensor reads one physical quantity from the twin's state and produces a noisy, degraded measurement. The full degradation pipeline (noise, drift, latency, quantization, saturation, outliers) is internal to the sensor.
 
-Examples:
-
-- TemperatureSensor
-- PressureSensor
-- VibrationSensor
-- PositionSensor
-
----
-
-## Fault Layer
-
-Faults introduce anomalies.
-
-Faults are reusable and independent.
-
-Examples:
-
-- BiasFault
-- DriftFault
-- IncreasedFrictionFault
-- PacketLossFault
-
----
-
-# Plugin Architecture
-
-The EPIC Core discovers plugins through registries.
-
-Each plugin type has its own registry. Registries are module-level singletons in `epic_core/registry.py`, populated at application startup.
-
-```python
-twin_registry.register(MechanicalTwin())
-sensor_registry.register(TemperatureSensor())
-fault_registry.register(SensorBiasFault())
-```
-
-The API automatically exposes all registered components. No modification to the Core is required when new plugins are added.
-
-See [Plugin Registry](plugin-registry.md) for the full specification of registration, auto-discovery, versioning, and lookup.
+Sensors are completely independent from specific twins. The coupling is mediated exclusively by `PhysicalQuantity` — a sensor declares what it measures, a twin declares what quantities it provides. See [Physical Quantities](quantities.md).
 
 ---
 
 # Simulation Flow
 
-A simulation session is executed by the `SimulationEngine`, an asyncio-based component in the EPIC Core.
-
-Each contest has exactly one simulation session, started automatically when the contest becomes ACTIVE and running in real wall-clock time until the contest closes.
-
-High-level flow:
-
-1. Contest transitions to ACTIVE → platform creates and starts the session
-2. Load twin and scenario from registries
-3. Initialise latent state
-4. Loop (wall-clock time): advance state → apply faults → observe sensors → persist privately → broadcast to WebSocket subscribers
-5. Contest transitions to CLOSED → session stops, status set to COMPLETED
+A simulation session is started automatically when a contest transitions to ACTIVE. The session runs in real wall-clock time until the contest closes.
 
 ```text
-Latent State
+twin.configure(initial_conditions, fault_schedule)
       |
-      v
- twin.step()                         ← state evolution (returns new state)
+      v  returns initial state
       |
-      v
- fault.apply()                       ← StateFault and ParameterFault
-      |
-      v
- sensor.observe()                    ← produces raw measurement
-      |
-      v
- sensor_fault.apply_to_measurement() ← SensorFault
-      |
-      v
- SensorObservation (with labels)     ← persisted privately for scoring
-      |
-      v
- WebSocket broadcast (sensors only)  ← delivered to all connected participants
+      +------------ simulation loop (wall-clock time) ------------------+
+      |                                                                  |
+      v                                                                  |
+ twin.step(state, dt)                                                    |
+      |                                                                  |
+      |  ← twin manages fault activation and application internally      |
+      |                                                                  |
+      v                                                                  |
+ sensor.observe(new_state, dt)   for each configured sensor             |
+      |                                                                  |
+      |  ← sensor applies its own degradation pipeline internally        |
+      |                                                                  |
+      v                                                                  |
+ twin.get_active_faults()        for label generation only              |
+      |                                                                  |
+      v                                                                  |
+ SensorObservation (sensors + labels)  → persisted privately            |
+ WebSocket broadcast (sensors only)    → delivered to participants      |
+      |                                                                  |
+      +------------------------------------------------------------------+
 ```
 
-See [Simulation Engine](simulation-engine.md) for the full engine specification including wall-clock timing, WebSocket broadcasting, and label storage.
+The engine has no fault logic. It calls `twin.step()`, calls `sensor.observe()`, and calls `twin.get_active_faults()` solely to produce ground-truth labels for the scoring engine.
+
+See [Simulation Engine](simulation-engine.md) for the full specification.
+
+---
+
+# Extension Model
+
+New digital twins, sensors, and scoring metrics are added by implementing the interfaces in `epic_core/interfaces.py` and registering them at application startup.
+
+```python
+# epic_api/main.py  (startup)
+from epic_core.registry import twin_registry, sensor_registry
+from epic_twins.mechanical.twin import MechanicalTwin
+from epic_sensors.linear.position import PositionSensor
+from epic_sensors.linear.velocity import VelocitySensor
+
+twin_registry.register(MechanicalTwin())
+sensor_registry.register(PositionSensor())
+sensor_registry.register(VelocitySensor())
+```
+
+No dynamic discovery framework is required. The API automatically exposes all registered twins and sensors. No Core modification is needed when a new twin or sensor is added.
+
+**Faults are not registered globally.** They are owned by their twin and returned by `twin.get_faults()`. The engine and API load fault descriptors directly from the twin.
 
 ---
 
 # Data Visibility
 
-In Phase 1, data visibility is fixed: participants always receive sensor readings only through the WebSocket stream. Labels, fault metadata, and latent state are always stored privately and never exposed to participants.
+Participants receive only sensor readings, delivered through the WebSocket stream. Ground-truth labels, fault metadata, and the twin's internal state are always stored privately and never exposed through participant-facing API endpoints.
 
-Future phases may introduce configurable visibility modes (e.g. a training contest that exposes labels to help students learn). The three intended modes are:
-
-## Training Mode (future)
-
-May expose sensor readings plus labels and fault metadata, configurable per contest.
-
-## Validation Mode (future)
-
-Exposes sensor readings only, possibly with partial labels.
-
-## Test Mode (future)
-
-Exposes sensor readings only. No hidden information available.
-
-No internal state information.
+The scoring engine reads labels from the private store when evaluating submissions.
 
 ---
 
-# Extensibility Requirements
+# Extensibility Requirement
 
-The architecture must allow:
+The architecture must allow new digital twins, sensors, fault models, and scoring metrics to be integrated without modifying any EPIC Core file.
 
-- new digital twins
-- new sensors
-- new fault models
-- new scoring metrics
-- new contest types
+The test for this requirement: could a completely different domain (biomedical monitor, smart building, power grid) be integrated by implementing interfaces alone, with no changes to the Core, the Contest Layer, the REST API, or the WebSocket API?
 
-without changing:
-
-- EPIC Core
-- Contest Layer
-- REST API
-- WebSocket API
-
----
-
-# Long-Term Goal
-
-EPIC should become a generic framework for simulation-driven machine learning competitions.
-
-The first mechanical twin is only a proof of concept.
-
-Future domains should be integrated by implementing interfaces rather than modifying infrastructure.
+If the answer is no, the proposed change must be reconsidered.

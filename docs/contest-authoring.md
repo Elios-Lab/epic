@@ -4,15 +4,14 @@ One of the primary goals of EPIC is to allow instructors and researchers to crea
 
 Contest creation should be largely configuration-driven.
 
-The platform should allow a contest author to create a new competition by selecting:
+The platform should allow a contest author to create a new competition by configuring:
 
-- Digital Twins
-- Scenarios
-- Tasks
-- Metrics
-- Scoring Policies
-- Submission Rules
-- Visibility Settings
+- A digital twin
+- Sensor pipeline parameters
+- A fault schedule (which faults, when, how severe)
+- Initial conditions
+- Tasks and scoring metrics
+- Visibility and submission rules
 
 without implementing new software components.
 
@@ -25,18 +24,20 @@ The recommended workflow is:
 ```text
 Select Twin
       ↓
-Select Scenarios
+Configure Sensors (with parameter overrides)
       ↓
-Define Tasks
+Configure Fault Schedule (fault_id, start_time, end_time, severity)
       ↓
-Select Metrics
+Set Initial Conditions
+      ↓
+Define Tasks and Metrics
       ↓
 Configure Leaderboard
       ↓
 Publish Contest
 ```
 
-Most contests should be creatable through configuration files or the administrative interface.
+All configuration is stored directly on the contest record. There are no scenario templates — each contest explicitly defines its full simulation configuration.
 
 ---
 
@@ -46,10 +47,11 @@ A contest consists of:
 
 ```text
 Contest Metadata
-Digital Twins
-Scenarios
-Tasks
-Metrics
+Digital Twin           ← which twin to simulate
+Initial Conditions     ← optional state overrides
+Sensor Configs         ← which sensors, with specific parameter values
+Fault Schedule         ← which faults, when they start/end, severity
+Tasks and Metrics
 Scoring Policy
 Submission Policy
 Leaderboard Policy
@@ -89,74 +91,70 @@ visibility: PUBLIC
 
 ---
 
-# Selecting Digital Twins
+# Selecting a Twin
 
-A contest may use one or more digital twins.
-
-Example:
-
-```yaml
-allowed_twins:
-
-  - mechanical_system
-```
-
-or
-
-```yaml
-allowed_twins:
-
-  - industrial_pump
-
-  - electric_motor
-```
-
-The selected twins define the available simulation environments.
-
----
-
-# Selecting Scenarios
-
-Contest authors choose which scenarios are visible.
+A contest uses exactly one digital twin.
 
 Example:
 
 ```yaml
-allowed_scenarios:
-
-  - normal_operation
-
-  - increased_damping
-
-  - sensor_bias
+twin_id: mechanical_system
 ```
-
-This allows gradual difficulty increases.
 
 ---
 
-# Difficulty Levels
+# Configuring Sensors
 
-Contests may expose scenarios by difficulty.
-
-Example:
+For each sensor, the organizer specifies the sensor_id and optional parameter overrides:
 
 ```yaml
-difficulty_levels:
-
-  beginner:
-    - normal_operation
-
-  intermediate:
-    - sensor_bias
-
-  advanced:
-    - multiple_faults
+sensor_configs:
+  - sensor_id: position
+    noise_std: 0.005
+  - sensor_id: velocity
+    noise_std: 0.01
+    drift_rate: 0.0005
+  - sensor_id: temperature
+    noise_std: 0.2
+    p_outlier: 0.002
 ```
 
-This is particularly useful for educational settings.
+The platform validates that each sensor is compatible with the selected twin (its `measured_quantity` must be in `twin.supported_quantities()`).
 
 ---
+
+# Configuring the Fault Schedule
+
+The organizer specifies which physical faults to inject, and when:
+
+```yaml
+fault_schedule:
+  - fault_id: increased_damping
+    start_time: 3600.0    # seconds from simulation start
+    end_time: null        # active until contest ends
+    severity: 0.3         # initial severity in [0.0, 1.0]
+  - fault_id: reduced_stiffness
+    start_time: 7200.0
+    end_time: 10800.0
+    severity: 0.5
+```
+
+`fault_id` must reference a fault returned by the twin's `get_faults()`. The engine validates this at contest creation time.
+
+# Setting Initial Conditions
+
+Optionally override the twin's default starting state:
+
+```yaml
+initial_conditions:
+  position: 0.5
+  velocity: 0.0
+```
+
+Unspecified fields use the twin's defaults.
+
+---
+
 
 # Defining Tasks
 
@@ -234,7 +232,7 @@ fault_classification:
 
     - increased_damping
 
-    - sensor_bias
+    - reduced_stiffness
 ```
 
 ---
@@ -422,28 +420,17 @@ This is a common real-world requirement.
 
 ```yaml
 name: Introductory Forecasting Challenge
-
-allowed_twins:
-
-  - mechanical_system
-
-allowed_scenarios:
-
-  - normal_operation
-
-tasks:
-
-  - forecasting
-
-metrics:
-
-  forecasting:
-
-    - mae
-
-leaderboard:
-
-  mode: best_score
+twin_id: mass_spring_damper
+sensor_configs:
+  - sensor_id: position
+    noise_std: 0.01
+  - sensor_id: temperature
+    noise_std: 0.3
+fault_schedule: []
+sampling_rate_hz: 10.0
+task_type: FORECASTING
+forecast_horizons: [1, 5, 10]
+visibility: PUBLIC
 ```
 
 ---
@@ -452,61 +439,29 @@ leaderboard:
 
 ```yaml
 name: Advanced Predictive Intelligence Challenge
-
-allowed_twins:
-
-  - industrial_pump
-
-allowed_scenarios:
-
-  - normal_operation
-
-  - bearing_wear
-
-  - sensor_bias
-
-tasks:
-
-  - forecasting
-
-  - anomaly_detection
-
-metrics:
-
-  forecasting:
-
-    - rmse
-
-  anomaly_detection:
-
-    - f1
-
-    - roc_auc
-
-final_score:
-
-  forecasting_weight: 0.6
-
-  anomaly_weight: 0.4
+twin_id: mass_spring_damper
+sensor_configs:
+  - sensor_id: position
+    noise_std: 0.02
+    p_outlier: 0.003
+  - sensor_id: velocity
+    noise_std: 0.05
+  - sensor_id: temperature
+    noise_std: 0.5
+    drift_rate: 0.002
+fault_schedule:
+  - fault_id: increased_damping
+    start_time: 3600.0
+    end_time: null
+    severity: 0.4
+sampling_rate_hz: 10.0
+task_type: FORECASTING
+forecast_horizons: [1, 5, 10]
 ```
 
 ---
 
-# Example Research Contest
 
-```yaml
-name: Prognostics Benchmark
-
-tasks:
-
-  - forecasting
-
-  - anomaly_detection
-
-  - remaining_useful_life
-```
-
----
 
 # Contest Templates
 
@@ -530,23 +485,7 @@ Authors should be able to instantiate a template and customize parameters.
 
 # Administrative Interface
 
-Future versions should support GUI-based contest creation.
-
-Workflow:
-
-```text
-Create Contest
-      ↓
-Select Twin
-      ↓
-Select Scenarios
-      ↓
-Select Tasks
-      ↓
-Select Metrics
-      ↓
-Publish
-```
+Future versions should support GUI-based contest creation with a graphical interface for selecting twins, configuring sensors, and defining the fault schedule.
 
 without editing YAML manually.
 

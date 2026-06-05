@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import random
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -14,7 +13,6 @@ import epic_core.registry as registry_module
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.db.models import Contest, SensorObservation, SimulationSession
 from epic_core.exceptions import PluginExecutionError, PluginNotFoundError
-from epic_core.interfaces import SensorFault
 
 
 class SimulationEngine:
@@ -29,15 +27,17 @@ class SimulationEngine:
             await db.commit()
 
             try:
-                await self._run_loop(session, db)
+                await self._run_loop(session, db_factory)
             except Exception as exc:
-                session.status = "FAILED"
-                session.session_metadata = {
-                    **(session.session_metadata or {}),
-                    "error": str(exc),
-                }
-                session.ended_at = datetime.now(timezone.utc)
-                await db.commit()
+                async with db_factory() as db2:
+                    session2 = await self._load_session(db2, session_id)
+                    session2.status = "FAILED"
+                    session2.session_metadata = {
+                        **(session2.session_metadata or {}),
+                        "error": str(exc),
+                    }
+                    session2.ended_at = datetime.now(timezone.utc)
+                    await db2.commit()
                 return
 
     async def _load_session(self, db, session_id: str) -> SimulationSession:
@@ -49,8 +49,10 @@ class SimulationEngine:
             raise PluginExecutionError(f"session '{session_id}' does not exist")
         return session
 
-    async def _run_loop(self, session: SimulationSession, db) -> None:
-        contest = await self._load_contest(db, session.contest_id)
+    async def _run_loop(self, session: SimulationSession, db_factory) -> None:
+        async with db_factory() as db:
+            contest = await self._load_contest(db, session.contest_id)
+
         try:
             twin = registry_module.twin_registry.get(session.twin_id)
         except PluginNotFoundError as exc:
@@ -58,139 +60,118 @@ class SimulationEngine:
                 f"twin '{session.twin_id}' could not be loaded"
             ) from exc
 
-        try:
-            scenario = next(
-                candidate
-                for candidate in twin.get_scenarios()
-                if candidate.scenario_id == session.scenario_id
-            )
-        except StopIteration as exc:
-            raise PluginExecutionError(
-                f"scenario '{session.scenario_id}' could not be loaded"
-            ) from PluginNotFoundError(session.scenario_id)
-
-        config = self._call_plugin(
-            scenario.scenario_id, "initialize", scenario.initialize
-        )
-        state = self._call_plugin(
-            twin.twin_id,
-            "create_initial_state",
-            twin.create_initial_state,
-            config.get("initial_conditions"),
-        )
-        scheduled_faults = []
-        for entry in self._call_plugin(
-            scenario.scenario_id,
-            "get_fault_schedule",
-            scenario.get_fault_schedule,
-        ):
+        contest_sensors = []
+        supported = twin.supported_quantities()
+        for cfg in contest.sensor_configs:
+            sensor_id = cfg.get("sensor_id")
             try:
-                fault = registry_module.fault_registry.get(entry["fault_id"])
+                sensor = registry_module.sensor_registry.get(sensor_id)
             except PluginNotFoundError as exc:
                 raise PluginExecutionError(
-                    f"fault '{entry['fault_id']}' could not be loaded"
+                    f"sensor '{sensor_id}' could not be loaded"
                 ) from exc
-            scheduled_faults.append((entry, fault))
+            if sensor.measured_quantity not in supported:
+                raise PluginExecutionError(
+                    f"sensor '{sensor_id}' is not compatible with twin '{twin.twin_id}'"
+                )
+            contest_sensors.append(sensor)
+
+        available_faults = {fault.fault_id for fault in twin.get_faults()}
+        for entry in contest.fault_schedule:
+            fault_id = entry.get("fault_id")
+            if fault_id not in available_faults:
+                raise PluginExecutionError(
+                    f"fault '{fault_id}' is not available for twin '{twin.twin_id}'"
+                )
 
         if session.seed is not None:
+            import random
+
             random.seed(session.seed)
             np.random.seed(session.seed)
 
-        active_faults: set = set()
+        state = self._call_plugin(
+            twin.twin_id,
+            "configure",
+            twin.configure,
+            contest.initial_conditions,
+            contest.fault_schedule,
+        )
+
         dt = 1.0 / session.sampling_rate_hz
-        t = 0.0
         sequence_id = 0
         commit_interval = 100
-        contest_end_date = self._as_utc(contest.end_date)
 
-        while (
-            contest_end_date is not None
-            and datetime.now(timezone.utc) < contest_end_date
-        ):
-            t += dt
-            sequence_id += 1
+        async with db_factory() as db:
+            contest_end_date = self._as_utc(contest.end_date)
 
-            for entry, fault in scheduled_faults:
-                if t >= entry["start_time"] and fault not in active_faults:
-                    self._call_plugin(
-                        fault.fault_id, "activate", fault.activate, entry["severity"]
-                    )
-                    active_faults.add(fault)
-                if (
-                    entry["end_time"] is not None
-                    and t >= entry["end_time"]
-                    and fault in active_faults
-                ):
-                    self._call_plugin(fault.fault_id, "deactivate", fault.deactivate)
-                    active_faults.remove(fault)
+            while (
+                contest_end_date is not None
+                and datetime.now(timezone.utc) < contest_end_date
+            ):
+                sequence_id += 1
 
-            loop = asyncio.get_running_loop()
-            new_state = await loop.run_in_executor(
-                None,
-                lambda: self._call_plugin(twin.twin_id, "step", twin.step, state, dt),
-            )
-            for fault in list(active_faults):
-                if not isinstance(fault, SensorFault):
-                    self._call_plugin(
-                        fault.fault_id, "apply", fault.apply, new_state, dt
-                    )
-
-            sensors = {}
-            for sensor in twin.get_sensors():
-                raw = self._call_plugin(
-                    sensor.sensor_id, "observe", sensor.observe, new_state
+                loop = asyncio.get_running_loop()
+                new_state = await loop.run_in_executor(
+                    None,
+                    lambda s=state: self._call_plugin(
+                        twin.twin_id, "step", twin.step, s, dt
+                    ),
                 )
-                for fault in active_faults:
-                    if isinstance(fault, SensorFault) and (
-                        not fault.target_sensor_ids
-                        or sensor.sensor_id in fault.target_sensor_ids
-                    ):
-                        raw = self._call_plugin(
-                            fault.fault_id,
-                            "apply_to_measurement",
-                            fault.apply_to_measurement,
-                            raw,
+
+                sensors = {}
+                for sensor in contest_sensors:
+                    sensors[sensor.sensor_id] = self._call_plugin(
+                        sensor.sensor_id, "observe", sensor.observe, new_state
+                    )
+
+                active_faults = twin.get_active_faults()
+                labels = {
+                    "is_anomaly": len(active_faults) > 0,
+                    "fault_ids": [fault["fault_id"] for fault in active_faults],
+                    "severities": {
+                        fault["fault_id"]: fault["severity"]
+                        for fault in active_faults
+                    },
+                }
+
+                timestamp = datetime.now(timezone.utc)
+                observation = SensorObservation(
+                    session_id=session.id,
+                    sequence_id=sequence_id,
+                    timestamp=timestamp,
+                    sensors=sensors,
+                    labels=labels,
+                )
+                db.add(observation)
+                await self._broadcast(
+                    str(session.contest_id),
+                    {
+                        "timestamp": timestamp.isoformat(),
+                        "session_id": str(session.id),
+                        "sequence_id": sequence_id,
+                        "sensors": sensors,
+                    },
+                )
+                state = new_state
+
+                if sequence_id % commit_interval == 0:
+                    await db.commit()
+                    async with db_factory() as refresh_db:
+                        refreshed = await self._load_contest(
+                            refresh_db, session.contest_id
                         )
-                sensors[sensor.sensor_id] = raw
+                    contest_end_date = self._as_utc(refreshed.end_date)
 
-            labels = {
-                "is_anomaly": len(active_faults) > 0,
-                "fault_ids": [fault.fault_id for fault in active_faults],
-                "severities": {
-                    fault.fault_id: fault.current_severity
-                    for fault in active_faults
-                },
-            }
-            timestamp = datetime.now(timezone.utc)
-            observation = SensorObservation(
-                session_id=session.id,
-                sequence_id=sequence_id,
-                timestamp=timestamp,
-                sensors=sensors,
-                labels=labels,
-            )
-            db.add(observation)
-            await self._broadcast(
-                str(session.contest_id),
-                {
-                    "timestamp": timestamp.isoformat(),
-                    "session_id": str(session.id),
-                    "sequence_id": sequence_id,
-                    "sensors": sensors,
-                },
-            )
-            state = new_state
+                await asyncio.sleep(dt)
 
-            if sequence_id % commit_interval == 0:
-                await db.commit()
-                contest = await self._load_contest(db, session.contest_id)
-                contest_end_date = self._as_utc(contest.end_date)
-            await asyncio.sleep(dt)
+            await db.commit()
 
-        await db.commit()
-        session.status = "COMPLETED"
-        session.ended_at = datetime.now(timezone.utc)
-        await db.commit()
+        async with db_factory() as db:
+            session = await self._load_session(db, str(session.id))
+            session.status = "COMPLETED"
+            session.ended_at = datetime.now(timezone.utc)
+            await db.commit()
 
     def _call_plugin(self, plugin_id: str, method_name: str, method, *args):
         try:

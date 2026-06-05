@@ -23,7 +23,10 @@ from epic_core.db.base import create_all_tables
 from epic_core.db.session import get_engine as get_db_engine
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
-from epic_twins.mechanical.plugin import register as register_mechanical
+import epic_core.registry as registry_module
+from epic_core.scoring import MAE
+from epic_sensors.plugin import register as register_sensors
+from epic_twins.mass_spring_damper.plugin import register as register_mass_spring_damper
 
 
 @asynccontextmanager
@@ -35,7 +38,10 @@ async def lifespan(app: FastAPI):
     app.state.engine = SimulationEngine(broadcaster=app.state.broadcaster)
     init_db(settings.database_url)
     await create_all_tables(get_db_engine())
-    register_mechanical()
+    register_sensors()
+    register_mass_spring_damper()
+    if not registry_module.metric_registry.contains("mae"):
+        registry_module.metric_registry.register(MAE())
     yield
 
 

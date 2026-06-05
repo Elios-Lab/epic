@@ -10,13 +10,12 @@ from typing import Iterator
 import epic_core.registry as registry_module
 from epic_core.interfaces import (
     DigitalTwin,
-    Fault,
-    Scenario,
+    FaultDescriptor,
     ScoringMetric,
     Sensor,
-    SensorFault,
     SimulationState,
 )
+from epic_core.quantities import PhysicalQuantity
 from epic_core.registry import PluginRegistry
 
 
@@ -24,12 +23,17 @@ from epic_core.registry import PluginRegistry
 class MockState(SimulationState):
     value: float = 0.0
 
+    def get_quantity(self, quantity: PhysicalQuantity) -> float | None:
+        if quantity is PhysicalQuantity.LINEAR_POSITION:
+            return self.value
+        return None
+
 
 class MockSensor(Sensor):
     def __init__(
         self,
         sensor_id: str = "mock_sensor",
-        constant_value: float = 5.0,
+        constant_value: float | None = 5.0,
         version: str = "1.0.0",
     ) -> None:
         self._sensor_id = sensor_id
@@ -48,24 +52,32 @@ class MockSensor(Sensor):
     def unit(self) -> str:
         return "unit"
 
-    def observe(self, state) -> float:
-        return float(self._constant_value)
+    @property
+    def measured_quantity(self) -> PhysicalQuantity:
+        return PhysicalQuantity.LINEAR_POSITION
+
+    def observe(self, state: SimulationState, dt: float = 0.0) -> float:
+        if self._constant_value is not None:
+            return float(self._constant_value)
+        value = state.get_quantity(self.measured_quantity)
+        return 0.0 if value is None else float(value)
 
     def metadata(self) -> dict:
         return {
             "sensor_id": self.sensor_id,
             "name": self.name,
+            "unit": self.unit,
+            "measured_quantity": self.measured_quantity.value,
             "version": self._version,
             "description": "Mock sensor for tests",
         }
 
 
-class MockFault(Fault):
-    def __init__(self, fault_id: str = "mock_fault", version: str = "1.0.0") -> None:
+class MockFaultDescriptor(FaultDescriptor):
+    """Minimal FaultDescriptor for use in tests and mock twins."""
+
+    def __init__(self, fault_id: str = "mock_fault") -> None:
         self._fault_id = fault_id
-        self._version = version
-        self._current_severity = 0.0
-        self.apply_count = 0
 
     @property
     def fault_id(self) -> str:
@@ -75,115 +87,31 @@ class MockFault(Fault):
     def name(self) -> str:
         return "Mock Fault"
 
-    @property
-    def current_severity(self) -> float:
-        return self._current_severity
-
-    def activate(self, initial_severity: float = 1.0) -> None:
-        self._current_severity = initial_severity
-
-    def deactivate(self) -> None:
-        self._current_severity = 0.0
-
-    def apply(self, state: SimulationState, dt: float) -> None:
-        self.apply_count += 1
-
     def metadata(self) -> dict:
         return {
             "fault_id": self.fault_id,
             "name": self.name,
-            "version": self._version,
-            "description": "Mock fault for tests",
-        }
-
-
-class MockSensorFault(SensorFault):
-    def __init__(
-        self,
-        fault_id: str = "mock_sensor_fault",
-        version: str = "1.0.0",
-        target_sensor_ids: list[str] | None = None,
-    ) -> None:
-        self._fault_id = fault_id
-        self._version = version
-        self._target_sensor_ids = target_sensor_ids or []
-        self._current_severity = 0.0
-
-    @property
-    def fault_id(self) -> str:
-        return self._fault_id
-
-    @property
-    def name(self) -> str:
-        return "Mock Sensor Fault"
-
-    @property
-    def current_severity(self) -> float:
-        return self._current_severity
-
-    @property
-    def target_sensor_ids(self) -> list[str]:
-        return self._target_sensor_ids
-
-    def activate(self, initial_severity: float = 1.0) -> None:
-        self._current_severity = initial_severity
-
-    def deactivate(self) -> None:
-        self._current_severity = 0.0
-
-    def apply_to_measurement(self, measurement: float) -> float:
-        return float(measurement + self.current_severity)
-
-    def metadata(self) -> dict:
-        return {
-            "fault_id": self.fault_id,
-            "name": self.name,
-            "version": self._version,
-            "description": "Mock sensor fault for tests",
-        }
-
-
-class MockScenario(Scenario):
-    def __init__(
-        self,
-        scenario_id: str = "normal",
-        fault_schedule: list[dict] | None = None,
-        version: str = "1.0.0",
-    ) -> None:
-        self._scenario_id = scenario_id
-        self._fault_schedule = fault_schedule or []
-        self._version = version
-
-    @property
-    def scenario_id(self) -> str:
-        return self._scenario_id
-
-    @property
-    def name(self) -> str:
-        return "Mock Scenario"
-
-    def initialize(self) -> dict:
-        return {"initial_conditions": {"value": 0.0}}
-
-    def get_fault_schedule(self) -> list[dict]:
-        return self._fault_schedule
-
-    def metadata(self) -> dict:
-        return {
-            "scenario_id": self.scenario_id,
-            "name": self.name,
-            "version": self._version,
-            "description": "Mock scenario for tests",
+            "description": "Mock fault descriptor for tests",
         }
 
 
 class MockTwin(DigitalTwin):
+    """
+    Minimal digital twin for engine and registry tests.
+
+    State is a MockState with a single float value that increments by dt
+    on each step. Supports one fault ('mock_fault') that activates per
+    the fault schedule passed to configure().
+    """
+
     def __init__(self, twin_id: str = "mock_twin", version: str = "1.0.0") -> None:
         self._twin_id = twin_id
         self._version = version
-        self._sensor = MockSensor()
-        self._fault = MockFault()
-        self._scenario = MockScenario()
+        self._fault_descriptor = MockFaultDescriptor()
+        self._fault_schedule: list[dict] = []
+        self._active_faults: dict[str, float] = {}
+        self._t: float = 0.0
+        self._fault_applied_count: int = 0
 
     @property
     def twin_id(self) -> str:
@@ -193,25 +121,46 @@ class MockTwin(DigitalTwin):
     def name(self) -> str:
         return "Mock Twin"
 
-    def create_initial_state(
-        self, initial_conditions: dict | None = None
+    def configure(
+        self, initial_conditions: dict | None, fault_schedule: list[dict]
     ) -> SimulationState:
-        value = 0.0
-        if initial_conditions:
-            value = float(initial_conditions.get("value", value))
+        self._t = 0.0
+        self._fault_schedule = fault_schedule or []
+        self._active_faults = {}
+        self._fault_applied_count = 0
+        value = float((initial_conditions or {}).get("value", 0.0))
         return MockState(value=value)
 
     def step(self, state: SimulationState, dt: float) -> SimulationState:
-        return MockState(value=getattr(state, "value", 0.0) + dt)
+        self._t += dt
+        self._tick_faults()
+        value = (state.get_quantity(PhysicalQuantity.LINEAR_POSITION) or 0.0) + dt
+        if self._active_faults:
+            self._fault_applied_count += 1
+        return MockState(value=value)
 
-    def get_sensors(self) -> list[Sensor]:
-        return [self._sensor]
+    def _tick_faults(self) -> None:
+        for entry in self._fault_schedule:
+            fid = entry["fault_id"]
+            active = self._t >= entry["start_time"] and (
+                entry["end_time"] is None or self._t < entry["end_time"]
+            )
+            if active:
+                self._active_faults[fid] = entry["severity"]
+            else:
+                self._active_faults.pop(fid, None)
 
-    def get_faults(self) -> list[Fault]:
-        return [self._fault]
+    def get_active_faults(self) -> list[dict]:
+        return [
+            {"fault_id": fid, "severity": sev}
+            for fid, sev in self._active_faults.items()
+        ]
 
-    def get_scenarios(self) -> list[Scenario]:
-        return [self._scenario]
+    def supported_quantities(self) -> set[PhysicalQuantity]:
+        return {PhysicalQuantity.LINEAR_POSITION}
+
+    def get_faults(self) -> list[FaultDescriptor]:
+        return [self._fault_descriptor]
 
     def metadata(self) -> dict:
         return {
@@ -226,29 +175,21 @@ class MockTwin(DigitalTwin):
 def test_registry_context(
     twins: list[DigitalTwin] | None = None,
     sensors: list[Sensor] | None = None,
-    faults: list[Fault] | None = None,
-    scenarios: list[Scenario] | None = None,
     metrics: list[ScoringMetric] | None = None,
 ) -> Iterator[SimpleNamespace]:
     original = SimpleNamespace(
         twin=registry_module.twin_registry,
         sensor=registry_module.sensor_registry,
-        fault=registry_module.fault_registry,
-        scenario=registry_module.scenario_registry,
         metric=registry_module.metric_registry,
     )
     fresh = SimpleNamespace(
         twin=PluginRegistry(DigitalTwin),
         sensor=PluginRegistry(Sensor),
-        fault=PluginRegistry(Fault),
-        scenario=PluginRegistry(Scenario),
         metric=PluginRegistry(ScoringMetric),
     )
 
     registry_module.twin_registry = fresh.twin
     registry_module.sensor_registry = fresh.sensor
-    registry_module.fault_registry = fresh.fault
-    registry_module.scenario_registry = fresh.scenario
     registry_module.metric_registry = fresh.metric
 
     try:
@@ -256,17 +197,10 @@ def test_registry_context(
             fresh.twin.register(plugin)
         for plugin in sensors or []:
             fresh.sensor.register(plugin)
-        for plugin in faults or []:
-            fresh.fault.register(plugin)
-        for plugin in scenarios or []:
-            fresh.scenario.register(plugin)
         for plugin in metrics or []:
             fresh.metric.register(plugin)
         yield fresh
     finally:
         registry_module.twin_registry = original.twin
         registry_module.sensor_registry = original.sensor
-        registry_module.fault_registry = original.fault
-        registry_module.scenario_registry = original.scenario
         registry_module.metric_registry = original.metric
-

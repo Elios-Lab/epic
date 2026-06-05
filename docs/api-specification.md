@@ -10,7 +10,6 @@ The API provides access to:
 - Contest Registrations
 - Tasks
 - Digital Twins
-- Scenarios
 - Sensors
 - Simulation Sessions
 - Submissions
@@ -222,11 +221,26 @@ Request:
 {
   "name": "EPIC Forecasting Challenge 2027",
   "description": "Introductory forecasting competition",
+  "twin_id": "mechanical_system",
+  "initial_conditions": {"position": 0.1, "velocity": 0.0},
+  "sensor_configs": [
+    {"sensor_id": "position",    "noise_std": 0.005},
+    {"sensor_id": "velocity",    "noise_std": 0.01},
+    {"sensor_id": "temperature", "noise_std": 0.2, "drift_rate": 0.001}
+  ],
+  "fault_schedule": [
+    {"fault_id": "increased_damping", "start_time": 3600.0, "end_time": null, "severity": 0.3}
+  ],
+  "sampling_rate_hz": 10.0,
+  "task_type": "FORECASTING",
+  "forecast_horizons": [1, 5, 10],
   "start_date": "2027-01-10T00:00:00Z",
   "end_date": "2027-03-01T23:59:59Z",
   "visibility": "PUBLIC"
 }
 ```
+
+`sensor_configs` entries reference sensor_ids registered in `sensor_registry`. The platform validates compatibility (each sensor's `measured_quantity` must be in `twin.supported_quantities()`). `fault_schedule` entries reference fault_ids from `twin.get_faults()`.
 
 Response `201 Created`:
 
@@ -565,43 +579,58 @@ Response `200 OK`:
 
 ---
 
-# Scenarios
-
-Scenarios belong to digital twins.
-
----
-
-## List Twin Scenarios
-
-```http
-GET /api/v1/twins/{twin_id}/scenarios
-```
-
----
-
-## Get Scenario
-
-```http
-GET /api/v1/twins/{twin_id}/scenarios/{scenario_id}
-```
-
----
-
 # Sensors
 
-Sensors belong to digital twins.
+Sensors live in `epic_sensors/` and are registered globally in `sensor_registry`, independent of any twin. The API exposes them in two ways: globally and filtered by twin compatibility.
 
 ---
 
-## List Twin Sensors
+## List All Sensors
 
 ```http
-GET /api/v1/twins/{twin_id}/sensors
+GET /api/v1/sensors
+```
+
+Returns all sensors registered in `sensor_registry`.
+
+Response `200 OK`:
+
+```json
+{
+  "sensors": [
+    {
+      "sensor_id": "position",
+      "name": "Position Sensor",
+      "measured_quantity": "linear_position",
+      "unit": "m",
+      "version": "1.0.0",
+      "description": "Measures linear position"
+    }
+  ]
+}
 ```
 
 ---
 
 ## Get Sensor
+
+```http
+GET /api/v1/sensors/{sensor_id}
+```
+
+---
+
+## List Sensors Compatible with a Twin
+
+```http
+GET /api/v1/twins/{twin_id}/sensors
+```
+
+Returns sensors from `sensor_registry` whose `measured_quantity` is in `twin.supported_quantities()`. These are the sensors that can be selected when creating a contest with this twin.
+
+---
+
+## Get Sensor Compatible with a Twin
 
 ```http
 GET /api/v1/twins/{twin_id}/sensors/{sensor_id}
@@ -687,7 +716,6 @@ Response `200 OK`:
   "session_id": "sess_abc",
   "contest_id": "forecast_2027",
   "twin_id": "mechanical_system",
-  "scenario_id": "normal_operation",
   "sampling_rate_hz": 10.0,
   "status": "RUNNING",
   "started_at": "2027-01-10T00:00:00Z",

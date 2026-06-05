@@ -69,7 +69,15 @@ class Contest(Base):
         String(32), nullable=False, default="PUBLIC"
     )
     twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    sensor_configs: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=lambda: [{"sensor_id": "position"}]
+    )
+    fault_schedule: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    initial_conditions: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
     sampling_rate_hz: Mapped[float] = mapped_column(
         Float, nullable=False, default=10.0
     )
@@ -110,7 +118,6 @@ class SimulationSession(Base):
         index=True,
     )
     twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)
     sampling_rate_hz: Mapped[float] = mapped_column(Float, nullable=False)
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(

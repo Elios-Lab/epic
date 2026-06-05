@@ -20,9 +20,14 @@ def get_twin(twin_id: str):
 @router.get("/{twin_id}/sensors")
 def list_twin_sensors(twin_id: str):
     twin = registry_module.twin_registry.get(twin_id)
+    supported_quantities = twin.supported_quantities()
     return {
         "twin_id": twin_id,
-        "sensors": [sensor.metadata() for sensor in twin.get_sensors()],
+        "sensors": [
+            sensor.metadata()
+            for sensor in registry_module.sensor_registry.list()
+            if sensor.measured_quantity in supported_quantities
+        ],
     }
 
 
@@ -32,13 +37,4 @@ def list_twin_faults(twin_id: str):
     return {
         "twin_id": twin_id,
         "faults": [fault.metadata() for fault in twin.get_faults()],
-    }
-
-
-@router.get("/{twin_id}/scenarios")
-def list_twin_scenarios(twin_id: str):
-    twin = registry_module.twin_registry.get(twin_id)
-    return {
-        "twin_id": twin_id,
-        "scenarios": [scenario.metadata() for scenario in twin.get_scenarios()],
     }

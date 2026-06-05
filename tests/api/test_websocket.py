@@ -16,8 +16,8 @@ async def _create_contest(
         contest = Contest(
             name=name,
             status=status,
-            twin_id="mechanical_system",
-            scenario_id="normal_operation",
+            twin_id="mass_spring_damper",
+            sensor_configs=[{"sensor_id": "position"}],
             sampling_rate_hz=10.0,
             end_date=datetime.now(timezone.utc) + timedelta(seconds=1),
         )
@@ -91,4 +91,3 @@ def test_websocket_delivers_broadcast_message(client, auth_headers, db_factory):
         asyncio.run(broadcaster.broadcast(str(contest.id), payload))
 
         assert websocket.receive_json() == payload
-

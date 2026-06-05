@@ -48,8 +48,8 @@ def _user(username: str = "alice", email: str = "alice@example.com") -> User:
 def _contest(name: str = "Contest") -> Contest:
     return Contest(
         name=name,
-        twin_id="mechanical_system",
-        scenario_id="normal_operation",
+        twin_id="mass_spring_damper",
+        sensor_configs=[{"sensor_id": "position"}],
         sampling_rate_hz=10.0,
     )
 
@@ -76,7 +76,6 @@ async def _create_simulation_session(
     session = SimulationSession(
         contest_id=contest.id,
         twin_id=contest.twin_id,
-        scenario_id=contest.scenario_id,
         sampling_rate_hz=contest.sampling_rate_hz,
         session_metadata={"source": "test"},
     )
@@ -131,7 +130,7 @@ async def test_create_contest_and_query_by_name(db_session):
     queried_contest = result.scalar_one()
 
     assert queried_contest.id == contest.id
-    assert queried_contest.twin_id == "mechanical_system"
+    assert queried_contest.twin_id == "mass_spring_damper"
 
 
 @pytest.mark.asyncio
@@ -152,7 +151,7 @@ async def test_create_simulation_session_and_query_it_back(db_session):
     queried_session = result.scalar_one()
 
     assert queried_session.contest_id == contest.id
-    assert queried_session.twin_id == "mechanical_system"
+    assert queried_session.twin_id == "mass_spring_damper"
 
 
 @pytest.mark.asyncio

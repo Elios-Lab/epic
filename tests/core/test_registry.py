@@ -9,8 +9,6 @@ from epic_core.exceptions import (
 from epic_core.interfaces import ScoringMetric, Sensor
 from epic_core.registry import PluginRegistry
 from epic_core.testing import (
-    MockFault,
-    MockScenario,
     MockSensor,
     MockTwin,
     test_registry_context as registry_context,
@@ -138,6 +136,7 @@ def test_register_rejects_object_missing_required_interface_method():
                 "sensor_id": "bad",
                 "name": "Bad",
                 "version": "1.0.0",
+                "measured_quantity": "linear_position",
                 "description": "Bad sensor",
             }
 
@@ -183,6 +182,7 @@ def test_register_rejects_invalid_semver():
                     "sensor_id": "sensor",
                     "name": "Sensor",
                     "version": "1.0",
+                    "measured_quantity": "linear_position",
                     "description": "Invalid version",
                 }
             )
@@ -199,6 +199,7 @@ def test_register_rejects_empty_plugin_id():
                     "sensor_id": "",
                     "name": "Sensor",
                     "version": "1.0.0",
+                    "measured_quantity": "linear_position",
                     "description": "Empty id",
                 }
             )
@@ -215,6 +216,7 @@ def test_register_rejects_empty_name():
                     "sensor_id": "sensor",
                     "name": "",
                     "version": "1.0.0",
+                    "measured_quantity": "linear_position",
                     "description": "Empty name",
                 }
             )
@@ -231,6 +233,7 @@ def test_register_rejects_non_string_description():
                     "sensor_id": "sensor",
                     "name": "Sensor",
                     "version": "1.0.0",
+                    "measured_quantity": "linear_position",
                     "description": 3,
                 }
             )
@@ -246,17 +249,11 @@ def test_registry_without_interface_infers_plugin_id_key():
     assert registry.get("sensor") is sensor
 
 
-def test_registry_without_interface_infers_fault_scenario_and_metric_id_keys():
-    fault_registry = PluginRegistry()
-    scenario_registry = PluginRegistry()
+def test_registry_without_interface_infers_metric_id_key():
     metric_registry = PluginRegistry()
 
-    fault_registry.register(MockFault(fault_id="fault"))
-    scenario_registry.register(MockScenario(scenario_id="scenario"))
     metric_registry.register(MockMetric())
 
-    assert fault_registry.get("fault").fault_id == "fault"
-    assert scenario_registry.get("scenario").scenario_id == "scenario"
     assert metric_registry.get("mock_metric").metric_id == "mock_metric"
 
 

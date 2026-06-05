@@ -1,12 +1,46 @@
-"""Plugin system interfaces for EPIC Core."""
+"""Core interfaces for EPIC."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from epic_core.quantities import PhysicalQuantity
+
 
 class SimulationState(ABC):
-    pass
+    @abstractmethod
+    def get_quantity(self, quantity: PhysicalQuantity) -> float | None:
+        """
+        Return the current value for a physical quantity.
+        Return None if this state does not model the requested quantity.
+        """
+        pass
+
+
+class FaultDescriptor(ABC):
+    """
+    Lightweight descriptor for a fault supported by a digital twin.
+    Used only for API listing and contest validation.
+    The twin manages all fault activation and application internally.
+    """
+
+    @property
+    @abstractmethod
+    def fault_id(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
+        """
+        Return fault metadata. Must include at minimum:
+            {"fault_id": str, "name": str, "description": str}
+        """
+        pass
 
 
 class DigitalTwin(ABC):
@@ -21,29 +55,55 @@ class DigitalTwin(ABC):
         pass
 
     @abstractmethod
-    def create_initial_state(
-        self, initial_conditions: dict | None = None
+    def configure(
+        self,
+        initial_conditions: dict | None,
+        fault_schedule: list[dict],
     ) -> SimulationState:
+        """
+        Called once by the engine before the simulation loop begins.
+
+        The twin must:
+        - Store the fault_schedule internally.
+        - Build and return the initial SimulationState, applying
+          initial_conditions overrides (if any) to its defaults.
+        """
         pass
 
     @abstractmethod
     def step(self, state: SimulationState, dt: float) -> SimulationState:
+        """
+        Advance the simulation by one time step dt (seconds).
+
+        The twin is responsible for fault scheduling and application.
+        """
         pass
 
     @abstractmethod
-    def get_sensors(self) -> list[Sensor]:
+    def get_active_faults(self) -> list[dict]:
+        """
+        Return the currently active faults for label generation only.
+
+        Return format: [{"fault_id": str, "severity": float}, ...]
+        """
         pass
 
     @abstractmethod
-    def get_faults(self) -> list[Fault]:
+    def supported_quantities(self) -> set[PhysicalQuantity]:
+        """Return the physical quantities this twin's state can provide."""
         pass
 
     @abstractmethod
-    def get_scenarios(self) -> list[Scenario]:
+    def get_faults(self) -> list[FaultDescriptor]:
+        """Return descriptors for all faults this twin supports."""
         pass
 
     @abstractmethod
     def metadata(self) -> dict:
+        """
+        Return twin metadata. Must include at minimum:
+            {"twin_id": str, "name": str, "version": str, "description": str}
+        """
         pass
 
 
@@ -63,89 +123,17 @@ class Sensor(ABC):
     def unit(self) -> str:
         pass
 
+    @property
     @abstractmethod
-    def observe(self, state: SimulationState) -> float:
+    def measured_quantity(self) -> PhysicalQuantity:
+        pass
+
+    @abstractmethod
+    def observe(self, state: SimulationState, dt: float = 0.0) -> float:
         pass
 
     @abstractmethod
     def metadata(self) -> dict:
-        pass
-
-
-class Fault(ABC):
-    @property
-    @abstractmethod
-    def fault_id(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def current_severity(self) -> float:
-        pass
-
-    @abstractmethod
-    def activate(self, initial_severity: float = 1.0) -> None:
-        pass
-
-    @abstractmethod
-    def deactivate(self) -> None:
-        pass
-
-    @abstractmethod
-    def apply(self, state: SimulationState, dt: float) -> None:
-        pass
-
-    @abstractmethod
-    def metadata(self) -> dict:
-        pass
-
-
-class SensorFault(Fault):
-    @property
-    @abstractmethod
-    def target_sensor_ids(self) -> list[str]:
-        pass
-
-    def apply(self, state: SimulationState, dt: float) -> None:
-        pass
-
-    @abstractmethod
-    def apply_to_measurement(self, measurement: float) -> float:
-        pass
-
-
-class Scenario(ABC):
-    @property
-    @abstractmethod
-    def scenario_id(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @abstractmethod
-    def initialize(self) -> dict:
-        pass
-
-    @abstractmethod
-    def get_fault_schedule(self) -> list[dict]:
-        pass
-
-    @abstractmethod
-    def metadata(self) -> dict:
-        pass
-
-
-class OperatingProfile(ABC):
-    @abstractmethod
-    def value(self, t: float) -> float:
         pass
 
 

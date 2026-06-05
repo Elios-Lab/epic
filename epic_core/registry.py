@@ -13,8 +13,6 @@ from epic_core.exceptions import (
 )
 from epic_core.interfaces import (
     DigitalTwin,
-    Fault,
-    Scenario,
     ScoringMetric,
     Sensor,
 )
@@ -104,6 +102,8 @@ class PluginRegistry(Generic[T]):
 
         id_key = _id_key_for_interface(interface, plugin)
         required_keys = {id_key, "name", "version", "description"}
+        if interface is Sensor:
+            required_keys.add("measured_quantity")
         missing_keys = required_keys - metadata.keys()
         if missing_keys:
             missing = ", ".join(sorted(missing_keys))
@@ -121,6 +121,13 @@ class PluginRegistry(Generic[T]):
             raise PluginValidationError(
                 "plugin metadata 'description' must be a string"
             )
+        if interface is Sensor and (
+            not isinstance(metadata["measured_quantity"], str)
+            or not metadata["measured_quantity"]
+        ):
+            raise PluginValidationError(
+                "plugin metadata 'measured_quantity' must be a string"
+            )
         if not isinstance(version, str) or _SEMVER_RE.fullmatch(version) is None:
             raise PluginValidationError("plugin metadata 'version' must be valid semver")
 
@@ -129,7 +136,7 @@ class PluginRegistry(Generic[T]):
     def _resolve_interface(self, plugin: T) -> type | None:
         if self._interface is not None:
             return self._interface
-        for interface in (DigitalTwin, Sensor, Fault, Scenario, ScoringMetric):
+        for interface in (DigitalTwin, Sensor, ScoringMetric):
             if isinstance(plugin, interface):
                 return interface
         return None
@@ -139,8 +146,6 @@ def _id_key_for_interface(interface: type | None, plugin: object) -> str:
     interface_id_keys = {
         DigitalTwin: "twin_id",
         Sensor: "sensor_id",
-        Fault: "fault_id",
-        Scenario: "scenario_id",
         ScoringMetric: "metric_id",
     }
     if interface is not None:
@@ -154,8 +159,6 @@ def _id_key_for_interface(interface: type | None, plugin: object) -> str:
     for attr_name, id_key in (
         ("twin_id", "twin_id"),
         ("sensor_id", "sensor_id"),
-        ("fault_id", "fault_id"),
-        ("scenario_id", "scenario_id"),
         ("metric_id", "metric_id"),
     ):
         if hasattr(plugin, attr_name):
@@ -172,6 +175,4 @@ def _semver_key(version: str) -> tuple[int, int, int]:
 
 twin_registry: PluginRegistry[DigitalTwin] = PluginRegistry(DigitalTwin)
 sensor_registry: PluginRegistry[Sensor] = PluginRegistry(Sensor)
-fault_registry: PluginRegistry[Fault] = PluginRegistry(Fault)
-scenario_registry: PluginRegistry[Scenario] = PluginRegistry(Scenario)
 metric_registry: PluginRegistry[ScoringMetric] = PluginRegistry(ScoringMetric)

@@ -1,541 +1,322 @@
 # Digital Twin Development Guide
 
-> Related: [Plugin System](plugin-system.md) — canonical interfaces · [Sensors](sensors.md) · [Faults](faults.md) · [API Specification](api-specification.md)
+> Related: [Faults](faults.md) · [Sensors](sensors.md) · [Physical Quantities](quantities.md) · [Simulation Engine](simulation-engine.md)
 
-Digital twins are the core simulation components of EPIC.
+A digital twin is a self-contained simulation of a physical system. It evolves an internal latent state over time, manages its own fault behaviour, and exposes observable quantities that sensors can read.
 
-A digital twin represents a dynamic system that evolves over time and can be observed through sensors.
+Examples of systems that can be modelled as twins:
 
-Examples include:
-
-- Mechanical systems
-- Industrial pumps
-- Electric motors
-- Manufacturing systems
+- Mechanical systems (mass-spring-damper, rotating machinery)
+- Industrial equipment (pumps, compressors, motors)
 - Smart buildings
-- Power systems
-- Environmental monitoring systems
-- Biomedical systems
+- Power grids
+- Biomedical monitors
 - Networked systems
-
-The EPIC Core must remain independent from all of these domains.
-
-A digital twin is therefore implemented as a plugin.
 
 ---
 
 # Design Philosophy
 
-A digital twin should model:
+A twin models three things:
 
-1. An internal latent state
-2. State evolution dynamics
-3. Observable sensors
-4. Fault mechanisms
-5. Scenarios
+1. **Latent state** — the true internal variables of the system (position, velocity, temperature, bearing wear, …). Participants never observe these directly.
+2. **Dynamics** — how the state evolves over time (`step()`).
+3. **Fault management** — which faults are available, and how they alter dynamics when active.
 
-Participants should generally observe only the sensor outputs.
-
-The latent state remains hidden.
+Participants observe the system only through sensors configured at contest creation time. The twin's internal state remains hidden.
 
 ---
 
-# Digital Twin Responsibilities
+# Responsibilities
 
-Every digital twin must:
+A digital twin must:
 
-- Define its latent state
-- Define state evolution rules
-- Register sensors
-- Register faults
-- Register scenarios
-- Expose metadata
+- define its latent state
+- implement state evolution in `step()`
+- declare which physical quantities its state provides (`supported_quantities()`)
+- accept a fault schedule at session start (`configure()`) and manage fault activation entirely internally
+- expose available fault descriptors for API listing and contest validation (`get_faults()`)
+- report currently active faults for label generation (`get_active_faults()`)
+- expose metadata
 
 A digital twin must not:
 
-- Manage contests
-- Manage users
-- Perform authentication
-- Compute leaderboards
-- Manage submissions
-
-Those responsibilities belong to EPIC Core.
+- own sensors (sensors are independent and live in `epic_sensors/`)
+- manage contests, users, submissions, or scores
+- perform authentication
 
 ---
 
-# Digital Twin Interface
+# DigitalTwin Interface
 
-Every twin must implement the `DigitalTwin` abstract class defined in [Plugin System](plugin-system.md).
-
-The interface requires implementing: `twin_id`, `name`, `create_initial_state(initial_conditions)`, `step(state, dt) -> SimulationState`, `get_sensors() -> list[Sensor]`, `get_faults() -> list[Fault]`, `get_scenarios() -> list[Scenario]`, and `metadata()`.
-
----
-
-# Twin Metadata
-
-Each twin must expose metadata.
-
-Example:
+Every twin must implement the `DigitalTwin` abstract class from `epic_core/interfaces.py`.
 
 ```python
-{
-    "twin_id": "mechanical_system",
-    "name": "Mechanical System",
-    "version": "1.0.0",
-    "description": "Simple mass-spring-damper example"
-}
+class DigitalTwin(ABC):
+
+    @property
+    @abstractmethod
+    def twin_id(self) -> str:
+        """Unique identifier, e.g. 'mechanical_system'."""
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def configure(
+        self,
+        initial_conditions: dict | None,
+        fault_schedule: list[dict],
+    ) -> SimulationState:
+        """
+        Called once by the engine before the simulation loop begins.
+
+        Receives the contest's initial_conditions and fault_schedule.
+        The twin stores the fault schedule internally and uses it during
+        subsequent step() calls to activate faults at the correct times.
+
+        Returns the initial SimulationState for the session.
+
+        fault_schedule entries have the form:
+            {
+                "fault_id": "increased_damping",
+                "start_time": 3600.0,   # seconds from simulation start
+                "end_time": None,       # None = active until session ends
+                "severity": 0.3         # [0.0, 1.0]
+            }
+        """
+        pass
+
+    @abstractmethod
+    def step(self, state: SimulationState, dt: float) -> SimulationState:
+        """
+        Advance the simulation by one time step dt (in seconds).
+
+        The twin is responsible for:
+        1. Tracking internal simulation time.
+        2. Activating or deactivating faults according to the stored schedule.
+        3. Computing system dynamics.
+        4. Applying the effects of currently active faults to the dynamics.
+        5. Returning the new SimulationState.
+
+        Must return a new SimulationState. Must not modify state in place.
+        """
+        pass
+
+    @abstractmethod
+    def get_active_faults(self) -> list[dict]:
+        """
+        Return the list of currently active faults.
+
+        Called by the engine after each step() solely for label generation.
+        Must be read-only — must not change any twin state.
+
+        Return format:
+            [{"fault_id": "increased_damping", "severity": 0.3}, ...]
+        """
+        pass
+
+    @abstractmethod
+    def supported_quantities(self) -> set[PhysicalQuantity]:
+        """
+        Return the set of physical quantities this twin's state can provide.
+
+        Used to validate sensor compatibility at session start.
+        """
+        pass
+
+    @abstractmethod
+    def get_faults(self) -> list[FaultDescriptor]:
+        """
+        Return descriptors for all faults this twin supports.
+
+        Used by the API to list available faults and by the engine to
+        validate fault_ids in a contest's fault_schedule.
+        """
+        pass
+
+    @abstractmethod
+    def metadata(self) -> dict:
+        """
+        Return twin metadata. Must include at minimum:
+            {
+                "twin_id": str,
+                "name": str,
+                "version": str,   # semver, e.g. "1.0.0"
+                "description": str
+            }
+        """
+        pass
 ```
-
-Metadata is used by:
-
-- REST APIs
-- Documentation
-- Contest configuration
-- User interfaces
 
 ---
 
 # Latent State
 
-The latent state represents the true state of the system.
+The latent state holds the true internal variables of the simulated system. It must implement `SimulationState` so sensors can read physical quantities.
 
-Example:
+```python
+class SimulationState(ABC):
+
+    @abstractmethod
+    def get_quantity(self, quantity: PhysicalQuantity) -> float | None:
+        """
+        Return the current value for a physical quantity.
+        Return None if this state does not model the requested quantity.
+
+        This is the only interface through which sensors access the twin's
+        state. No sensor may access state fields directly.
+        """
+        pass
+```
+
+Concrete twins define their own state dataclass:
 
 ```python
 @dataclass
-class MechanicalState:
-
+class MechanicalState(SimulationState):
     position: float
-
     velocity: float
-
     acceleration: float
-
     temperature: float
+    mass: float
+    stiffness: float
+    damping: float
+
+    def get_quantity(self, quantity: PhysicalQuantity) -> float | None:
+        return {
+            PhysicalQuantity.LINEAR_POSITION:     self.position,
+            PhysicalQuantity.LINEAR_VELOCITY:     self.velocity,
+            PhysicalQuantity.LINEAR_ACCELERATION: self.acceleration,
+            PhysicalQuantity.TEMPERATURE:         self.temperature,
+        }.get(quantity)
 ```
 
-The latent state should never be exposed directly unless explicitly enabled for training scenarios.
+The Core never accesses state fields directly. Physical quantities are the only interface.
 
 ---
 
-# State Evolution
+# Fault Management
 
-Each digital twin must implement a state evolution function.
+Fault management is entirely internal to the twin. The engine never activates, deactivates, or applies fault objects. The twin receives the fault schedule once via `configure()` and is solely responsible for everything that follows.
 
-Conceptually:
+A typical implementation pattern:
 
 ```python
-new_state = twin.step(current_state, dt)
+def configure(self, initial_conditions, fault_schedule):
+    self._t = 0.0
+    self._fault_schedule = fault_schedule or []
+    self._active_faults: dict[str, float] = {}   # fault_id -> severity
+    return self._build_initial_state(initial_conditions)
+
+def step(self, state, dt):
+    self._t += dt
+    self._update_active_faults()
+    new_state = self._compute_dynamics(state, dt)
+    self._apply_active_faults(new_state, dt)
+    return new_state
+
+def _update_active_faults(self):
+    for entry in self._fault_schedule:
+        fid = entry["fault_id"]
+        started = self._t >= entry["start_time"]
+        ended = entry["end_time"] is not None and self._t >= entry["end_time"]
+        if started and not ended:
+            self._active_faults[fid] = entry["severity"]
+        else:
+            self._active_faults.pop(fid, None)
+
+def get_active_faults(self):
+    return [
+        {"fault_id": fid, "severity": sev}
+        for fid, sev in self._active_faults.items()
+    ]
 ```
 
-The function should:
-
-1. Compute system dynamics
-2. Apply operating profiles
-3. Apply active faults
-4. Update state variables
-
-The returned state becomes the next simulation state.
+See [Faults](faults.md) for guidance on implementing fault effects on dynamics.
 
 ---
 
-# Sensors
+# Physical Quantities and Sensors
 
-Sensors observe the latent state.
-
-The twin should register sensors during initialization.
-
-Example:
+The twin declares which physical quantities its state provides. Any sensor in `epic_sensors/` that measures one of those quantities is automatically compatible.
 
 ```python
-self.sensors = [
-    PositionSensor(),
-    VelocitySensor(),
-    TemperatureSensor()
-]
+def supported_quantities(self) -> set[PhysicalQuantity]:
+    return {
+        PhysicalQuantity.LINEAR_POSITION,
+        PhysicalQuantity.LINEAR_VELOCITY,
+        PhysicalQuantity.LINEAR_ACCELERATION,
+        PhysicalQuantity.TEMPERATURE,
+    }
 ```
 
-Sensors should be independent reusable components.
-
-A twin should compose sensors rather than implement measurement logic directly.
+Sensor compatibility is validated by the engine at session start. See [Physical Quantities](quantities.md) and [Sensors](sensors.md).
 
 ---
 
-# Faults
+# Digital Twin Lifecycle in a Contest
 
-Faults introduce abnormal behaviour.
+```text
+Contest created: twin_id, sensor_configs, fault_schedule, initial_conditions
+      ↓
+Contest transitions to ACTIVE
+      ↓
+Engine calls twin.configure(initial_conditions, fault_schedule)  → initial state
+      ↓
+Simulation loop:
+      twin.step(state, dt)           ← dynamics + internal fault management
+      sensor.observe(new_state, dt)  ← measurement per configured sensor
+      twin.get_active_faults()       ← labels written to private storage
+      broadcast sensor readings to participants
+      ↓
+Contest transitions to CLOSED → session COMPLETED
+```
 
-Example:
+---
+
+# Reference Twin: Mechanical System
+
+The first EPIC twin is a mass-spring-damper:
+
+```
+m·x'' + c·x' + k·x = F(t)
+```
+
+State variables: `position`, `velocity`, `acceleration`, `temperature`.
+
+System parameters: `mass`, `stiffness`, `damping`.
+
+Available faults (see [Faults](faults.md)):
+
+- `increased_damping` — gradually increases the damping coefficient
+- `reduced_stiffness` — gradually reduces the stiffness coefficient
+- `increased_friction` — adds energy dissipation, raising temperature
+
+---
+
+# Registration
+
+A twin becomes available by registering it at application startup:
 
 ```python
-self.faults = [
-    IncreasedDampingFault(),
-    SensorBiasFault()
-]
+from epic_core.registry import twin_registry
+from epic_twins.mechanical.twin import MechanicalTwin
+
+twin_registry.register(MechanicalTwin())
 ```
 
-Faults should also be reusable components.
-
-A fault should not be tightly coupled to a single twin whenever possible.
+After registration, the platform exposes the twin through `GET /api/v1/twins` and related endpoints automatically. No Core file needs to be modified.
 
 ---
 
-# Scenarios
+# Adding a New Twin
 
-A scenario defines how the twin is used.
+1. Define a `SimulationState` subclass with `get_quantity()`.
+2. Implement `DigitalTwin`: `configure()`, `step()`, `get_active_faults()`, `supported_quantities()`, `get_faults()`, `metadata()`.
+3. Register at startup.
 
-Typical responsibilities:
-
-- Initial conditions
-- Operating profile
-- Active faults
-- Fault schedule
-- Environment configuration
-
-Example:
-
-```python
-normal_operation
-
-sensor_bias
-
-increased_damping
-
-intermittent_disturbance
-```
-
----
-
-# Scenario Scheduling
-
-Scenarios may activate faults at specific times.
-
-Example:
-
-```text
-0s   -> Normal operation
-
-50s  -> Sensor bias begins
-
-120s -> Increased damping begins
-```
-
-This allows realistic anomaly generation.
-
----
-
-# Operating Profiles
-
-An operating profile describes system inputs over time.
-
-Examples:
-
-- Constant input
-- Sinusoidal input
-- Random excitation
-- Piecewise operating modes
-
-Interface:
-
-```python
-profile.value(t)
-```
-
-The twin should use the profile to generate realistic operating conditions.
-
----
-
-# Digital Twin Lifecycle
-
-A simulation session typically follows:
-
-```text
-Create State
-      ↓
-Initialize Scenario
-      ↓
-Simulation Loop
-      ↓
-Apply Dynamics
-      ↓
-Apply Faults
-      ↓
-Generate Observations
-      ↓
-Store Results
-      ↓
-End Session
-```
-
----
-
-# First Reference Twin
-
-The first EPIC twin should be intentionally simple.
-
-Recommended model:
-
-## Mass-Spring-Damper System
-
-State variables:
-
-```text
-position
-velocity
-acceleration
-temperature
-```
-
-System parameters:
-
-```text
-mass
-stiffness
-damping
-```
-
-This system provides:
-
-- Continuous dynamics
-- Forecasting challenges
-- Fault injection opportunities
-- Minimal implementation complexity
-
----
-
-# Example State Update
-
-Conceptual model:
-
-```text
-m*x'' + c*x' + k*x = F(t)
-```
-
-Where:
-
-```text
-m = mass
-c = damping
-k = stiffness
-F = external force
-```
-
-The exact implementation is left to the twin.
-
----
-
-# Example Faults
-
-Suitable faults for the first twin:
-
-## Increased Damping
-
-Gradually increase damping coefficient.
-
-Effects:
-
-- Reduced oscillation amplitude
-- Slower response
-
----
-
-## Reduced Stiffness
-
-Gradually decrease stiffness.
-
-Effects:
-
-- Lower natural frequency
-- Different oscillation pattern
-
----
-
-## Increased Friction
-
-Adds energy dissipation.
-
-Effects:
-
-- Faster decay
-- Increased temperature
-
----
-
-## Sensor Bias
-
-Adds constant offset.
-
-Effects:
-
-- Observation error
-- No physical change
-
----
-
-## Noisy Sensor
-
-Increases observation variance.
-
-Effects:
-
-- Reduced signal quality
-
----
-
-# Data Visibility
-
-Different contest modes expose different information.
-
-## Training
-
-May expose:
-
-- Sensor observations
-- Labels
-- Fault metadata
-- Latent state (optional)
-
----
-
-## Validation
-
-Usually exposes:
-
-- Sensor observations
-
-May expose limited labels.
-
----
-
-## Test
-
-Exposes:
-
-- Sensor observations only
-
-No hidden information should be available.
-
----
-
-# Twin Registration
-
-A twin becomes available after registration.
-
-Example:
-
-```python
-registry.register(MechanicalTwin())
-```
-
-After registration, the platform should automatically expose:
-
-```text
-GET /api/v1/twins
-```
-
-and related endpoints.
-
-No API changes should be required.
-
----
-
-# Versioning
-
-Each twin should be versioned.
-
-Example:
-
-```text
-mechanical_system:1.0.0
-industrial_pump:2.1.0
-```
-
-Version information is important for:
-
-- Reproducibility
-- Benchmarking
-- Research experiments
-
----
-
-# Future Digital Twins
-
-Potential future twins include:
-
-## Industrial Pump
-
-Sensors:
-
-- Pressure
-- Flow
-- Vibration
-- Temperature
-
-Faults:
-
-- Cavitation
-- Bearing wear
-- Filter obstruction
-
----
-
-## Electric Motor
-
-Sensors:
-
-- Current
-- Voltage
-- Temperature
-- RPM
-
-Faults:
-
-- Overheating
-- Bearing degradation
-- Electrical faults
-
----
-
-## Smart Building
-
-Sensors:
-
-- Temperature
-- Humidity
-- Occupancy
-
-Faults:
-
-- HVAC failures
-- Sensor failures
-
----
-
-## Biomedical Monitoring
-
-Sensors:
-
-- ECG
-- Heart rate
-- SpO₂
-
-Faults:
-
-- Arrhythmias
-- Sensor artifacts
-
----
-
-# Design Requirement
-
-A new digital twin should be implementable by:
-
-1. Defining a state model
-2. Implementing dynamics
-3. Registering sensors
-4. Registering faults
-5. Registering scenarios
-
-without modifying any EPIC Core component.
-
-This requirement is the primary measure of success for the EPIC architecture.
+No EPIC Core file needs to be modified.

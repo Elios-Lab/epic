@@ -10,8 +10,6 @@ from epic_core.db.base import create_all_tables, create_engine
 from epic_core.db.models import Contest, SensorObservation, SimulationSession
 from epic_core.engine import SimulationEngine
 from epic_core.testing import (
-    MockFault,
-    MockScenario,
     MockSensor,
     MockTwin,
     test_registry_context as registry_context,
@@ -23,39 +21,23 @@ class FailingTwin(MockTwin):
         raise RuntimeError("step failed")
 
 
-class MockFaultScenario(MockScenario):
-    def get_fault_schedule(self) -> list[dict]:
-        return [
-            {
-                "fault_id": "mock_fault",
-                "start_time": 0.0,
-                "end_time": None,
-                "severity": 0.5,
-            }
-        ]
-
-
-class ConfigurableMockTwin(MockTwin):
-    def __init__(
-        self,
-        twin_id: str = "mock_twin",
-        scenario=None,
-        fault=None,
-        sensor=None,
-    ) -> None:
-        super().__init__(twin_id=twin_id)
-        self._scenario = scenario or self._scenario
-        self._fault = fault or self._fault
-        self._sensor = sensor or self._sensor
-
-
 class NoisyMockSensor(MockSensor):
     def __init__(self, sensor_id: str = "mock_sensor", noise_std: float = 1.0) -> None:
         super().__init__(sensor_id=sensor_id, constant_value=5.0)
         self.noise_std = noise_std
 
-    def observe(self, state) -> float:
+    def observe(self, state, dt: float = 0.0) -> float:
         return float(self._constant_value + np.random.normal(0.0, self.noise_std))
+
+
+MOCK_FAULT_SCHEDULE = [
+    {
+        "fault_id": "mock_fault",
+        "start_time": 0.0,
+        "end_time": None,
+        "severity": 0.5,
+    }
+]
 
 
 @pytest_asyncio.fixture
@@ -72,7 +54,8 @@ async def _create_contest_and_session(
     db_factory,
     name: str,
     twin_id: str = "mock_twin",
-    scenario_id: str = "normal",
+    sensor_configs: list[dict] | None = None,
+    fault_schedule: list[dict] | None = None,
     seed: int | None = None,
     seconds: float = 1.0,
 ) -> tuple[Contest, SimulationSession]:
@@ -80,7 +63,8 @@ async def _create_contest_and_session(
         contest = Contest(
             name=name,
             twin_id=twin_id,
-            scenario_id=scenario_id,
+            sensor_configs=sensor_configs or [{"sensor_id": "mock_sensor"}],
+            fault_schedule=fault_schedule or [],
             sampling_rate_hz=10.0,
             end_date=datetime.now(timezone.utc) + timedelta(seconds=seconds),
         )
@@ -91,7 +75,6 @@ async def _create_contest_and_session(
         session = SimulationSession(
             contest_id=contest.id,
             twin_id=twin_id,
-            scenario_id=scenario_id,
             sampling_rate_hz=10.0,
             seed=seed,
         )
@@ -123,7 +106,7 @@ async def _get_observations(db_factory, session_id):
 async def test_run_session_completes_and_sets_status(engine_db_factory):
     _, session = await _create_contest_and_session(engine_db_factory, "complete")
 
-    with registry_context(twins=[MockTwin(twin_id="mock_twin")]):
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
         await SimulationEngine().run_session(str(session.id), engine_db_factory)
 
     completed = await _get_session(engine_db_factory, session.id)
@@ -134,7 +117,7 @@ async def test_run_session_completes_and_sets_status(engine_db_factory):
 async def test_run_session_creates_observations(engine_db_factory):
     _, session = await _create_contest_and_session(engine_db_factory, "observations")
 
-    with registry_context(twins=[MockTwin(twin_id="mock_twin")]):
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
         await SimulationEngine().run_session(str(session.id), engine_db_factory)
 
     observations = await _get_observations(engine_db_factory, session.id)
@@ -148,7 +131,7 @@ async def test_run_session_creates_observations(engine_db_factory):
 async def test_run_session_observations_have_non_null_labels(engine_db_factory):
     _, session = await _create_contest_and_session(engine_db_factory, "labels")
 
-    with registry_context(twins=[MockTwin(twin_id="mock_twin")]):
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
         await SimulationEngine().run_session(str(session.id), engine_db_factory)
 
     observations = await _get_observations(engine_db_factory, session.id)
@@ -158,32 +141,18 @@ async def test_run_session_observations_have_non_null_labels(engine_db_factory):
 
 
 @pytest.mark.asyncio
-async def test_fault_scenario_training_labels_mark_anomaly(engine_db_factory):
-    _, session = await _create_contest_and_session(engine_db_factory, "fault-labels")
-    fault = MockFault(fault_id="mock_fault")
-    scenario = MockFaultScenario()
-    twin = ConfigurableMockTwin(scenario=scenario, fault=fault)
+async def test_fault_schedule_produces_anomaly_labels(engine_db_factory):
+    _, session = await _create_contest_and_session(
+        engine_db_factory, "fault-labels", fault_schedule=MOCK_FAULT_SCHEDULE
+    )
 
-    with registry_context(twins=[twin], faults=[fault]):
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
         await SimulationEngine().run_session(str(session.id), engine_db_factory)
 
     observations = await _get_observations(engine_db_factory, session.id)
 
     assert observations[0].labels["is_anomaly"] is True
-    assert observations[0].labels["fault_ids"]
-
-
-@pytest.mark.asyncio
-async def test_fault_scenario_applies_mock_fault(engine_db_factory):
-    _, session = await _create_contest_and_session(engine_db_factory, "fault-apply")
-    fault = MockFault(fault_id="mock_fault")
-    scenario = MockFaultScenario()
-    twin = ConfigurableMockTwin(scenario=scenario, fault=fault)
-
-    with registry_context(twins=[twin], faults=[fault]):
-        await SimulationEngine().run_session(str(session.id), engine_db_factory)
-
-    assert fault.apply_count > 0
+    assert "mock_fault" in observations[0].labels["fault_ids"]
 
 
 @pytest.mark.asyncio
@@ -201,9 +170,11 @@ async def test_run_session_missing_twin_sets_failed(engine_db_factory):
 
 
 @pytest.mark.asyncio
-async def test_run_session_missing_scenario_sets_failed(engine_db_factory):
+async def test_run_session_missing_sensor_sets_failed(engine_db_factory):
     _, session = await _create_contest_and_session(
-        engine_db_factory, "missing-scenario", scenario_id="missing"
+        engine_db_factory,
+        "missing-sensor",
+        sensor_configs=[{"sensor_id": "missing_sensor"}],
     )
 
     with registry_context(twins=[MockTwin(twin_id="mock_twin")]):
@@ -219,7 +190,9 @@ async def test_run_session_sets_failed_when_twin_step_raises(engine_db_factory):
         engine_db_factory, "failed", twin_id="failing_twin"
     )
 
-    with registry_context(twins=[FailingTwin(twin_id="failing_twin")]):
+    with registry_context(
+        twins=[FailingTwin(twin_id="failing_twin")], sensors=[MockSensor()]
+    ):
         await SimulationEngine().run_session(str(session.id), engine_db_factory)
 
     failed = await _get_session(engine_db_factory, session.id)
@@ -229,14 +202,10 @@ async def test_run_session_sets_failed_when_twin_step_raises(engine_db_factory):
 
 @pytest.mark.asyncio
 async def test_run_session_seed_reproduces_noisy_sensor_values(engine_db_factory):
-    first_twin = ConfigurableMockTwin(
-        twin_id="first_seed_twin", sensor=NoisyMockSensor()
-    )
-    second_twin = ConfigurableMockTwin(
-        twin_id="second_seed_twin", sensor=NoisyMockSensor()
-    )
+    first_twin = MockTwin(twin_id="first_seed_twin")
+    second_twin = MockTwin(twin_id="second_seed_twin")
 
-    with registry_context(twins=[first_twin, second_twin]):
+    with registry_context(twins=[first_twin, second_twin], sensors=[NoisyMockSensor()]):
         _, first_session = await _create_contest_and_session(
             engine_db_factory, "first-seed", twin_id="first_seed_twin", seed=42
         )
@@ -248,7 +217,9 @@ async def test_run_session_seed_reproduces_noisy_sensor_values(engine_db_factory
         await SimulationEngine().run_session(str(second_session.id), engine_db_factory)
 
     first_observation = (await _get_observations(engine_db_factory, first_session.id))[0]
-    second_observation = (await _get_observations(engine_db_factory, second_session.id))[0]
+    second_observation = (
+        await _get_observations(engine_db_factory, second_session.id)
+    )[0]
 
     assert (
         first_observation.sensors["mock_sensor"]

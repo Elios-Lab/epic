@@ -1,10 +1,10 @@
 # Simulation Engine
 
-> Related: [Plugin System](plugin-system.md) — interfaces · [Plugin Registry](plugin-registry.md) — registry · [API Specification](api-specification.md) — session endpoints
+> Related: [Digital Twins](digital-twins.md) · [Sensors](sensors.md) · [API Specification](api-specification.md)
 
-The Simulation Engine is the component of the EPIC Core responsible for running digital twin simulations, applying faults, collecting sensor observations, and delivering results to callers.
+The Simulation Engine is the EPIC Core component responsible for running digital twin simulations, collecting sensor observations, and delivering results to participants.
 
-The engine is domain-independent. It interacts exclusively with the `DigitalTwin`, `Sensor`, `Fault`, and `Scenario` interfaces defined in [Plugin System](plugin-system.md).
+The engine is domain-independent. It interacts with the twin exclusively through the `DigitalTwin` interface and with sensors through the `Sensor` interface. It has no knowledge of fault logic, physical quantities, or domain-specific behaviour.
 
 ---
 
@@ -13,16 +13,17 @@ The engine is domain-independent. It interacts exclusively with the `DigitalTwin
 The engine is responsible for:
 
 - managing the simulation loop
+- calling `twin.configure()` once at session start
 - calling `twin.step()` at each time step
-- applying active faults according to the fault schedule
-- collecting sensor observations
-- applying sensor faults to measurements
-- pushing observations to the session output stream
-- persisting observations to storage
-- enforcing session duration and status transitions
+- calling `sensor.observe()` for each configured sensor
+- collecting ground-truth labels via `twin.get_active_faults()`
+- persisting observations privately for scoring
+- broadcasting sensor readings to WebSocket subscribers
+- managing session status transitions
 
 The engine is not responsible for:
 
+- fault activation or application (the twin manages this)
 - contest management
 - submission evaluation
 - authentication
@@ -32,71 +33,55 @@ The engine is not responsible for:
 
 # Execution Model
 
-Each contest has exactly one simulation session, running in real wall-clock time from the moment the contest becomes ACTIVE until it becomes CLOSED.
+Each contest has exactly one simulation session. It starts when the contest transitions to ACTIVE and runs in real wall-clock time until the contest transitions to CLOSED.
 
-The engine runs this session continuously at the configured `sampling_rate_hz`. Every produced observation is:
+The engine runs the session continuously at `sampling_rate_hz`. Every observation is:
 
-1. Pushed to all connected WebSocket clients (participants receive sensor readings only).
-2. Persisted to the database privately with full labels (for scoring use only).
+1. Persisted to the database with full labels (private, for scoring only).
+2. Broadcast to all connected WebSocket clients (sensor readings only, no labels).
 
-There is no batch mode, no accelerated simulation, and no pause or stop mechanism available to participants. The simulation clock is wall-clock time.
+There is no batch mode, no accelerated simulation, and no pause mechanism available to participants.
 
 ---
 
 # Concurrency Model
 
-The engine uses Python's `asyncio`.
+The engine uses Python `asyncio`. Each session runs as an independent `asyncio.Task`. Multiple sessions can run concurrently in the same process.
 
-Each simulation session runs as an independent `asyncio.Task`.
-
-Multiple sessions can run concurrently within the same process.
-
-The engine must never block the event loop during a simulation step. If a twin's `step()` is computationally intensive, it must be offloaded to a thread pool:
+If `twin.step()` is computationally intensive it must be offloaded to a thread pool to avoid blocking the event loop:
 
 ```python
 loop = asyncio.get_running_loop()
-state = await loop.run_in_executor(executor, twin.step, state, dt)
+new_state = await loop.run_in_executor(None, twin.step, state, dt)
 ```
 
 ---
 
 # SimulationEngine Interface
 
-The engine exposes the following interface to the rest of the Core:
-
 ```python
 class SimulationEngine:
 
-    async def run_session(
-        self,
-        session_id: str,
-        db_factory,
-    ) -> None:
+    async def run_session(self, session_id: str, db_factory) -> None:
         """
         Execute a contest simulation session to completion.
 
         Runs in real wall-clock time at session.sampling_rate_hz.
-        Each observation is persisted privately and broadcast to
-        all WebSocket subscribers of the contest.
+        Each observation is persisted privately and broadcast to all
+        WebSocket subscribers of the contest.
 
         The session ends naturally when wall-clock time reaches
-        contest.end_date. It cannot be paused or cancelled by
-        participants.
+        contest.end_date.
 
-        Raises PluginExecutionError if the twin or scenario cannot
-        be loaded, or if a fatal error occurs during the loop.
+        Raises PluginExecutionError if the twin raises an unrecoverable
+        exception during configure() or step().
         """
-        pass
-
-    def get_session_status(self, session_id: str) -> SessionStatus:
         pass
 ```
 
 ---
 
 # Session Lifecycle
-
-A session is created when the contest transitions to ACTIVE and transitions through:
 
 ```text
 CREATED
@@ -107,131 +92,81 @@ COMPLETED
 
     or
 
-    ↓  (unrecoverable plugin exception)
+    ↓  (unrecoverable exception in twin.step() or sensor.observe())
 FAILED
 ```
 
-The engine is responsible for updating session status in storage at each transition. There is no CANCELLED state — only the platform can stop a session, and only by closing the contest.
+The engine updates session status in storage at each transition.
 
 ---
 
 # Simulation Loop
 
-The engine executes the following loop for every session:
-
 ```text
-1.  Load twin from registry
-2.  Load scenario from twin
-3.  Call scenario.initialize() → config dict
-4.  Call twin.create_initial_state(config['initial_conditions']) → state
-5.  Parse fault schedule from scenario.get_fault_schedule()
-6.  Set session status to RUNNING
-7.  t = 0.0
-8.  While wall-clock time < contest.end_date:
-        a.  Advance virtual time: t += dt  (dt = 1 / sampling_rate_hz)
-        b.  Activate/deactivate faults according to schedule
-        c.  Call twin.step(state, dt) → new_state
-        d.  Call fault.apply(new_state, dt) for each active non-SensorFault
-            (faults modify new_state in place)
-        e.  For each sensor in twin.get_sensors():
-                raw = sensor.observe(new_state)
-                For each active SensorFault targeting this sensor:
-                    raw = sensor_fault.apply_to_measurement(raw)
-        f.  Assemble SensorObservation (sensors dict only, for broadcast)
-        g.  Build full observation with labels (for private storage)
-        h.  Persist full observation to database (private — never exposed to participants)
-        i.  Broadcast sensor readings only to all WebSocket subscribers of the contest
-        j.  Sleep until next tick (wall-clock alignment)
-        k.  state = new_state
-9.  Set session status to COMPLETED
+1.  Load twin from registry using contest.twin_id.
+
+2.  Instantiate sensors from contest.sensor_configs with parameter overrides.
+    Validate: sensor.measured_quantity ∈ twin.supported_quantities() for each sensor.
+    Raise EPICValidationError if any sensor is incompatible.
+
+3.  Call twin.configure(contest.initial_conditions, contest.fault_schedule) → state.
+    Validate: every fault_id in contest.fault_schedule is in twin.get_faults().
+    Raise EPICValidationError if any fault_id is unknown.
+
+4.  Set session status to RUNNING.
+
+5.  t = 0.0
+
+6.  While wall-clock time < contest.end_date:
+
+        a.  new_state = twin.step(state, dt)
+            ← twin handles fault activation and application internally
+
+        b.  For each sensor in contest_sensors:
+                measurement = sensor.observe(new_state, dt)
+                ← sensor applies its own degradation pipeline
+
+        c.  active_faults = twin.get_active_faults()
+            labels = {
+                "is_anomaly": len(active_faults) > 0,
+                "fault_ids":  [f["fault_id"]  for f in active_faults],
+                "severities": {f["fault_id"]: f["severity"] for f in active_faults},
+            }
+
+        d.  Persist SensorObservation (sensors + labels) to database privately.
+
+        e.  Broadcast { timestamp, session_id, sequence_id, sensors } to WebSocket.
+
+        f.  Sleep dt seconds (wall-clock alignment).
+
+        g.  state = new_state
+
+7.  Set session status to COMPLETED.
 ```
+
+Step 6a is the only place the engine interacts with the twin during the loop. The engine has no fault schedule, no fault objects, and no activation logic of its own.
 
 ---
 
-# Fault Scheduling
+# Session Configuration
 
-The engine reads the fault schedule returned by `scenario.get_fault_schedule()` once at session start.
-
-Each schedule entry has the form:
+The engine reads its configuration from the `Contest` and `SimulationSession` records:
 
 ```python
-{
-    "fault_id": "sensor_bias",
-    "start_time": 120.0,
-    "end_time": None,       # None = active until session ends
-    "severity": 0.5
-}
+contest.twin_id            # which twin to load
+contest.sensor_configs     # sensors + parameter overrides
+contest.fault_schedule     # passed as-is to twin.configure()
+contest.initial_conditions # passed as-is to twin.configure()
+contest.end_date           # loop termination condition
+session.sampling_rate_hz   # dt = 1 / sampling_rate_hz
+session.seed               # optional RNG seed
 ```
-
-At each time step, the engine checks which faults should be activated or deactivated:
-
-```python
-for entry in fault_schedule:
-    fault = fault_registry.get(entry["fault_id"])
-
-    if t >= entry["start_time"] and not fault_is_active:
-        fault.activate(entry["severity"])
-
-    if entry["end_time"] is not None and t >= entry["end_time"] and fault_is_active:
-        fault.deactivate()
-```
-
----
-
-# SensorFault Targeting
-
-A `SensorFault` must declare which sensor(s) it targets.
-
-This is expressed through an additional required property on `SensorFault`:
-
-```python
-class SensorFault(Fault):
-
-    @property
-    @abstractmethod
-    def target_sensor_ids(self) -> list[str]:
-        """
-        Return the sensor_ids this fault applies to.
-        Return an empty list to apply to all sensors of the twin.
-        """
-        pass
-```
-
-The engine applies the fault only to matching sensors.
-
----
-
-# Labels
-
-The engine always produces ground-truth labels at each time step:
-
-```python
-labels = {
-    "is_anomaly": len(active_faults) > 0,
-    "fault_ids": [f.fault_id for f in active_faults],
-    "severities": {f.fault_id: f.current_severity for f in active_faults},
-}
-```
-
-Labels are persisted to the database as part of every `SensorObservation` record. They are never included in the WebSocket broadcast to participants. The scoring engine reads them directly from the database when evaluating submissions.
 
 ---
 
 # WebSocket Broadcasting
 
-The engine maintains a broadcast queue per contest session. All connected WebSocket clients for a contest share the same queue.
-
-```text
-SimulationEngine
-      ↓  (produces observation)
-ContestBroadcaster
-      ↓  (fan-out to all subscribers)
-WebSocketHandler × N
-      ↓  (WebSocket.send_json per client)
-Client × N
-```
-
-The message sent to participants contains sensor readings only:
+The message sent to participants contains sensor readings only. Labels are never included.
 
 ```json
 {
@@ -246,57 +181,32 @@ The message sent to participants contains sensor readings only:
 }
 ```
 
-Labels and fault metadata are never included.
-
-Each client has its own bounded output queue. If a client is too slow to consume, its oldest messages are dropped. The engine's main loop is never blocked by slow clients. Observations are always persisted to the database regardless of client speed.
-
----
-
-# Simulation Clock
-
-The engine uses wall-clock time as the primary clock. The simulation runs in real time: one simulated second equals one real second.
-
-Between steps the engine sleeps for `dt` seconds (`dt = 1 / sampling_rate_hz`) to align with real time. The `SensorObservation.timestamp` records the actual wall-clock time of each observation.
-
-The competition's `end_date` is the natural termination condition. The engine checks wall-clock time against `contest.end_date` at each step.
+Each client has its own bounded output queue. If a client is too slow to consume messages, its oldest messages are dropped. The engine's main loop is never blocked by slow clients.
 
 ---
 
 # Reproducibility
 
-If `session.seed` is set, the engine seeds the random number generator before the simulation loop:
+If `session.seed` is set, the engine seeds the random number generators before starting the loop:
 
 ```python
-import random
-import numpy as np
-
+import random, numpy as np
 random.seed(session.seed)
 np.random.seed(session.seed)
 ```
 
-Twins and sensors must use the module-level random functions (not private RNG instances) to benefit from this seeding.
+Twins and sensors must use module-level random functions to benefit from seeding.
 
 ---
 
 # Error Handling
 
-If `twin.step()` raises an exception, the engine:
+If `twin.step()` or `sensor.observe()` raises an exception, the engine sets session status to `FAILED`, stores the error message in `session.metadata["error"]`, and cancels the asyncio task.
 
-1. Logs the exception.
-2. Sets session status to `FAILED`.
-3. Stores the error message in `session.metadata["error"]`.
-4. Cancels the session's asyncio Task.
-
-The same policy applies to `sensor.observe()` and `fault.apply()`.
-
-The engine must never propagate a plugin exception to the API layer uncaught. See [Error Handling](error-handling.md) for the full exception hierarchy.
+Plugin exceptions are never propagated to the API layer. See [Error Handling](error-handling.md).
 
 ---
 
 # Design Requirement
 
-The simulation engine must be fully testable without a real digital twin.
-
-The Core must provide a `MockTwin` and `MockScenario` for use in unit tests of the engine itself.
-
-See [Testing](testing.md) for details.
+The engine must be fully testable without a real digital twin or sensor. `epic_core/testing.py` provides `MockTwin` and `MockSensor` for this purpose. See [Testing](testing.md).
