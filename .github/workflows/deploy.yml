@@ -1,0 +1,26 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to epic-server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: epic.elioslab.net
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/epic
+            git pull origin main
+            source .venv/bin/activate
+            pip install -e . --quiet
+            alembic upgrade head
+            sudo systemctl restart epic
+            echo "Deploy complete"
