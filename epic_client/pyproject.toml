@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "epic-elios-client"
+version = "1.0.0"
+description = "Participant SDK for the EPIC — ELIOS Predictive Intelligence Challenge platform."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "ELIOS Lab" }
+]
+license = { text = "MIT" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+]
+dependencies = [
+  "websockets",
+]
+
+[project.optional-dependencies]
+notebook = [
+  "pandas",
+]
+
+[tool.setuptools]
+packages = ["epic_client"]
+
+[tool.setuptools.package-dir]
+epic_client = "."
