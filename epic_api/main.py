@@ -1,10 +1,13 @@
 """FastAPI application factory."""
 
+import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from epic_api import dependencies
 from epic_api.errors import register_exception_handlers
@@ -24,6 +27,7 @@ from epic_api.routers import (
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.config import Settings, get_settings
 from epic_core.db.bootstrap import seed_admin
+from epic_core.db.models import Contest, SimulationSession, Submission
 from epic_core.db.session import get_session_factory
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
@@ -37,6 +41,51 @@ from epic_twins.rotating_machinery.plugin import register as register_rotating_m
 from epic_twins.smart_building.plugin import register as register_smart_building
 
 GUI_DIR = Path(__file__).resolve().parent.parent / "epic_gui"
+
+
+async def _recover_after_restart() -> None:
+    """Repair state left inconsistent by an unclean shutdown.
+
+    Two things can be wrong after a crash:
+    - Sessions marked RUNNING with no engine actually running.
+      We pause them (and the owning contest) so organizers can resume manually.
+    - Submissions stuck in PENDING because their scoring task died in memory.
+      We reschedule their scoring so they eventually reach EVALUATED or FAILED.
+    """
+    db_factory = get_session_factory()
+    async with db_factory() as db:
+        # ── 1. Orphaned running sessions ─────────────────────────────────────
+        orphaned_result = await db.execute(
+            select(SimulationSession).where(
+                SimulationSession.status.in_(["RUNNING", "CREATED"])
+            )
+        )
+        for session in orphaned_result.scalars():
+            contest_result = await db.execute(
+                select(Contest).where(Contest.id == session.contest_id)
+            )
+            contest = contest_result.scalar_one_or_none()
+            if contest is None or contest.status != "ACTIVE":
+                continue
+            contest.status = "PAUSED"
+            session.status = "PAUSED"
+            session.ended_at = datetime.now(timezone.utc)
+            session.session_metadata = {
+                **(session.session_metadata or {}),
+                "recovery": "Paused automatically after unclean server shutdown. Use Resume to restart.",
+            }
+        await db.commit()
+
+        # ── 2. Orphaned PENDING submissions ───────────────────────────────────
+        pending_result = await db.execute(
+            select(Submission).where(Submission.status == "PENDING")
+        )
+        pending_ids = [sub.id for sub in pending_result.scalars()]
+
+    for submission_id in pending_ids:
+        asyncio.create_task(
+            submissions._score_submission(submission_id, db_factory)
+        )
 
 
 @asynccontextmanager
@@ -59,6 +108,7 @@ async def lifespan(app: FastAPI):
         registry_module.metric_registry.register(MAE())
     if not registry_module.metric_registry.contains("f1"):
         registry_module.metric_registry.register(F1Score())
+    await _recover_after_restart()
     yield
 
 

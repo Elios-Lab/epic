@@ -156,9 +156,41 @@ Unspecified fields use the twin's defaults.
 ---
 
 
+# Two-Phase Contest Structure
+
+Every contest uses a **two-phase** structure that ensures submission integrity:
+
+1. **Observation phase** (`start_date` → `end_of_observation`): the simulation runs and participants observe sensor readings via the WebSocket stream.
+2. **Evaluation phase** (`end_of_observation` → `end_of_observation + prediction_horizon_seconds`): the simulation continues generating ground truth. No submissions are accepted yet.
+3. **Submission window** (`end_of_observation + prediction_horizon_seconds` → `end_date`): participants submit their full forecast for the evaluation window.
+
+Required fields:
+
+```yaml
+end_of_observation: 2027-01-15T12:00:00Z   # end of the observation phase
+prediction_horizon_seconds: 60.0            # length of the evaluation window
+```
+
+Optional fields:
+
+```yaml
+score_against: ground_truth   # "ground_truth" (default) or "sensors"
+```
+
+`score_against` controls the reference signal used when computing the leaderboard metric:
+
+- **`ground_truth`** (recommended default) — scores are computed against the noiseless latent-state values recorded by the engine during the evaluation phase. A perfect physics model achieves a score of zero; measurement noise does not penalise it.
+- **`sensors`** — scores are computed against the actual (noisy) sensor readings. Choose this only when the task explicitly asks participants to forecast the corrupted measurement (e.g. a sensor-drift detection challenge).
+
+The platform computes `eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)`. Participants must submit exactly `eval_steps` predicted values per sensor.
+
+Constraint: `end_date` must be after `end_of_observation + prediction_horizon_seconds` to give participants time to submit.
+
+---
+
 # Defining Tasks
 
-A contest may contain one or more tasks.
+A contest may contain one or more tasks. Each entry in the `tasks` list (or `task_type` field in the API request) causes the platform to create a `Task` entity with the corresponding `task_type` (`FORECASTING`, `ANOMALY_DETECTION`, etc.). Tasks are returned embedded in the contest response under the `tasks` key.
 
 Example:
 
@@ -177,21 +209,26 @@ tasks:
 Goal:
 
 ```text
-Predict future sensor values.
+Predict sensor values across the full evaluation window.
 ```
 
-Example:
+The task configuration is computed automatically from `prediction_horizon_seconds` and `sampling_rate_hz`:
 
 ```yaml
-forecasting:
+configuration:
+  prediction_horizon_seconds: 60.0
+  eval_steps: 1200   # 60.0 s × 20 Hz
+```
 
-  horizons:
+Participants submit one list of `eval_steps` values per sensor:
 
-    - 1
-
-    - 5
-
-    - 10
+```json
+{
+  "forecast": {
+    "position": [0.12, 0.13, ...],
+    "velocity": [0.01, 0.02, ...]
+  }
+}
 ```
 
 ---
@@ -429,7 +466,12 @@ sensor_configs:
 fault_schedule: []
 sampling_rate_hz: 10.0
 task_type: FORECASTING
-forecast_horizons: [1, 5, 10]
+metric_ids: [mae]
+score_against: ground_truth
+start_date: 2027-01-10T09:00:00Z
+end_of_observation: 2027-01-10T09:30:00Z   # 30-min observation window
+prediction_horizon_seconds: 60.0           # predict the next 60 s (600 steps at 10 Hz)
+end_date: 2027-01-10T10:00:00Z             # submission window closes 30 min later
 visibility: PUBLIC
 ```
 
@@ -456,7 +498,13 @@ fault_schedule:
     severity: 0.4
 sampling_rate_hz: 10.0
 task_type: FORECASTING
-forecast_horizons: [1, 5, 10]
+metric_ids: [mae, rmse]
+score_against: ground_truth
+start_date: 2027-03-01T08:00:00Z
+end_of_observation: 2027-03-01T09:00:00Z   # 1-hour observation window
+prediction_horizon_seconds: 300.0          # predict the next 5 min (3000 steps at 10 Hz)
+end_date: 2027-03-01T12:00:00Z
+visibility: PUBLIC
 ```
 
 ---
@@ -465,9 +513,9 @@ forecast_horizons: [1, 5, 10]
 
 # Contest Templates
 
-Future versions should provide reusable templates.
+Predefined templates are available for all five built-in twins via the API (`GET /api/v1/templates`). A template is a complete, validated contest configuration that an organizer can retrieve and submit as-is or with parameter overrides.
 
-Examples:
+Available categories:
 
 ```text
 Forecasting Challenge
@@ -475,11 +523,11 @@ Forecasting Challenge
 Anomaly Detection Challenge
 
 Predictive Maintenance Challenge
-
-Prognostics Challenge
 ```
 
-Authors should be able to instantiate a template and customize parameters.
+To use a template, retrieve it from the API and pass it (with any overrides) to `POST /api/v1/contests`.
+
+User-defined reusable templates — saved configurations that organizers can share — are a planned future extension.
 
 ---
 

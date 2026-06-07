@@ -52,7 +52,7 @@ class BearingFault(_BaseFault):
     description_value = "Adds speed ripple and heat from bearing damage"
 
     def apply(self, state: SimulationState, severity: float, dt: float) -> None:
-        state.speed += 25.0 * severity
+        state.speed += 25.0 * severity * dt
         state.temperature += 0.25 * severity * dt
 
 

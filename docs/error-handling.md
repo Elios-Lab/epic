@@ -1,6 +1,6 @@
 # Error Handling
 
-> Related: [Plugin System](plugin-system.md) · [Simulation Engine](simulation-engine.md) · [API Specification](api-specification.md)
+> Related: [Architecture](architecture.md) · [Simulation Engine](simulation-engine.md) · [API Specification](api-specification.md)
 
 This document defines the exception hierarchy, error propagation rules, and the mapping from exceptions to API error responses.
 

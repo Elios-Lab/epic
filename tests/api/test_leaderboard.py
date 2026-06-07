@@ -23,6 +23,11 @@ def create_user_and_headers(client, admin_headers, username: str, email: str, pa
     return user, {"Authorization": f"Bearer {login_response.json()['access_token']}"}
 
 
+_EVAL_STEPS = 1         # round(0.05 s * 20 Hz) = 1
+_PREDICTION_HORIZON = 0.05
+_SAMPLING_RATE = 20.0
+
+
 def create_active_contest_with_observations(db_factory, name: str = "Leaderboard"):
     async def create_records():
         now = datetime.now(timezone.utc)
@@ -34,9 +39,11 @@ def create_active_contest_with_observations(db_factory, name: str = "Leaderboard
                 visibility="PUBLIC",
                 twin_id="mass_spring_damper",
                 sensor_configs=[{"sensor_id": "position"}],
-                sampling_rate_hz=20.0,
-                start_date=now,
-                end_date=now + timedelta(seconds=10),
+                sampling_rate_hz=_SAMPLING_RATE,
+                start_date=now - timedelta(seconds=10),
+                end_date=now + timedelta(seconds=30),
+                end_of_observation=now - timedelta(seconds=2),
+                prediction_horizon_seconds=_PREDICTION_HORIZON,
                 created_by=None,
             )
             db.add(contest)
@@ -48,7 +55,7 @@ def create_active_contest_with_observations(db_factory, name: str = "Leaderboard
                     name="FORECASTING",
                     metric_ids=[],
                     weight=1.0,
-                    configuration={"forecast_horizons": [1]},
+                    configuration={"eval_steps": _EVAL_STEPS, "prediction_horizon_seconds": _PREDICTION_HORIZON},
                 )
             )
             await db.commit()
@@ -94,8 +101,7 @@ def submit_and_score(client, headers, db_factory, contest_id: str, prediction: f
         f"/api/v1/contests/{contest_id}/submissions",
         json={
             "task_id": "forecasting",
-            "prediction_from_sequence": 1,
-            "payload": {"forecast": {"horizon_1": {"position": prediction}}},
+            "payload": {"forecast": {"position": [prediction]}},
         },
         headers=headers,
     )
@@ -139,7 +145,10 @@ def leaderboard_setup(client, db_factory, admin_headers):
 def test_get_leaderboard_returns_entries_ordered_by_rank(client, db_factory, admin_headers):
     setup = leaderboard_setup(client, db_factory, admin_headers)
 
-    response = client.get(f"/api/v1/contests/{setup['contest'].id}/leaderboard")
+    response = client.get(
+        f"/api/v1/contests/{setup['contest'].id}/leaderboard",
+        headers=admin_headers,
+    )
 
     assert response.status_code == 200
     entries = response.json()["entries"]
@@ -149,7 +158,10 @@ def test_get_leaderboard_returns_entries_ordered_by_rank(client, db_factory, adm
 def test_participant_with_lower_mae_has_rank_one(client, db_factory, admin_headers):
     setup = leaderboard_setup(client, db_factory, admin_headers)
 
-    response = client.get(f"/api/v1/contests/{setup['contest'].id}/leaderboard")
+    response = client.get(
+        f"/api/v1/contests/{setup['contest'].id}/leaderboard",
+        headers=admin_headers,
+    )
 
     assert response.status_code == 200
     rank_one = response.json()["entries"][0]
@@ -164,7 +176,10 @@ def test_better_second_submission_replaces_leaderboard_entry(
     better_submission = submit_and_score(
         client, setup["headers1"], db_factory, str(setup["contest"].id), 0.21
     )
-    response = client.get(f"/api/v1/contests/{setup['contest'].id}/leaderboard")
+    response = client.get(
+        f"/api/v1/contests/{setup['contest'].id}/leaderboard",
+        headers=admin_headers,
+    )
 
     assert response.status_code == 200
     rank_one = response.json()["entries"][0]
@@ -198,3 +213,97 @@ def test_get_user_leaderboard_entry_by_different_participant_returns_403(
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_get_leaderboard_unauthenticated_returns_401(client, db_factory, admin_headers):
+    contest = create_active_contest_with_observations(db_factory, name="AuthCheck")
+
+    response = client.get(f"/api/v1/contests/{contest.id}/leaderboard")
+
+    assert response.status_code == 401
+
+
+def test_get_leaderboard_private_contest_denied_to_non_registered_user(
+    client, db_factory, admin_headers
+):
+    async def create_private_contest():
+        now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        async with db_factory() as db:
+            contest = Contest(
+                name="PrivateLeaderboard",
+                status="ACTIVE",
+                visibility="PRIVATE",
+                twin_id="mass_spring_damper",
+                sensor_configs=[{"sensor_id": "position"}],
+                sampling_rate_hz=10.0,
+                start_date=now,
+                end_date=now + __import__("datetime").timedelta(seconds=60),
+                created_by=None,
+            )
+            db.add(contest)
+            await db.commit()
+            await db.refresh(contest)
+            return contest
+
+    import asyncio
+    contest = asyncio.run(create_private_contest())
+
+    _, outsider_headers = create_user_and_headers(
+        client, admin_headers, "outsider_lb", "outsider_lb@example.com", "pass"
+    )
+
+    response = client.get(
+        f"/api/v1/contests/{contest.id}/leaderboard",
+        headers=outsider_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_get_leaderboard_private_contest_accessible_to_registered_participant(
+    client, db_factory, admin_headers
+):
+    async def create_private_contest_with_obs():
+        import datetime as dt
+        now = dt.datetime.now(dt.timezone.utc)
+        async with db_factory() as db:
+            contest = Contest(
+                name="PrivateLeaderboardRegistered",
+                status="ACTIVE",
+                visibility="PRIVATE",
+                twin_id="mass_spring_damper",
+                sensor_configs=[{"sensor_id": "position"}],
+                sampling_rate_hz=10.0,
+                start_date=now,
+                end_date=now + dt.timedelta(seconds=60),
+                created_by=None,
+            )
+            db.add(contest)
+            await db.flush()
+            db.add(Task(
+                contest_id=contest.id,
+                task_type="FORECASTING",
+                name="FORECASTING",
+                metric_ids=[],
+                weight=1.0,
+                configuration={"eval_steps": 1, "prediction_horizon_seconds": 0.05},
+            ))
+            await db.commit()
+            await db.refresh(contest)
+            return contest
+
+    import asyncio
+    contest = asyncio.run(create_private_contest_with_obs())
+
+    _, member_headers = create_user_and_headers(
+        client, admin_headers, "member_lb", "member_lb@example.com", "pass"
+    )
+    register(client, member_headers, str(contest.id))
+
+    response = client.get(
+        f"/api/v1/contests/{contest.id}/leaderboard",
+        headers=member_headers,
+    )
+
+    assert response.status_code == 200

@@ -104,7 +104,7 @@ class RotatingMachineryTwin(DigitalTwin):
             2.0 * math.pi * 1.5 * self._t
         )
         temperature = state.temperature + (0.01 + 0.025 * load_factor) * dt
-        shaft_deflection = state.shaft_deflection + 0.002 * math.sin(
+        shaft_deflection = float(self._DEFAULTS["shaft_deflection"]) + 0.002 * math.sin(
             2.0 * math.pi * 0.3 * self._t
         )
         new_state = RotatingMachineryState(

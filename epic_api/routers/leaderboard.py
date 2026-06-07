@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user
 from epic_api.utils import get_contest_or_raise, parse_uuid
-from epic_core.db.models import LeaderboardEntry, User
+from epic_core.db.models import ContestRegistration, LeaderboardEntry, User
 from epic_core.db.session import get_db
 from epic_core.exceptions import (
     ContestNotFoundError,
@@ -30,12 +30,34 @@ def leaderboard_entry_response(entry: LeaderboardEntry, user: User) -> dict:
     }
 
 
+async def _assert_leaderboard_access(
+    db: AsyncSession, contest, current_user: User
+) -> None:
+    if contest.visibility == "PUBLIC":
+        return
+    if current_user.role == "ADMINISTRATOR":
+        return
+    if current_user.role == "ORGANIZER" and contest.created_by == current_user.id:
+        return
+    reg = await db.execute(
+        select(ContestRegistration).where(
+            ContestRegistration.contest_id == contest.id,
+            ContestRegistration.user_id == current_user.id,
+            ContestRegistration.status == "REGISTERED",
+        )
+    )
+    if reg.scalar_one_or_none() is None:
+        raise InsufficientPermissionsError("Leaderboard access denied")
+
+
 @router.get("/{contest_id}/leaderboard")
 async def get_leaderboard(
     contest_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     contest = await get_contest_or_raise(db, contest_id)
+    await _assert_leaderboard_access(db, contest, current_user)
     result = await db.execute(
         select(LeaderboardEntry, User)
         .join(User, LeaderboardEntry.user_id == User.id)

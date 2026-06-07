@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -17,6 +18,12 @@ from epic_core.db.session import get_db
 from epic_core.exceptions import InvalidCredentialsError
 
 router = APIRouter()
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.websocket("/contests/{contest_id}")
@@ -41,14 +48,27 @@ async def contest_stream(
         await websocket.close(code=1008)
         return
 
+    # In two-phase mode, reject connections once the evaluation phase has started.
+    # Participants must not see the evaluation-phase sensor data.
+    if (
+        contest.end_of_observation is not None
+        and datetime.now(timezone.utc) >= _as_utc(contest.end_of_observation)
+    ):
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     queue = broadcaster.subscribe(contest_id)
     try:
         while True:
             payload = await queue.get()
             await websocket.send_json(payload)
+            # The engine broadcasts a special "evaluation_started" event when
+            # the observation phase ends.  Forward it to the client, then close
+            # the stream — participants must not receive evaluation-phase data.
+            if payload.get("event") == "evaluation_started":
+                break
     except WebSocketDisconnect:
         pass
     finally:
         broadcaster.unsubscribe(contest_id, queue)
-

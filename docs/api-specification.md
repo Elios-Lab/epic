@@ -102,6 +102,8 @@ Administrator only.
 POST /api/v1/users
 ```
 
+Administrator only. EPIC uses a closed registration model — user accounts are created by administrators, not by self-service.
+
 Request:
 
 ```json
@@ -225,8 +227,10 @@ Request:
   ],
   "sampling_rate_hz": 10.0,
   "task_type": "FORECASTING",
-  "forecast_horizons": [1, 5, 10],
+  "metric_ids": ["mae"],
   "start_date": "2027-01-10T00:00:00Z",
+  "end_of_observation": "2027-01-10T01:00:00Z",
+  "prediction_horizon_seconds": 60.0,
   "end_date": "2027-03-01T23:59:59Z",
   "visibility": "PUBLIC"
 }
@@ -253,7 +257,8 @@ Response `201 Created`:
       "name": "FORECASTING",
       "weight": 1.0,
       "configuration": {
-        "forecast_horizons": [1, 5, 10]
+        "prediction_horizon_seconds": 60.0,
+        "eval_steps": 600
       }
     }
   ]
@@ -277,6 +282,8 @@ Response `200 OK`:
   "status": "ACTIVE",
   "visibility": "PUBLIC",
   "start_date": "2027-01-10T00:00:00Z",
+  "end_of_observation": "2027-01-10T01:00:00Z",
+  "prediction_horizon_seconds": 60.0,
   "end_date": "2027-03-01T23:59:59Z",
   "tasks": [
     {
@@ -285,7 +292,8 @@ Response `200 OK`:
       "name": "FORECASTING",
       "weight": 1.0,
       "configuration": {
-        "forecast_horizons": [1, 5, 10]
+        "prediction_horizon_seconds": 60.0,
+        "eval_steps": 600
       }
     }
   ]
@@ -641,10 +649,10 @@ Response `200 OK`:
       "description": "Gradual increase in damping coefficient"
     },
     {
-      "fault_id": "sensor_bias",
-      "name": "Sensor Bias",
+      "fault_id": "reduced_stiffness",
+      "name": "Reduced Stiffness",
       "version": "1.0.0",
-      "description": "Constant offset added to sensor measurement"
+      "description": "Gradual reduction in spring stiffness coefficient"
     }
   ]
 }
@@ -723,22 +731,23 @@ GET /api/v1/contests/{contest_id}/submissions
 POST /api/v1/contests/{contest_id}/submissions
 ```
 
-`prediction_from_sequence` is required. It must be the `sequence_id` of the last observation the participant used to build their prediction. The server rejects the submission if this sequence_id had not yet been published at the time of submission. See [Scoring](scoring.md) for a full explanation of the temporal integrity guarantee.
+Submissions are only accepted after the evaluation phase ends (`end_of_observation + prediction_horizon_seconds`). The payload must contain exactly `eval_steps` predicted values per sensor. See [Scoring](scoring.md) for a full explanation of the two-phase integrity guarantee.
 
 Request:
 
 ```json
 {
   "task_id": "forecasting",
-  "prediction_from_sequence": 500,
   "payload": {
     "forecast": {
-      "horizon_1": { "position": 0.12 },
-      "horizon_5": { "position": 0.24 }
+      "position": [0.12, 0.13, 0.14],
+      "velocity": [0.01, 0.02, 0.01]
     }
   }
 }
 ```
+
+Each sensor list must have exactly `eval_steps` values (from the contest's task configuration).
 
 Response `201 Created`:
 
@@ -748,7 +757,6 @@ Response `201 Created`:
   "contest_id": "forecast_2027",
   "user_id": "u_abc123",
   "task_id": "forecasting",
-  "prediction_from_sequence": 500,
   "submitted_at": "2027-02-10T14:00:00Z",
   "status": "PENDING"
 }

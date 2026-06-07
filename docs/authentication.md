@@ -16,7 +16,6 @@ The system should be simple in the first implementation while remaining extensib
 
 The authentication system must support:
 
-- User registration
 - Login
 - Logout
 - JWT-based authentication
@@ -109,15 +108,17 @@ Store only hashes.
 
 ---
 
-# Registration
+# User Creation
 
-Users should be able to create accounts.
+EPIC uses a closed registration model: only administrators can create user accounts. Self-service registration is not supported.
 
 Endpoint:
 
 ```http
 POST /api/v1/users
 ```
+
+Requires `ADMINISTRATOR` role.
 
 Required information:
 
@@ -128,6 +129,8 @@ Required information:
   "password": "..."
 }
 ```
+
+New accounts are assigned the `PARTICIPANT` role by default. Administrators may specify a different role at creation time.
 
 ---
 
@@ -275,6 +278,7 @@ Examples:
 POST /api/v1/contests        ← ORGANIZER or ADMINISTRATOR
 PATCH /api/v1/contests/{id}  ← ORGANIZER (own contest) or ADMINISTRATOR
 GET  /api/v1/users           ← ADMINISTRATOR only
+POST /api/v1/users           ← ADMINISTRATOR only
 ```
 
 ---
@@ -370,12 +374,12 @@ Authorization: Bearer eyJ...
 Examples:
 
 ```http
-POST /api/v1/users
-
 POST /api/v1/auth/login
 ```
 
 No authentication required.
+
+`POST /api/v1/users` requires ADMINISTRATOR authentication (see [User Creation](#user-creation)).
 
 ---
 
@@ -473,7 +477,7 @@ Personal information should be minimized.
 Typical workflow:
 
 ```text
-Register
+Admin creates account
     ↓
 Login
     ↓

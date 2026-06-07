@@ -24,6 +24,7 @@ class PhysicalQuantity(Enum):
     VOLTAGE = "voltage"
     POWER = "power"
     RESISTANCE = "resistance"
+    TORQUE = "torque"
 
     VIBRATION = "vibration"
     SOUND_PRESSURE = "sound_pressure"

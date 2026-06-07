@@ -319,11 +319,11 @@ Future versions should support:
 
 ---
 
-# Sensor Faults
+# Sensor Failure Modes
 
-Sensors themselves may fail.
+Sensors may exhibit probabilistic failure modes that are important for anomaly detection challenges.
 
-These failures are important for anomaly detection challenges.
+Unlike physical system faults (which are owned by the twin), these are intrinsic sensor properties modelled as sensor parameters — not as `FaultDescriptor` objects. See [Faults](faults.md) for the distinction.
 
 Examples:
 
@@ -477,21 +477,28 @@ Examples:
 
 # Sensor Registry
 
-Sensors should be discoverable through a registry.
+The registry holds one **prototype** instance per sensor type, registered at application startup. The prototype is used exclusively for:
 
-Example:
+- Discovery and metadata retrieval
+- Compatibility validation (sensor ↔ twin quantity matching)
+- Type reference during session initialisation
+
+The prototype is never used directly for observation. When a contest session starts, the engine constructs a **fresh sensor instance** from the prototype's class, applying the contest's `sensor_configs` overrides:
+
+```python
+sensor_class = registered_sensor.__class__
+configured_sensor = sensor_class(**overrides)   # fresh instance, independent per session
+```
+
+This mirrors how digital twins are instantiated: each contest session gets its own independent sensor instances, carrying their own `_drift` accumulator, `_latency_buffer`, and any other stateful pipeline components. Two concurrent contests using the same sensor type never share state.
+
+Example registration:
 
 ```python
 sensor_registry.register(PositionSensor())
 
 sensor_registry.register(TemperatureSensor())
 ```
-
-The registry should provide:
-
-- Discovery
-- Validation
-- Metadata retrieval
 
 ---
 

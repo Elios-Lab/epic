@@ -49,9 +49,8 @@ class SensorDriftFault(_BaseFault):
     description_value = "Progressively biases temperature and humidity readings"
 
     def apply(self, state: SimulationState, severity: float, dt: float) -> None:
-        drift = severity * state.time
-        state.temperature += 0.05 * drift
-        state.humidity += 0.08 * drift
+        state.temperature += 0.05 * severity * dt
+        state.humidity += 0.08 * severity * dt
 
 
 class OccupancySpikeFault(_BaseFault):

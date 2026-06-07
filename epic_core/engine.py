@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import epic_core.registry as registry_module
 from epic_core.broadcaster import ContestBroadcaster
@@ -89,17 +89,64 @@ class SimulationEngine:
         )
 
         dt = 1.0 / session.sampling_rate_hz
-        sequence_id = 0
-        commit_interval = 100
+        commit_interval = 10   # commit every 10 steps (≤1 s at 10 Hz, 0.5 s at 20 Hz)
+
+        # ── Two-phase setup ───────────────────────────────────────────
+        two_phase = (
+            contest.end_of_observation is not None
+            and contest.prediction_horizon_seconds is not None
+        )
+        if two_phase:
+            end_of_observation_utc = self._as_utc(contest.end_of_observation)
+            simulation_end = end_of_observation_utc + timedelta(
+                seconds=contest.prediction_horizon_seconds
+            )
+            eval_n_steps = round(
+                contest.prediction_horizon_seconds * session.sampling_rate_hz
+            )
+        else:
+            end_of_observation_utc = None
+            simulation_end = self._as_utc(contest.end_date)
+            eval_n_steps = None
+
+        # ── Resume support ────────────────────────────────────────────
+        # Start sequence_id from the last committed observation so that a
+        # resumed session continues rather than restarting numbering from zero.
+        async with db_factory() as db:
+            max_seq_result = await db.execute(
+                select(func.max(SensorObservation.sequence_id)).where(
+                    SensorObservation.session_id == session.id
+                )
+            )
+        sequence_id = max_seq_result.scalar() or 0
+        committed_through = sequence_id
+
+        paused = False          # set True when PAUSED status detected
+        in_evaluation = False   # set True after end_of_observation is crossed
 
         async with db_factory() as db:
-            contest_end_date = self._as_utc(contest.end_date)
 
             while (
-                contest_end_date is not None
-                and datetime.now(timezone.utc) < contest_end_date
+                simulation_end is not None
+                and datetime.now(timezone.utc) < simulation_end
             ):
                 sequence_id += 1
+
+                # ── Phase transition check (two-phase contests only) ──
+                if two_phase and not in_evaluation:
+                    now = datetime.now(timezone.utc)
+                    if now >= end_of_observation_utc:
+                        in_evaluation = True
+                        # Notify all connected participants that the stream
+                        # is ending and the evaluation window is starting.
+                        await self._broadcast(
+                            str(session.contest_id),
+                            {
+                                "event": "evaluation_started",
+                                "observation_end_sequence_id": sequence_id - 1,
+                                "evaluation_steps": eval_n_steps,
+                            },
+                        )
 
                 loop = asyncio.get_running_loop()
                 new_state = await loop.run_in_executor(
@@ -110,10 +157,15 @@ class SimulationEngine:
                 )
 
                 sensors = {}
+                ground_truth = {}
                 for sensor in contest_sensors:
                     sensors[sensor.sensor_id] = self._call_plugin(
                         sensor.sensor_id, "observe", sensor.observe, new_state, dt
                     )
+                    # Clean latent-state value — no noise, drift, or outliers.
+                    raw = new_state.get_quantity(sensor.measured_quantity)
+                    if raw is not None:
+                        ground_truth[sensor.sensor_id] = float(raw)
 
                 active_faults = twin.get_active_faults()
                 labels = {
@@ -126,40 +178,61 @@ class SimulationEngine:
                 }
 
                 timestamp = datetime.now(timezone.utc)
-                observation = SensorObservation(
-                    session_id=session.id,
-                    sequence_id=sequence_id,
-                    timestamp=timestamp,
-                    sensors=sensors,
-                    labels=labels,
-                )
-                db.add(observation)
-                await self._broadcast(
-                    str(session.contest_id),
-                    {
-                        "timestamp": timestamp.isoformat(),
-                        "session_id": str(session.id),
-                        "sequence_id": sequence_id,
-                        "sensors": sensors,
-                    },
-                )
-                state = new_state
+
+                # ── Store only during the evaluation phase ────────────
+                should_store = (not two_phase) or in_evaluation
+                if should_store:
+                    observation = SensorObservation(
+                        session_id=session.id,
+                        sequence_id=sequence_id,
+                        timestamp=timestamp,
+                        sensors=sensors,
+                        ground_truth=ground_truth or None,
+                        labels=labels,
+                    )
+                    db.add(observation)
 
                 if sequence_id % commit_interval == 0:
-                    await db.commit()
+                    if should_store:
+                        await db.commit()
+                        committed_through = sequence_id
                     async with db_factory() as refresh_db:
                         refreshed = await self._load_contest(
                             refresh_db, session.contest_id
                         )
-                    contest_end_date = self._as_utc(refreshed.end_date)
+                    if not two_phase:
+                        # Classic mode: respect dynamic end_date updates.
+                        simulation_end = self._as_utc(refreshed.end_date)
+                    if refreshed.status == "PAUSED":
+                        paused = True
+                        break
+                    if refreshed.status == "CLOSED":
+                        break
 
+                # ── Broadcast only during the observation phase ───────
+                should_broadcast = (not two_phase) or (not in_evaluation)
+                if should_broadcast:
+                    await self._broadcast(
+                        str(session.contest_id),
+                        {
+                            "timestamp": timestamp.isoformat(),
+                            "session_id": str(session.id),
+                            "sequence_id": sequence_id,
+                            "committed_through": committed_through,
+                            "sensors": sensors,
+                        },
+                    )
+
+                state = new_state
                 await asyncio.sleep(dt)
 
-            await db.commit()
+            if not paused and should_store:
+                await db.commit()
+                committed_through = sequence_id
 
         async with db_factory() as db:
             session = await self._load_session(db, str(session.id))
-            session.status = "COMPLETED"
+            session.status = "PAUSED" if paused else "COMPLETED"
             session.ended_at = datetime.now(timezone.utc)
             await db.commit()
 

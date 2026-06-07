@@ -32,7 +32,10 @@ class ContestBroadcaster:
     async def broadcast(self, contest_id: str, payload: dict) -> None:
         for queue in list(self._subscribers.get(contest_id, set())):
             if queue.full():
-                queue.get_nowait()
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
             queue.put_nowait(payload)
 
     def subscriber_count(self, contest_id: str) -> int:

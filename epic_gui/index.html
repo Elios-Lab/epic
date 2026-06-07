@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EPIC</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='64' height='64' rx='10' fill='%23061a33'/%3E%3Cpath d='M8 32c4-9 8-9 12 0s8 9 12 0' stroke='%23ffffff' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M32 32l3-17 4 34 4-34 3 17' stroke='%230096c7' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='39' cy='31' r='4' fill='%230096c7'/%3E%3Cpath d='M46 32c3.5-8 7-8 10 0' stroke='%23ffffff' stroke-width='3' fill='none' stroke-linecap='round' opacity='.75'/%3E%3C/svg%3E"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -77,7 +82,7 @@
                 </div>
                 <div class="rounded-md border border-white/10 bg-white/10 p-5">
                   <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Automatic Scoring</div>
-                  <div class="mt-2 text-base leading-6 text-white/90">Predictions are evaluated continuously as new observations arrive, keeping the leaderboard live.</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">After the evaluation window closes, submit your full forecast and the platform scores it automatically against the hidden ground truth.</div>
                 </div>
               </div>
             </div>
@@ -244,16 +249,21 @@
                       </summary>
                       <div class="px-5 pb-5 pt-2 space-y-3 text-sm text-slate-700 leading-6">
                         <p>
-                          Register for an active contest, connect to its live sensor stream,
-                          collect observations, build a prediction, and submit it — all from
-                          a Jupyter notebook using the <strong>epic-elios-client</strong> SDK.
+                          Every contest runs in <strong>two phases</strong>. During the
+                          <strong>observation phase</strong> you watch live sensor data and build your model.
+                          After the <strong>evaluation window</strong> closes, you submit a single forecast
+                          covering every step in that window — all from a Jupyter notebook using the
+                          <strong>epic-elios-client</strong> SDK.
                         </p>
                         <ol class="list-decimal list-inside space-y-1">
                           <li>Install the SDK: <code class="bg-white rounded px-1 py-0.5 border border-slate-200">pip install "epic-elios-client[notebook]"</code></li>
-                          <li>Run <strong>quickstart.ipynb</strong> to learn the full workflow end to end.</li>
-                          <li>Study <strong>mass_spring_damper_forecasting.ipynb</strong> for a physics-based forecasting example.</li>
-                          <li>Adapt the model, improve it, and submit via <code class="bg-white rounded px-1 py-0.5 border border-slate-200">client.submit()</code>.</li>
+                          <li>Register for a contest and stream the observation phase with <code class="bg-white rounded px-1 py-0.5 border border-slate-200">client.collect()</code>.</li>
+                          <li>Train your model on the collected data (the evaluation window is hidden).</li>
+                          <li>Once the submission window opens, submit your forecast via <code class="bg-white rounded px-1 py-0.5 border border-slate-200">client.submit()</code>.</li>
                         </ol>
+                        <p class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                          <strong>Tip:</strong> The contest card shows the current phase — <em>Observation</em>, <em>Evaluation</em>, or <em>Submission open</em>. You can only submit once the submission window is open.
+                        </p>
                         <div class="flex flex-wrap gap-3 pt-1">
                           <a href="https://pypi.org/project/epic-elios-client/" target="_blank" rel="noopener"
                              class="inline-flex items-center gap-1.5 rounded-md border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-epic-navy hover:border-epic-cyan transition">
@@ -325,24 +335,22 @@
                                   </button>
                                   <button
                                     type="button"
-                                    @click="participant.monitoredContest && contestId(participant.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                    @click="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
                                     class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy focus:outline-none focus:ring-4 focus:ring-cyan-100"
                                   >
-                                    <span x-text="participant.monitoredContest && contestId(participant.monitoredContest) === contestId(contest) ? 'Stop' : 'Monitor'"></span>
+                                    <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop' : 'Monitor'"></span>
                                   </button>
                                 </div>
                               </div>
                             </article>
                           </template>
                         </div>
-                        <div x-show="participant.monitoredContest" class="space-y-3">
+                        <div x-show="monitor.monitoredContest" class="space-y-3">
                           <div class="flex items-center justify-between gap-4">
                             <div>
                               <h3 class="text-base font-semibold text-slate-900"
-                                  x-text="participant.monitoredContest?.name"></h3>
-                              <p class="text-sm text-slate-500">
-                                Live sensor readings — read-only view
-                              </p>
+                                  x-text="monitor.monitoredContest?.name"></h3>
+                              <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
                             </div>
                             <button
                               type="button"
@@ -352,7 +360,7 @@
                               Stop
                             </button>
                           </div>
-                          <p x-show="participant.monitorError" x-text="participant.monitorError"
+                          <p x-show="monitor.monitorError" x-text="monitor.monitorError"
                              class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
                           <div class="rounded-md border border-slate-200 bg-white p-4">
                             <div class="h-72">
@@ -385,7 +393,7 @@
                             <canvas x-ref="sensorChart" class="h-full w-full"></canvas>
                           </div>
                         </div>
-                        <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="grid gap-4 sm:grid-cols-3">
                           <div class="rounded-md bg-slate-50 p-4">
                             <div class="text-sm font-medium text-slate-500">Latest sequence</div>
                             <div class="mt-1 text-2xl font-semibold text-epic-deep" x-text="participant.latestObservation.sequence_id ?? '-'"></div>
@@ -394,29 +402,33 @@
                             <div class="text-sm font-medium text-slate-500">Latest timestamp</div>
                             <div class="mt-1 text-lg font-semibold text-epic-deep" x-text="participant.latestObservation.timestamp || '-'"></div>
                           </div>
+                          <div class="rounded-md p-4" :class="contestPhaseClass(participant.connectedContest)">
+                            <div class="text-sm font-medium opacity-70">Phase</div>
+                            <div class="mt-1 text-lg font-semibold" x-text="contestPhaseLabel(participant.connectedContest) || 'Observation'"></div>
+                          </div>
+                        </div>
+                        <div x-show="contestPhaseLabel(participant.connectedContest) !== 'Submission open'"
+                             class="rounded-md border border-cyan-200 bg-cyan-50 px-5 py-4 text-sm text-epic-navy">
+                          The stream is live during the <strong>observation phase</strong>. Collect data and build your model now.
+                          Submissions will be accepted once the evaluation window closes.
                         </div>
                         <form class="rounded-md border border-slate-200 bg-slate-50 p-5" @submit.prevent="submitPrediction()">
                           <h3 class="text-lg font-semibold text-slate-900">Submit Prediction</h3>
+                          <p class="mt-1 text-sm text-slate-500">
+                            Provide one list of predicted values per sensor, covering every step in the evaluation window
+                            (<code class="bg-white rounded px-1 border border-slate-200">eval_steps</code> values each).
+                          </p>
                           <label class="mt-4 block">
-                            <span class="text-sm font-medium text-slate-700">Prediction payload JSON</span>
+                            <span class="text-sm font-medium text-slate-700">Forecast payload JSON</span>
                             <textarea
                               x-model="participant.submissionPayload"
                               rows="8"
                               class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
                             ></textarea>
                           </label>
-                          <label class="mt-4 block">
-                            <span class="text-sm font-medium text-slate-700">Prediction from sequence</span>
-                            <input
-                              type="text"
-                              readonly
-                              :value="participant.latestObservation.sequence_id ?? ''"
-                              class="mt-2 w-full rounded-md border border-slate-200 bg-white px-4 py-3 text-slate-700"
-                            />
-                          </label>
                           <button
                             type="submit"
-                            :disabled="participant.submitting || participant.latestObservation.sequence_id === null"
+                            :disabled="participant.submitting"
                             class="mt-5 rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <span x-show="!participant.submitting">Submit</span>
@@ -536,6 +548,13 @@
                                   :class="statusBadgeClass(contest.status)"
                                   class="rounded-full px-2.5 py-1 text-xs font-semibold"
                                 ></span>
+                                <template x-if="contest.end_of_observation && contest.status === 'ACTIVE'">
+                                  <span
+                                    :class="contestPhaseClass(contest)"
+                                    class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                    x-text="contestPhaseLabel(contest)"
+                                  ></span>
+                                </template>
                               </div>
                               <dl class="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                                 <div>
@@ -568,6 +587,34 @@
                               <button
                                 x-show="contest.status === 'ACTIVE'"
                                 type="button"
+                                :disabled="organizer.pausingContestId === contestId(contest)"
+                                @click="pauseContest(contest)"
+                                class="rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.pausingContestId !== contestId(contest)">Pause</span>
+                                <span x-show="organizer.pausingContestId === contestId(contest)">Pausing…</span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'PAUSED'"
+                                type="button"
+                                :disabled="organizer.pausingContestId === contestId(contest)"
+                                @click="resumeContest(contest)"
+                                class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.pausingContestId !== contestId(contest)">Resume</span>
+                                <span x-show="organizer.pausingContestId === contestId(contest)">Resuming…</span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click.stop="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                              >
+                                <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop Monitor' : 'Monitor'"></span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
                                 @click="updateContestStatus(contest, 'CLOSED')"
                                 class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
                               >
@@ -580,6 +627,16 @@
                                 class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
                               >
                                 Extend Deadline
+                              </button>
+                              <button
+                                x-show="contest.status !== 'ACTIVE'"
+                                type="button"
+                                :disabled="organizer.deletingContestId === contestId(contest)"
+                                @click="deleteContest(contest)"
+                                class="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.deletingContestId !== contestId(contest)">Delete</span>
+                                <span x-show="organizer.deletingContestId === contestId(contest)">Deleting…</span>
                               </button>
                             </div>
                           </div>
@@ -638,6 +695,30 @@
                           </div>
                         </article>
                       </template>
+                    </div>
+
+                    <div x-show="monitor.monitoredContest" class="space-y-3">
+                      <div class="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 class="text-base font-semibold text-slate-900"
+                              x-text="monitor.monitoredContest?.name"></h3>
+                          <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
+                        </div>
+                        <button
+                          type="button"
+                          @click="stopMonitor()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                      <p x-show="monitor.monitorError" x-text="monitor.monitorError"
+                         class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
+                      <div class="rounded-md border border-slate-200 bg-white p-4">
+                        <div class="h-72">
+                          <canvas x-ref="monitorChart" class="h-full w-full"></canvas>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -706,10 +787,38 @@
                             <span class="text-sm font-medium text-slate-700">Sampling rate (Hz)</span>
                             <input x-model.number="organizer.form.sampling_rate_hz" type="number" min="0.1" step="0.1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
                           </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Score against</span>
+                            <p class="mt-0.5 text-xs text-slate-500">Choose what the submission MAE/RMSE is computed against.</p>
+                            <select x-model="organizer.form.score_against" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                              <option value="ground_truth">Ground truth — noiseless latent state (recommended)</option>
+                              <option value="sensors">Sensor readings — noisy measurements</option>
+                            </select>
+                          </label>
                           <label class="block md:col-span-2">
                             <span class="text-sm font-medium text-slate-700">Description</span>
                             <textarea x-model="organizer.form.description" rows="3" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
                           </label>
+                          <div class="md:col-span-2 rounded-md border border-cyan-200 bg-cyan-50 p-4 space-y-4">
+                            <div>
+                              <p class="text-sm font-semibold text-epic-navy">Two-phase structure (required)</p>
+                              <p class="mt-1 text-xs text-slate-600">All contests use a two-phase model: participants observe the live stream, then forecast the hidden evaluation window.</p>
+                            </div>
+                            <div class="grid gap-4 sm:grid-cols-2">
+                              <label class="block">
+                                <span class="text-sm font-medium text-slate-700">End of observation phase</span>
+                                <p class="mt-0.5 text-xs text-slate-500">Sensor stream is visible to participants until this date.</p>
+                                <input x-model="organizer.form.end_of_observation" type="datetime-local" required
+                                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                              </label>
+                              <label class="block">
+                                <span class="text-sm font-medium text-slate-700">Prediction horizon (seconds)</span>
+                                <p class="mt-0.5 text-xs text-slate-500">Duration of the hidden evaluation window. Participants forecast this period.</p>
+                                <input x-model.number="organizer.form.prediction_horizon_seconds" type="number" min="1" step="1" required
+                                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                              </label>
+                            </div>
+                          </div>
                         </div>
                         <div class="grid gap-4 lg:grid-cols-2">
                           <label class="block">
@@ -828,6 +937,9 @@
                               <button type="button" @click="sortAdminContests('end_date')" class="hover:text-epic-navy">End</button>
                             </th>
                             <th class="px-4 py-3 font-semibold">Transition</th>
+                            <th class="px-4 py-3 font-semibold">Monitor</th>
+                            <th class="px-4 py-3 font-semibold">Pause / Resume</th>
+                            <th class="px-4 py-3 font-semibold">Delete</th>
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200 bg-white">
@@ -853,10 +965,81 @@
                                   </template>
                                 </select>
                               </td>
+                              <td class="px-4 py-3">
+                                <button
+                                  x-show="contest.status === 'ACTIVE'"
+                                  type="button"
+                                  @click="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                  class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                >
+                                  <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop' : 'Monitor'"></span>
+                                </button>
+                              </td>
+                              <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                  <button
+                                    x-show="contest.status === 'ACTIVE'"
+                                    type="button"
+                                    :disabled="admin.pausingContestId === contestId(contest)"
+                                    @click="pauseContest(contest)"
+                                    class="rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <span x-show="admin.pausingContestId !== contestId(contest)">Pause</span>
+                                    <span x-show="admin.pausingContestId === contestId(contest)">Pausing…</span>
+                                  </button>
+                                  <button
+                                    x-show="contest.status === 'PAUSED'"
+                                    type="button"
+                                    :disabled="admin.pausingContestId === contestId(contest)"
+                                    @click="resumeContest(contest)"
+                                    class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <span x-show="admin.pausingContestId !== contestId(contest)">Resume</span>
+                                    <span x-show="admin.pausingContestId === contestId(contest)">Resuming…</span>
+                                  </button>
+                                </div>
+                              </td>
+                              <td class="px-4 py-3">
+                                <button
+                                  x-show="contest.status !== 'ACTIVE'"
+                                  type="button"
+                                  :disabled="admin.deletingContestId === contestId(contest)"
+                                  @click="deleteContest(contest)"
+                                  class="rounded-md border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <span x-show="admin.deletingContestId !== contestId(contest)">Delete</span>
+                                  <span x-show="admin.deletingContestId === contestId(contest)">Deleting…</span>
+                                </button>
+                                <span x-show="contest.status === 'ACTIVE'" class="text-xs text-slate-400">Close first</span>
+                              </td>
                             </tr>
                           </template>
                         </tbody>
                       </table>
+                    </div>
+
+                    <div x-show="monitor.monitoredContest" class="space-y-3">
+                      <div class="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 class="text-base font-semibold text-slate-900"
+                              x-text="monitor.monitoredContest?.name"></h3>
+                          <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
+                        </div>
+                        <button
+                          type="button"
+                          @click="stopMonitor()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                      <p x-show="monitor.monitorError" x-text="monitor.monitorError"
+                         class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
+                      <div class="rounded-md border border-slate-200 bg-white p-4">
+                        <div class="h-72">
+                          <canvas x-ref="monitorChart" class="h-full w-full"></canvas>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1020,6 +1203,59 @@
           </section>
         </main>
       </template>
+
+      <!-- Delete-confirmation modal -->
+      <template x-if="deleteModal.open">
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="'delete-modal-title'"
+        >
+          <!-- backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            @click="deleteModal.cancel()"
+          ></div>
+
+          <!-- panel -->
+          <div class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+            <div class="flex items-start gap-4">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <svg class="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <h3 id="delete-modal-title" class="text-base font-semibold text-slate-900">Delete contest</h3>
+                <p class="mt-1 text-sm text-slate-600">
+                  Are you sure you want to delete
+                  <strong x-text="deleteModal.contestName" class="text-slate-900"></strong>?
+                </p>
+                <p class="mt-2 text-sm text-red-700">
+                  This will permanently remove all associated data — registrations, submissions, scores, and sensor observations. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                @click="deleteModal.cancel()"
+                class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy focus:outline-none focus:ring-4 focus:ring-cyan-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                @click="deleteModal.confirm()"
+                class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
 
     <script>
@@ -1039,6 +1275,12 @@
             username: "",
             role: "",
           },
+          monitor: {
+            monitoredContest: null,
+            monitorChart: null,
+            monitorSocket: null,
+            monitorError: "",
+          },
           participant: {
             tab: "contests",
             dashboardLoaded: false,
@@ -1049,10 +1291,6 @@
             registrations: [],
             registeredContestIds: new Set(),
             connectedContest: null,
-            monitoredContest: null,
-            monitorChart: null,
-            monitorSocket: null,
-            monitorError: "",
             latestObservation: {
               sequence_id: null,
               timestamp: "",
@@ -1060,9 +1298,7 @@
             submissionPayload: JSON.stringify(
               {
                 forecast: {
-                  horizon_1: {},
-                  horizon_5: {},
-                  horizon_10: {},
+                  sensor_id: [],
                 },
               },
               null,
@@ -1079,6 +1315,8 @@
             loadingTemplates: false,
             loadingLeaderboardId: null,
             creating: false,
+            deletingContestId: null,
+            pausingContestId: null,
             contests: [],
             templates: [],
             selectedTemplate: null,
@@ -1095,6 +1333,10 @@
               fault_schedule: [],
               initial_conditions: null,
               task_type: "FORECASTING",
+              metric_ids: ["mae"],
+              score_against: "ground_truth",
+              end_of_observation: "",
+              prediction_horizon_seconds: 3600,
             },
             expandedContestId: null,
             extendingContestId: null,
@@ -1102,6 +1344,12 @@
             leaderboards: {},
             error: "",
             success: "",
+          },
+          deleteModal: {
+            open: false,
+            contestName: "",
+            confirm: () => {},
+            cancel: () => {},
           },
           admin: {
             tab: "overview",
@@ -1113,6 +1361,8 @@
             totalUsers: 0,
             contestSortKey: "name",
             contestSortDirection: "asc",
+            deletingContestId: null,
+            pausingContestId: null,
             userSearch: "",
             createUserForm: { username: "", email: "", password: "", role: "PARTICIPANT" },
             creatingUser: false,
@@ -1236,11 +1486,30 @@
             }
             return Number(value).toFixed(4);
           },
+          contestPhaseLabel(contest) {
+            if (!contest.end_of_observation) return "";
+            const now = Date.now();
+            const obsEnd = new Date(contest.end_of_observation).getTime();
+            const evalEnd = obsEnd + (contest.prediction_horizon_seconds || 0) * 1000;
+            if (now < obsEnd) return "Observation";
+            if (now < evalEnd) return "Evaluation";
+            return "Submission open";
+          },
+          contestPhaseClass(contest) {
+            if (!contest.end_of_observation) return "";
+            const now = Date.now();
+            const obsEnd = new Date(contest.end_of_observation).getTime();
+            const evalEnd = obsEnd + (contest.prediction_horizon_seconds || 0) * 1000;
+            if (now < obsEnd) return "bg-cyan-100 text-cyan-800";
+            if (now < evalEnd) return "bg-purple-100 text-purple-800";
+            return "bg-emerald-100 text-emerald-800";
+          },
           statusBadgeClass(status) {
             const classes = {
               ACTIVE: "bg-emerald-100 text-emerald-800",
               SCHEDULED: "bg-yellow-100 text-yellow-800",
               DRAFT: "bg-slate-200 text-slate-700",
+              PAUSED: "bg-amber-100 text-amber-800",
               CLOSED: "bg-red-100 text-red-800",
               ARCHIVED: "bg-slate-300 text-slate-700",
             };
@@ -1326,9 +1595,7 @@
             this.participant.submissionPayload = JSON.stringify(
               {
                 forecast: {
-                  horizon_1: {},
-                  horizon_5: {},
-                  horizon_10: {},
+                  sensor_id: [],
                 },
               },
               null,
@@ -1353,28 +1620,28 @@
           },
           startMonitor(contest) {
             this.stopMonitor();
-            this.participant.monitoredContest = contest;
-            this.participant.monitorError = "";
+            this.monitor.monitoredContest = contest;
+            this.monitor.monitorError = "";
             this.$nextTick(() => {
               this.createMonitorChart();
               this.openMonitorStream(contest);
             });
           },
           stopMonitor() {
-            if (this.participant.monitorSocket) {
-              this.participant.monitorSocket.close();
-              this.participant.monitorSocket = null;
+            if (this.monitor.monitorSocket) {
+              this.monitor.monitorSocket.close();
+              this.monitor.monitorSocket = null;
             }
-            if (this.participant.monitorChart) {
-              this.participant.monitorChart.destroy();
-              this.participant.monitorChart = null;
+            if (this.monitor.monitorChart) {
+              this.monitor.monitorChart.destroy();
+              this.monitor.monitorChart = null;
             }
-            this.participant.monitoredContest = null;
+            this.monitor.monitoredContest = null;
           },
           createMonitorChart() {
             const canvas = this.$refs.monitorChart;
             if (!canvas || typeof Chart === "undefined") return;
-            this.participant.monitorChart = new Chart(canvas, {
+            this.monitor.monitorChart = new Chart(canvas, {
               type: "line",
               data: { labels: [], datasets: [] },
               options: {
@@ -1394,22 +1661,22 @@
             const contestId = this.contestId(contest);
             const protocol = window.location.protocol === "https:" ? "wss" : "ws";
             const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${contestId}?token=${encodeURIComponent(this.token)}`;
-            this.participant.monitorSocket = new WebSocket(url);
-            this.participant.monitorSocket.onmessage = (event) => {
+            this.monitor.monitorSocket = new WebSocket(url);
+            this.monitor.monitorSocket.onmessage = (event) => {
               const observation = JSON.parse(event.data);
               this.appendMonitorObservation(observation);
             };
-            this.participant.monitorSocket.onerror = () => {
-              this.participant.monitorError = "Monitor stream connection failed.";
+            this.monitor.monitorSocket.onerror = () => {
+              this.monitor.monitorError = "Monitor stream connection failed.";
             };
-            this.participant.monitorSocket.onclose = () => {
-              if (this.participant.monitoredContest) {
-                this.participant.monitorError = "Monitor stream disconnected. The contest simulation may not be running.";
+            this.monitor.monitorSocket.onclose = () => {
+              if (this.monitor.monitoredContest) {
+                this.monitor.monitorError = "Monitor stream disconnected. The contest simulation may not be running.";
               }
             };
           },
           appendMonitorObservation(observation) {
-            const chart = this.participant.monitorChart;
+            const chart = this.monitor.monitorChart;
             if (!chart) return;
             const sensors = observation.sensors || {};
             const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
@@ -1534,7 +1801,6 @@
                   method: "POST",
                   body: JSON.stringify({
                     task_id: "forecasting",
-                    prediction_from_sequence: this.participant.latestObservation.sequence_id,
                     payload,
                   }),
                 }
@@ -1600,6 +1866,7 @@
             this.organizer.tab = tab;
             this.organizer.error = "";
             this.organizer.success = "";
+            if (tab !== "contests") this.stopMonitor();
             if (tab === "contests") {
               await this.loadOrganizerContests();
             }
@@ -1664,6 +1931,84 @@
             this.organizer.contests = this.organizer.contests.map((contest) =>
               this.contestId(contest) === updatedId ? updated : contest
             );
+          },
+          async pauseContest(contest) {
+            const cid = this.contestId(contest);
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.pausingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/contests/${cid}/pause`, { method: "PUT" });
+              if (isOrganizer) {
+                this.replaceOrganizerContest(updated);
+              } else {
+                this.admin.contests = this.admin.contests.map((c) =>
+                  this.contestId(c) === cid ? updated : c
+                );
+              }
+              ns.success = `Contest "${contest.name}" paused — simulation will stop within the next few steps.`;
+            } catch (error) {
+              ns.error = error.message || "Pause failed.";
+            } finally {
+              ns.pausingContestId = null;
+            }
+          },
+          async resumeContest(contest) {
+            const cid = this.contestId(contest);
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.pausingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/contests/${cid}/resume`, { method: "PUT" });
+              if (isOrganizer) {
+                this.replaceOrganizerContest(updated);
+              } else {
+                this.admin.contests = this.admin.contests.map((c) =>
+                  this.contestId(c) === cid ? updated : c
+                );
+              }
+              ns.success = `Contest "${contest.name}" resumed — simulation restarting.`;
+            } catch (error) {
+              ns.error = error.message || "Resume failed.";
+            } finally {
+              ns.pausingContestId = null;
+            }
+          },
+          async deleteContest(contest) {
+            const cid = this.contestId(contest);
+            const confirmed = await new Promise((resolve) => {
+              this.deleteModal.contestName = contest.name;
+              this.deleteModal.confirm = () => { this.deleteModal.open = false; resolve(true); };
+              this.deleteModal.cancel  = () => { this.deleteModal.open = false; resolve(false); };
+              this.deleteModal.open = true;
+            });
+            if (!confirmed) return;
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.deletingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              await this.apiRequest(`/api/v1/contests/${cid}`, { method: "DELETE" });
+              if (isOrganizer) {
+                this.organizer.contests = this.organizer.contests.filter(
+                  (c) => this.contestId(c) !== cid
+                );
+              } else {
+                this.admin.contests = this.admin.contests.filter(
+                  (c) => this.contestId(c) !== cid
+                );
+              }
+              ns.success = `Contest "${contest.name}" deleted.`;
+            } catch (error) {
+              ns.error = error.message || "Delete failed.";
+            } finally {
+              ns.deletingContestId = null;
+            }
           },
           async toggleLeaderboard(contest) {
             const contestId = this.contestId(contest);
@@ -1733,6 +2078,10 @@
                 fault_schedule: fullTemplate.fault_schedule || [],
                 initial_conditions: fullTemplate.initial_conditions || null,
                 task_type: fullTemplate.task_type || "FORECASTING",
+                metric_ids: fullTemplate.metric_ids || ["mae"],
+                score_against: "ground_truth",
+                end_of_observation: "",
+                prediction_horizon_seconds: 3600,
               };
               this.organizer.newStep = 2;
             } catch (error) {
@@ -1749,6 +2098,7 @@
                 description: this.organizer.form.description,
                 visibility: this.organizer.form.visibility,
                 task_type: this.organizer.form.task_type,
+                metric_ids: this.organizer.form.metric_ids,
                 twin_id: this.organizer.form.twin_id,
                 sensor_configs: this.organizer.form.sensor_configs,
                 fault_schedule: this.organizer.form.fault_schedule,
@@ -1756,6 +2106,9 @@
                 sampling_rate_hz: Number(this.organizer.form.sampling_rate_hz),
                 start_date: this.toApiDateTime(this.organizer.form.start_date),
                 end_date: this.toApiDateTime(this.organizer.form.end_date),
+                end_of_observation: this.toApiDateTime(this.organizer.form.end_of_observation),
+                prediction_horizon_seconds: Number(this.organizer.form.prediction_horizon_seconds),
+                score_against: this.organizer.form.score_against,
               };
               const created = await this.apiRequest("/api/v1/contests", {
                 method: "POST",
@@ -1783,6 +2136,7 @@
             this.admin.tab = tab;
             this.admin.error = "";
             this.admin.success = "";
+            if (tab !== "overview") this.stopMonitor();
             if (tab === "overview") {
               await this.loadAdminOverview();
             }
@@ -1848,10 +2202,13 @@
             });
           },
           allowedStatusTransitions(status) {
+            // Pause and resume are handled by dedicated PUT endpoints and
+            // their own buttons — not via this transition selector.
             const transitions = {
               DRAFT: ["SCHEDULED", "ACTIVE"],
               SCHEDULED: ["ACTIVE"],
               ACTIVE: ["CLOSED"],
+              PAUSED: ["CLOSED"],
               CLOSED: ["ARCHIVED"],
               ARCHIVED: [],
             };

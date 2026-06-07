@@ -29,6 +29,7 @@ class ElectricMotorState(SimulationState):
             PhysicalQuantity.VOLTAGE: self.voltage,
             PhysicalQuantity.ROTATIONAL_SPEED: self.speed,
             PhysicalQuantity.TEMPERATURE: self.temperature,
+            PhysicalQuantity.TORQUE: self.torque,
         }.get(quantity)
 
 
@@ -150,6 +151,7 @@ class ElectricMotorTwin(DigitalTwin):
             PhysicalQuantity.VOLTAGE,
             PhysicalQuantity.ROTATIONAL_SPEED,
             PhysicalQuantity.TEMPERATURE,
+            PhysicalQuantity.TORQUE,
         }
 
     def get_faults(self) -> list[FaultDescriptor]:

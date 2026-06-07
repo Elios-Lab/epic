@@ -201,7 +201,7 @@ uv sync
 ### Run the development server
 
 ```bash
-uv run uvicorn epic_api.main:app --reload
+uv run uvicorn "epic_api.main:create_app" --factory --reload
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -291,8 +291,10 @@ Deliverables:
 
 - Three-role system: ADMINISTRATOR, ORGANIZER, PARTICIPANT ✅
 - Contest registration (participants join SCHEDULED or ACTIVE contests) ✅
-- Submission management with temporal integrity anchor (`prediction_from_sequence`) ✅
+- Two-phase contest model: observation window → hidden evaluation window → submission window ✅
+- Submission payload: flat sequence of `eval_steps` predicted values per sensor ✅
 - MAE scoring for forecasting tasks, F1 scoring for anomaly detection tasks ✅
+- Scoring against clean latent-state values (noiseless ground truth) by default ✅
 - Leaderboards with automatic ranking after each scored submission ✅
 - Deadline extension for organizers and admins ✅
 
@@ -300,7 +302,7 @@ Success criteria:
 
 - Multiple users can participate in competitions. ✅
 - Leaderboards update automatically after submissions. ✅
-- Submissions are verified as temporally honest (not post-hoc). ✅
+- Submissions are only accepted after the evaluation window closes, preventing post-hoc prediction. ✅
 
 ---
 

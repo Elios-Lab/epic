@@ -1,6 +1,6 @@
 # Scoring Framework
 
-> Related: [Plugin System](plugin-system.md) — canonical `ScoringMetric` interface · [Domain Model](domain-model.md) — `Score` and `LeaderboardEntry` entities · [Contest Management](contest-management.md)
+> Related: [Architecture](architecture.md) — canonical `ScoringMetric` interface · [Domain Model](domain-model.md) — `Score` and `LeaderboardEntry` entities · [Contest Management](contest-management.md)
 
 The Scoring Framework is responsible for evaluating participant submissions and generating contest rankings.
 
@@ -67,7 +67,7 @@ ROC AUC
 
 # Metric Interface
 
-Every metric must implement the `ScoringMetric` abstract class defined in [Plugin System](plugin-system.md).
+Every metric must implement the `ScoringMetric` abstract class defined in `epic_core/interfaces.py` (see [Architecture](architecture.md)).
 
 The interface requires implementing: `metric_id`, `direction` (`"minimize"` or `"maximize"`), `compute(y_true, y_pred)`, and `metadata()`.
 
@@ -117,72 +117,93 @@ Leaderboard Update
 
 ---
 
-# Submission Integrity: The Temporal Anchor
+# Submission Integrity: The Two-Phase Structure
 
 ## The Problem
 
 EPIC competitions run on a shared real-time simulation. Because all participants receive the same sensor readings, a dishonest participant could observe future data and then submit predictions that were computed after the fact — making them appear to have forecast something that was already known.
 
-## The Solution: `prediction_from_sequence`
+## The Solution: Two-Phase Contests
 
-Every submission must include a `prediction_from_sequence` field: the `sequence_id` of the most recent observation the participant used when producing their prediction.
+Every contest is a **two-phase** contest:
 
-At submission time, the server performs the **temporal integrity check**:
+1. **Observation phase** — the simulation runs from `start_date` to `end_of_observation`. Participants observe sensor readings via the WebSocket stream and build their forecasting models.
+2. **Evaluation phase** — from `end_of_observation` for `prediction_horizon_seconds`. The simulation continues producing ground truth, but no submissions are accepted yet.
 
-```text
-Is SensorObservation(sequence_id = prediction_from_sequence)
-published at or before submitted_at?
-```
+Submissions are **only accepted after `end_of_observation + prediction_horizon_seconds`** — once the full ground truth for the evaluation window is available. At that point every participant forecasts the same evaluation window, and no one can have seen it in advance.
 
-If the answer is no — i.e., the participant claims to have used an observation that hadn't been produced yet — the submission is rejected with status `REJECTED`.
+This guarantees that every accepted submission is **genuinely prospective**: the predictions it contains could only have been built from data observed during the observation phase.
 
-This guarantees that every accepted submission is **genuinely prospective**: the predictions it contains could only have been built from data the participant actually had at the moment they submitted.
+## Evaluation Window
 
-## How Scoring Uses the Anchor
-
-For a forecasting task with horizon H, the scoring engine evaluates the submission's predictions against observations:
+The number of evaluation steps is:
 
 ```text
-sequence_id = prediction_from_sequence + 1
-sequence_id = prediction_from_sequence + 2
-...
-sequence_id = prediction_from_sequence + H
+eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
 ```
 
-These observations are loaded from the server's private `SensorObservation` store.
+Participants must submit exactly `eval_steps` predicted values per sensor.
 
 ## PENDING Submissions
 
-If one or more horizon observations have not yet been produced by the simulation at the time of scoring (because the participant submitted very close to the current simulation time), the submission status is set to `PENDING` and scoring is deferred.
-
-**Known limitation (Phase 2):** there is currently no background job that automatically retries PENDING submissions when the missing observations become available. A participant whose submission lands in PENDING must wait until the organizer or administrator manually re-triggers evaluation, or resubmit. A retry mechanism is planned for Phase 3.
-
-## What This Mechanism Does Not Prevent
-
-The temporal anchor does not prevent **collusion**: one participant sharing their collected data or trained model with another. EPIC is an educational platform — preventing collusion entirely is a policy and academic integrity matter, not a technical one. Instructors can detect identical or near-identical submissions through post-hoc similarity analysis.
-
-The anchor also does not prevent a participant from observing one tick and submitting for the very next tick (a ~100ms window at 10 Hz). In practice this is negligible for any non-trivial prediction horizon.
+If the evaluation window is not yet fully populated with ground-truth observations when scoring runs, the submission status is set to `PENDING` and scoring is deferred until enough observations are available.
 
 ---
 
 # Forecasting Tasks
 
-Forecasting tasks require participants to predict future sensor values.
+Forecasting tasks require participants to predict the full evaluation window of sensor values.
 
-Example:
+The payload must contain one list of `eval_steps` values per sensor:
 
 ```json
 {
   "forecast": {
-    "horizon_1": {
-      "position": 0.12
-    },
-    "horizon_5": {
-      "position": 0.24
-    }
+    "position": [0.12, 0.13, 0.14, ...],
+    "velocity": [0.01, 0.02, 0.01, ...]
   }
 }
 ```
+
+Each list must have exactly `eval_steps` entries (one predicted value per evaluation step).
+
+---
+
+# Ground Truth vs. Sensor Readings
+
+Every sensor applies a configurable measurement pipeline — noise, drift,
+quantisation, outlier injection — before producing a reading.
+Scoring against noisy sensor readings would penalise a perfect physical model
+for unpredictable measurement errors.
+
+EPIC stores two separate reference signals for each evaluation-phase observation:
+
+| Field | Contents | Participant-visible? |
+|-------|----------|---------------------|
+| `sensors` | Corrupted sensor reading (gain · noise · drift · …) | ✓ (observation stream) |
+| `ground_truth` | Clean latent-state value from the digital twin, before any sensor corruption | ✗ (hidden) |
+
+The organiser chooses which reference is used for leaderboard scoring via the
+`score_against` task configuration field:
+
+```json
+"score_against": "ground_truth"
+```
+
+or
+
+```json
+"score_against": "sensors"
+```
+
+**Default:** `"ground_truth"` — scores reflect genuine model quality, not measurement noise.
+
+**When to choose `"sensors"`:** if the task intentionally asks participants to
+forecast the raw measurement (e.g. sensor drift is itself the phenomenon of
+interest), choose `"sensors"` so the ground truth matches what was observed.
+
+The `scored_against` key in each `Score.details` record records which reference
+was used at evaluation time.
 
 ---
 

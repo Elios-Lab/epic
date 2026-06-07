@@ -1,6 +1,6 @@
 # Physical Quantities
 
-> Related: [Plugin System](plugin-system.md) · [Sensors](sensors.md) · [Digital Twins](digital-twins.md)
+> Related: [Architecture](architecture.md) · [Sensors](sensors.md) · [Digital Twins](digital-twins.md)
 
 EPIC uses a shared ontology of physical quantities to decouple sensors from digital twins. A sensor declares which physical quantity it measures; a twin declares which physical quantities its latent state provides. The engine matches them at session start.
 

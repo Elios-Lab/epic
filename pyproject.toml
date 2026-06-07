@@ -19,10 +19,16 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["epic_api*", "epic_client*", "epic_core*", "epic_sensors*", "epic_twins*"]
 
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+norecursedirs = ["epic_client"]
+
 [dependency-groups]
 dev = [
     "httpx2",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "requests>=2.34.2",
+    "websocket-client>=1.9.0",
 ]

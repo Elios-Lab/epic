@@ -10,8 +10,10 @@ def contest_payload(name: str) -> dict:
         "twin_id": "mass_spring_damper",
         "sensor_configs": [{"sensor_id": "position"}],
         "sampling_rate_hz": 20.0,
-        "start_date": now.isoformat(),
-        "end_date": (now + timedelta(seconds=1)).isoformat(),
+        "start_date": (now - timedelta(seconds=10)).isoformat(),
+        "end_of_observation": (now - timedelta(seconds=2)).isoformat(),
+        "prediction_horizon_seconds": 0.1,
+        "end_date": (now + timedelta(seconds=30)).isoformat(),
     }
 
 

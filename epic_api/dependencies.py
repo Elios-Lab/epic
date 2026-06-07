@@ -4,9 +4,10 @@ from uuid import UUID
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.security.utils import get_authorization_scheme_param
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import HTTPConnection
+from starlette.requests import HTTPConnection, Request
 
 from epic_core.auth import decode_access_token
 from epic_core.config import Settings, get_settings as core_get_settings
@@ -14,7 +15,9 @@ from epic_core.db.models import User
 from epic_core.db.session import get_db
 from epic_core.exceptions import InsufficientPermissionsError, InvalidCredentialsError
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# Kept only for OpenAPI / Swagger UI — the lock icon and token input box.
+# Not used in the actual auth logic.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 def get_settings() -> Settings:
@@ -29,8 +32,25 @@ def get_broadcaster(connection: HTTPConnection):
     return connection.app.state.broadcaster
 
 
+async def _extract_bearer_token(request: Request) -> str:
+    """
+    Read the Bearer token from the Authorization header and raise
+    InvalidCredentialsError (→ our standard 401 envelope) if it is
+    absent or malformed.  This replaces OAuth2PasswordBearer as the
+    actual token source so that every 401 path produces the same
+    {"error": {"code": "INVALID_CREDENTIALS", …}} response.
+    """
+    authorization = request.headers.get("Authorization", "")
+    scheme, token = get_authorization_scheme_param(authorization)
+    if not authorization or scheme.lower() != "bearer" or not token:
+        raise InvalidCredentialsError(
+            "Missing or malformed Authorization header — expected 'Bearer <token>'"
+        )
+    return token
+
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: str = Depends(_extract_bearer_token),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> User:

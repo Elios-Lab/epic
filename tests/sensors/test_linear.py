@@ -1,3 +1,5 @@
+import pytest
+
 from epic_core.quantities import PhysicalQuantity
 from epic_core.testing import MockState
 from epic_sensors.acceleration import AccelerationSensor
@@ -64,3 +66,94 @@ def test_sensor_pipeline_applies_gain_bias_saturation_and_quantization():
 
     assert sensor.observe(MockState(value=1.2), dt=0.1) == 3.5
     assert sensor.observe(MockState(value=10.0), dt=0.1) == 5.0
+
+
+def test_drift_accumulates_over_steps():
+    sensor = PositionSensor(drift_rate=0.1)
+    state = MockState(value=0.0)
+    dt = 1.0
+
+    readings = [sensor.observe(state, dt=dt) for _ in range(5)]
+
+    # Each step accumulates 0.1 * 1.0 more drift; readings should be strictly increasing
+    for i in range(1, len(readings)):
+        assert readings[i] > readings[i - 1], (
+            f"drift not accumulating: readings[{i}]={readings[i]} <= readings[{i-1}]={readings[i-1]}"
+        )
+    # After 5 steps total drift = 0.1 * 1.0 * 5 = 0.5
+    assert readings[-1] == pytest.approx(0.5, abs=1e-9)
+
+
+def test_latency_buffer_delays_reading_by_correct_steps():
+    sensor = PositionSensor(latency_steps=2)
+    state_sequence = [MockState(value=float(v)) for v in range(10)]
+    dt = 0.1
+
+    readings = [sensor.observe(s, dt=dt) for s in state_sequence]
+
+    # With latency_steps=2 the sensor should return the value from 2 steps ago.
+    # Steps 0 and 1 return the oldest buffered value (0.0) while the buffer fills.
+    assert readings[0] == pytest.approx(0.0)
+    assert readings[1] == pytest.approx(0.0)
+    # From step 2 onward, reading at step i should equal value at step i-2.
+    for i in range(2, len(readings)):
+        assert readings[i] == pytest.approx(float(i - 2)), (
+            f"step {i}: expected {i - 2}, got {readings[i]}"
+        )
+
+
+def test_p_false_reading_replaces_measurement():
+    # p_false_reading=1.0 means every reading is a wrong value
+    sensor = PositionSensor(
+        p_false_reading=1.0,
+        min_value=-10.0,
+        max_value=10.0,
+    )
+    state = MockState(value=0.0)
+
+    readings = [sensor.observe(state) for _ in range(50)]
+
+    # With p=1.0 every reading is a random uniform in [min, max]; none should be exactly 0.0
+    # (the probability of hitting exactly 0.0 from a continuous uniform is zero)
+    assert all(-10.0 <= r <= 10.0 for r in readings)
+    # At least some readings should differ from the true value of 0.0
+    assert any(r != pytest.approx(0.0) for r in readings)
+
+
+def test_p_false_reading_zero_produces_true_value():
+    sensor = PositionSensor(p_false_reading=0.0)
+    state = MockState(value=3.0)
+
+    readings = [sensor.observe(state) for _ in range(20)]
+
+    assert all(r == pytest.approx(3.0) for r in readings)
+
+
+def test_p_outlier_produces_spikes():
+    # p_outlier=1.0 means every reading is an outlier spike.
+    # noise_std=0.0 keeps the base measurement at exactly 0 so the spike
+    # (±10 * (noise_std or 1.0) = ±10) is the only contribution.
+    sensor = PositionSensor(p_outlier=1.0, noise_std=0.0)
+    state = MockState(value=0.0)
+
+    readings = [sensor.observe(state) for _ in range(50)]
+
+    assert all(abs(r) == pytest.approx(10.0) for r in readings), (
+        f"expected all readings to be ±10 outliers: {readings[:5]}"
+    )
+
+
+def test_saturation_clamps_min_and_max():
+    sensor = PositionSensor(min_value=0.0, max_value=5.0)
+
+    assert sensor.observe(MockState(value=-100.0)) == pytest.approx(0.0)
+    assert sensor.observe(MockState(value=100.0)) == pytest.approx(5.0)
+    assert sensor.observe(MockState(value=2.5)) == pytest.approx(2.5)
+
+
+def test_quantization_rounds_to_resolution():
+    sensor = PositionSensor(quantization=0.25)
+
+    assert sensor.observe(MockState(value=1.1)) == pytest.approx(1.0)
+    assert sensor.observe(MockState(value=1.15)) == pytest.approx(1.25)
+    assert sensor.observe(MockState(value=1.0)) == pytest.approx(1.0)

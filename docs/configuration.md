@@ -1,6 +1,6 @@
 # Configuration
 
-> Related: [Architecture](architecture.md) · [Plugin Registry](plugin-registry.md) · [Authentication](authentication.md)
+> Related: [Architecture](architecture.md) · [Authentication](authentication.md)
 
 EPIC is configured through environment variables.
 
@@ -137,8 +137,7 @@ ADMIN_EMAIL=admin@elioslab.it
 ADMIN_PASSWORD=change-me-in-production
 ```
 
-Remove or unset these variables after the first deployment if you prefer
-not to re-seed on every restart (the account will persist in the database).
+The bootstrap step is idempotent: if the account already exists with the ADMINISTRATOR role, startup continues without changes. It is therefore safe to leave these variables set across restarts. Remove them only if you want to prevent automatic role promotion of an existing account on the next restart.
 
 ---
 

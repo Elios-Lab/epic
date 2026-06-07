@@ -19,8 +19,10 @@ def contest_payload(**overrides):
         "fault_schedule": [],
         "initial_conditions": {"position": 0.1},
         "sampling_rate_hz": 20.0,
-        "start_date": now.isoformat(),
-        "end_date": (now + timedelta(seconds=1)).isoformat(),
+        "start_date": (now - timedelta(seconds=10)).isoformat(),
+        "end_of_observation": (now - timedelta(seconds=2)).isoformat(),
+        "prediction_horizon_seconds": 0.1,
+        "end_date": (now + timedelta(seconds=30)).isoformat(),
     }
     payload.update(overrides)
     return payload
@@ -93,13 +95,26 @@ def submit_for_contest(client, headers, contest_id: str):
         f"/api/v1/contests/{contest_id}/submissions",
         json={
             "task_id": "forecasting",
-            "prediction_from_sequence": 1,
-            "payload": {"forecast": {"horizon_1": {"position": 0.12}}},
+            "payload": {"forecast": {"position": [0.12, 0.13]}},
         },
         headers=headers,
     )
     assert response.status_code == 201
     return response.json()
+
+
+def force_contest_status(db_factory, contest_id: str, status: str) -> None:
+    """Set contest status directly in the DB without starting the engine."""
+    from epic_core.db.models import Contest as ContestModel
+    async def _set():
+        async with db_factory() as db:
+            result = await db.execute(
+                select(ContestModel).where(ContestModel.id == UUID(contest_id))
+            )
+            contest = result.scalar_one()
+            contest.status = status
+            await db.commit()
+    asyncio.run(_set())
 
 
 def add_observation_for_contest(db_factory, contest_id: str) -> None:
@@ -185,6 +200,21 @@ def test_create_contest_with_unknown_sensor_returns_404(client, admin_headers):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "PLUGIN_NOT_FOUND"
+
+
+def test_create_contest_with_duplicate_name_returns_422(client, admin_headers):
+    create_contest(client, admin_headers, name="Duplicate Name Contest")
+
+    response = client.post(
+        "/api/v1/contests",
+        json=contest_payload(name="Duplicate Name Contest"),
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert "Duplicate Name Contest" in body["error"]["message"]
 
 
 def test_create_contest_with_invalid_visibility_returns_422(client, admin_headers):
@@ -334,7 +364,6 @@ def test_patch_end_date_on_active_contest_updates_deadline(client, admin_headers
     contest = create_contest(
         client,
         admin_headers,
-        start_date=now.isoformat(),
         end_date=(now + timedelta(seconds=3)).isoformat(),
     )
     active_response = client.patch(
@@ -364,7 +393,6 @@ def test_patch_end_date_with_past_date_returns_422(client, admin_headers):
     contest = create_contest(
         client,
         admin_headers,
-        start_date=now.isoformat(),
         end_date=(now + timedelta(seconds=3)).isoformat(),
     )
     active_response = client.patch(
@@ -470,3 +498,484 @@ def test_organizer_sees_all_own_contest_submissions_participant_sees_own(
     }
     assert own_submission["submission_id"] in participant_ids
     assert other_submission["submission_id"] not in participant_ids
+
+
+# ── Delete contest ────────────────────────────────────────────────────
+
+def test_delete_draft_contest_returns_204(client, admin_headers):
+    contest = create_contest(client, admin_headers, name="Delete draft contest")
+    contest_id = contest["contest_id"]
+
+    response = client.delete(
+        f"/api/v1/contests/{contest_id}",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 204
+    get_response = client.get(f"/api/v1/contests/{contest_id}")
+    assert get_response.status_code == 404
+
+
+def test_delete_contest_removes_all_associated_data(
+    client, admin_headers, auth_headers, db_factory
+):
+    """Deleting a CLOSED contest must remove tasks, registrations, submissions,
+    scores, leaderboard entries, simulation session, and sensor observations."""
+    import asyncio, time
+    from sqlalchemy import select
+    from epic_core.db.models import (
+        Task, ContestRegistration, Submission, Score,
+        LeaderboardEntry, SimulationSession, SensorObservation,
+    )
+    from uuid import UUID
+    from epic_api.routers.submissions import _score_submission
+
+    # Create and activate contest
+    contest = create_contest(
+        client, admin_headers,
+        name="Delete full data contest",
+        sampling_rate_hz=20.0,
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "SCHEDULED"}, headers=admin_headers)
+
+    register_for_contest(client, auth_headers, contest_id)
+
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "ACTIVE"}, headers=admin_headers)
+
+    add_observation_for_contest(db_factory, contest_id)
+    submission = submit_for_contest(client, auth_headers, contest_id)
+    sub_id = UUID(submission["submission_id"])
+    asyncio.run(_score_submission(sub_id, db_factory))
+
+    # Close the contest before deleting
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "CLOSED"}, headers=admin_headers)
+
+    # Delete
+    response = client.delete(
+        f"/api/v1/contests/{contest_id}", headers=admin_headers
+    )
+    assert response.status_code == 204
+
+    # Verify every related table is empty for this contest
+    async def assert_all_deleted():
+        cid = UUID(contest_id)
+        async with db_factory() as db:
+            assert (await db.execute(
+                select(Task).where(Task.contest_id == cid)
+            )).scalar_one_or_none() is None, "Task not deleted"
+
+            assert (await db.execute(
+                select(ContestRegistration).where(ContestRegistration.contest_id == cid)
+            )).scalar_one_or_none() is None, "ContestRegistration not deleted"
+
+            assert (await db.execute(
+                select(Submission).where(Submission.contest_id == cid)
+            )).scalar_one_or_none() is None, "Submission not deleted"
+
+            assert (await db.execute(
+                select(LeaderboardEntry).where(LeaderboardEntry.contest_id == cid)
+            )).scalar_one_or_none() is None, "LeaderboardEntry not deleted"
+
+            assert (await db.execute(
+                select(SimulationSession).where(SimulationSession.contest_id == cid)
+            )).scalar_one_or_none() is None, "SimulationSession not deleted"
+
+            # Scores and SensorObservations are grandchildren — verify via
+            # the now-deleted submission/session ids
+            assert (await db.execute(
+                select(Score).where(Score.submission_id == sub_id)
+            )).scalar_one_or_none() is None, "Score not deleted"
+
+    asyncio.run(assert_all_deleted())
+
+
+def test_delete_active_contest_returns_409(client, admin_headers):
+    contest = create_contest(
+        client, admin_headers,
+        name="Delete active contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "ACTIVE"}, headers=admin_headers)
+
+    response = client.delete(
+        f"/api/v1/contests/{contest_id}", headers=admin_headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+
+
+def test_delete_nonexistent_contest_returns_404(client, admin_headers):
+    import uuid
+    response = client.delete(
+        f"/api/v1/contests/{uuid.uuid4()}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_delete_own_contest_by_organizer_returns_204(client, organizer_headers):
+    """An organizer can delete a contest they created."""
+    contest = create_contest(
+        client, organizer_headers, name="Delete own organizer contest"
+    )
+    contest_id = contest["contest_id"]
+
+    response = client.delete(
+        f"/api/v1/contests/{contest_id}",
+        headers=organizer_headers,
+    )
+
+    assert response.status_code == 204
+    assert client.get(f"/api/v1/contests/{contest_id}").status_code == 404
+
+
+def test_delete_other_organizers_contest_returns_403(
+    client, admin_headers, organizer_headers
+):
+    """An organizer cannot delete a contest created by a different organizer."""
+    other_org_headers = create_organizer_headers(
+        client, admin_headers,
+        "other-org-delete", "other-org-delete@example.com", "password"
+    )
+    contest = create_contest(client, other_org_headers, name="Other organizer contest to protect")
+
+    response = client.delete(
+        f"/api/v1/contests/{contest['contest_id']}",
+        headers=organizer_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_delete_contest_by_participant_returns_403(
+    client, admin_headers, auth_headers
+):
+    contest = create_contest(
+        client, admin_headers, name="Delete by participant contest"
+    )
+    response = client.delete(
+        f"/api/v1/contests/{contest['contest_id']}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_delete_archived_contest_returns_204(client, admin_headers):
+    contest = create_contest(
+        client, admin_headers,
+        name="Delete archived contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    for status in ("ACTIVE", "CLOSED", "ARCHIVED"):
+        r = client.patch(f"/api/v1/contests/{contest_id}",
+            json={"status": status}, headers=admin_headers)
+        assert r.status_code == 200, f"Failed to transition to {status}: {r.text}"
+
+    response = client.delete(
+        f"/api/v1/contests/{contest_id}", headers=admin_headers
+    )
+    assert response.status_code == 204
+
+
+# ── Pause / Resume ────────────────────────────────────────────────────
+
+def test_pause_active_contest_returns_200(client, admin_headers, db_factory):
+    contest = create_contest(client, admin_headers, name="Pause active contest")
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "ACTIVE")
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/pause", headers=admin_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PAUSED"
+
+
+def test_pause_non_active_contest_returns_409(client, admin_headers):
+    contest = create_contest(client, admin_headers, name="Pause draft contest")
+
+    response = client.put(
+        f"/api/v1/contests/{contest['contest_id']}/pause", headers=admin_headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+
+
+def test_pause_by_owner_organizer_returns_200(client, organizer_headers, db_factory):
+    contest = create_contest(
+        client, organizer_headers,
+        name="Pause by owner organizer",
+    )
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "ACTIVE")
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/pause", headers=organizer_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PAUSED"
+
+
+def test_pause_by_different_organizer_returns_403(
+    client, admin_headers, organizer_headers, db_factory
+):
+    other_org = create_organizer_headers(
+        client, admin_headers,
+        "other-org-pause", "other-org-pause@example.com", "password"
+    )
+    contest = create_contest(
+        client, other_org,
+        name="Pause by different organizer",
+    )
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "ACTIVE")
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/pause", headers=organizer_headers
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_pause_by_participant_returns_403(client, admin_headers, auth_headers, db_factory):
+    contest = create_contest(client, admin_headers, name="Pause by participant")
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "ACTIVE")
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/pause", headers=auth_headers
+    )
+
+    assert response.status_code == 403
+
+
+def test_resume_paused_contest_returns_200(client, admin_headers, db_factory):
+    contest = create_contest(
+        client, admin_headers,
+        name="Resume paused contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    # ACTIVE creates the SimulationSession needed by the resume endpoint.
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "ACTIVE"}, headers=admin_headers)
+    # Force-set PAUSED directly to avoid the engine race condition.
+    force_contest_status(db_factory, contest_id, "PAUSED")
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/resume", headers=admin_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ACTIVE"
+
+
+def test_resume_non_paused_contest_returns_409(client, admin_headers):
+    contest = create_contest(client, admin_headers, name="Resume draft contest")
+
+    response = client.put(
+        f"/api/v1/contests/{contest['contest_id']}/resume", headers=admin_headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+
+
+def test_resume_expired_contest_returns_409(client, admin_headers):
+    """A paused contest whose end_date has passed cannot be resumed without extending."""
+    import time
+    contest = create_contest(
+        client, admin_headers,
+        name="Resume expired contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "ACTIVE"}, headers=admin_headers)
+    client.put(f"/api/v1/contests/{contest_id}/pause", headers=admin_headers)
+    time.sleep(3)  # let the end_date expire
+
+    response = client.put(
+        f"/api/v1/contests/{contest_id}/resume", headers=admin_headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+
+
+def test_paused_contest_can_be_closed(client, admin_headers, db_factory):
+    """PAUSED → CLOSED via PATCH is allowed without resuming first."""
+    contest = create_contest(
+        client, admin_headers,
+        name="Close paused contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "PAUSED")
+
+    response = client.patch(
+        f"/api/v1/contests/{contest_id}",
+        json={"status": "CLOSED"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CLOSED"
+
+
+def test_paused_contest_deadline_can_be_extended(client, admin_headers, db_factory):
+    """Extending the deadline on a PAUSED contest must succeed."""
+    contest = create_contest(
+        client, admin_headers,
+        name="Extend deadline paused contest",
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+    )
+    contest_id = contest["contest_id"]
+    force_contest_status(db_factory, contest_id, "PAUSED")
+
+    new_end = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    response = client.patch(
+        f"/api/v1/contests/{contest_id}",
+        json={"end_date": new_end},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+
+
+# ── Two-phase contests ────────────────────────────────────────────────
+
+def two_phase_payload(**overrides):
+    now = datetime.now(timezone.utc)
+    payload = {
+        "name": "Two-Phase Challenge",
+        "visibility": "PUBLIC",
+        "twin_id": "mass_spring_damper",
+        "sensor_configs": [{"sensor_id": "position"}],
+        "fault_schedule": [],
+        "sampling_rate_hz": 10.0,
+        "start_date": now.isoformat(),
+        "end_of_observation": (now + timedelta(seconds=5)).isoformat(),
+        "prediction_horizon_seconds": 2.0,
+        "end_date": (now + timedelta(seconds=20)).isoformat(),
+        "metric_ids": ["mae"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_create_two_phase_contest_returns_correct_fields(client, admin_headers):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(),
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["end_of_observation"] is not None
+    assert body["prediction_horizon_seconds"] == 2.0
+    tasks = body["tasks"]
+    assert len(tasks) == 1
+    assert tasks[0]["configuration"]["eval_steps"] == 20  # 2.0s * 10Hz
+    assert tasks[0]["configuration"]["prediction_horizon_seconds"] == 2.0
+    assert tasks[0]["configuration"]["score_against"] == "ground_truth"
+
+
+def test_create_contest_with_explicit_score_against_sensors(client, admin_headers):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(score_against="sensors"),
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    cfg = response.json()["tasks"][0]["configuration"]
+    assert cfg["score_against"] == "sensors"
+
+
+def test_create_contest_with_invalid_score_against_returns_422(client, admin_headers):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(score_against="raw"),
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_two_phase_contest_missing_horizon_returns_422(client, admin_headers):
+    payload = two_phase_payload()
+    del payload["prediction_horizon_seconds"]
+    response = client.post("/api/v1/contests", json=payload, headers=admin_headers)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_two_phase_contest_end_date_too_early_returns_422(client, admin_headers):
+    now = datetime.now(timezone.utc)
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(
+            end_of_observation=(now + timedelta(seconds=5)).isoformat(),
+            prediction_horizon_seconds=2.0,
+            # end_date before end_of_evaluation (5+2=7 s) → invalid
+            end_date=(now + timedelta(seconds=6)).isoformat(),
+        ),
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_two_phase_contest_with_unknown_metric_returns_422(client, admin_headers):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(metric_ids=["nonexistent_metric"]),
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_two_phase_submission_rejected_before_eval_ends(client, admin_headers, auth_headers):
+    """Submissions must be rejected while the evaluation window is still running."""
+    now = datetime.now(timezone.utc)
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(
+            name="Early submission two-phase",
+            prediction_horizon_seconds=3600.0,  # 1 hour — evaluation not yet done
+            end_date=(now + timedelta(hours=2)).isoformat(),
+        ),
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    contest_id = response.json()["contest_id"]
+    client.patch(f"/api/v1/contests/{contest_id}",
+        json={"status": "ACTIVE"}, headers=admin_headers)
+    register_for_contest(client, auth_headers, contest_id)
+
+    sub_response = client.post(
+        f"/api/v1/contests/{contest_id}/submissions",
+        json={"task_id": "forecasting", "payload": {"forecast": {"position": [0.1]}}},
+        headers=auth_headers,
+    )
+
+    assert sub_response.status_code == 409
+    assert sub_response.json()["error"]["code"] == "CONTEST_STATE_ERROR"

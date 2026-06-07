@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -38,7 +38,6 @@ router = APIRouter(tags=["submissions"])
 
 class CreateSubmissionRequest(BaseModel):
     task_id: str
-    prediction_from_sequence: int
     payload: dict
 
 
@@ -47,7 +46,6 @@ def submission_summary(submission: Submission) -> dict:
         "submission_id": str(submission.id),
         "user_id": str(submission.user_id),
         "task_id": submission.task_id,
-        "prediction_from_sequence": submission.prediction_from_sequence,
         "submitted_at": submission.submitted_at.isoformat(),
         "status": submission.status,
     }
@@ -82,93 +80,36 @@ async def _score_submission(
         )
         contest = contest_result.scalar_one()
         task_result = await db.execute(
-            select(Task).where(Task.contest_id == contest.id)
+            select(Task).where(
+                Task.contest_id == contest.id,
+                Task.task_type == submission.task_id.upper(),
+            )
         )
         task = task_result.scalars().first()
-        if task is None or task.task_type != "FORECASTING":
+        if task is None:
             submission.status = "FAILED"
             submission.submission_metadata = {
                 **(submission.submission_metadata or {}),
-                "error": "No forecasting task configured for contest",
+                "error": "Task not found for this contest",
+            }
+            await db.commit()
+            return
+        if task.task_type != "FORECASTING":
+            submission.status = "FAILED"
+            submission.submission_metadata = {
+                **(submission.submission_metadata or {}),
+                "error": f"Scoring for task type '{task.task_type}' is not yet implemented",
             }
             await db.commit()
             return
 
-        horizons = task.configuration.get("forecast_horizons", [1, 5, 10])
-        observations: dict[int, SensorObservation] = {}
-        for horizon in horizons:
-            result = await db.execute(
-                select(SensorObservation)
-                .join(
-                    SimulationSession,
-                    SensorObservation.session_id == SimulationSession.id,
-                )
-                .where(
-                    SimulationSession.contest_id == contest.id,
-                    SensorObservation.sequence_id
-                    == submission.prediction_from_sequence + horizon,
-                )
-            )
-            observation = result.scalar_one_or_none()
-            if observation is None:
-                submission.status = "PENDING"
-                await db.commit()
-                return
-            observations[horizon] = observation
+        metric_ids = task.metric_ids or ["mae"]
+        score_values = await _score_two_phase(db, submission, contest, task, metric_ids)
 
-        try:
-            forecast = submission.payload["forecast"]
-            predictions_by_sensor: dict[str, dict[int, float]] = {}
-            details_by_sensor: dict[str, dict[str, dict[str, float]]] = {}
-            for horizon in horizons:
-                horizon_predictions = forecast[f"horizon_{horizon}"]
-                if not isinstance(horizon_predictions, dict):
-                    raise TypeError(f"horizon_{horizon} must be a prediction dict")
-                for sensor_id, predicted_value in horizon_predictions.items():
-                    true_value = observations[horizon].sensors[sensor_id]
-                    predicted_float = float(predicted_value)
-                    true_float = float(true_value)
-                    predictions_by_sensor.setdefault(sensor_id, {})[horizon] = (
-                        predicted_float
-                    )
-                    details_by_sensor.setdefault(sensor_id, {})[
-                        f"horizon_{horizon}"
-                    ] = {
-                        "y_true": true_float,
-                        "y_pred": predicted_float,
-                        "absolute_error": abs(true_float - predicted_float),
-                    }
-        except (KeyError, TypeError, ValueError) as exc:
-            submission.status = "FAILED"
-            submission.submission_metadata = {
-                **(submission.submission_metadata or {}),
-                "error": str(exc),
-            }
-            await db.commit()
+        if score_values is None:
+            # Scoring set PENDING or FAILED on the submission — already committed.
             return
 
-        metric = registry_module.metric_registry.get("mae")
-        score_values: list[float] = []
-        for sensor_id, horizon_predictions in predictions_by_sensor.items():
-            sensor_horizons = sorted(horizon_predictions)
-            y_true = [
-                float(observations[horizon].sensors[sensor_id])
-                for horizon in sensor_horizons
-            ]
-            y_pred = [horizon_predictions[horizon] for horizon in sensor_horizons]
-            score_value = metric.compute(y_true, y_pred)
-            score_values.append(score_value)
-            db.add(
-                Score(
-                    submission_id=submission.id,
-                    metric_id=metric.metric_id,
-                    value=score_value,
-                    details={
-                        "sensor_id": sensor_id,
-                        "horizons": details_by_sensor[sensor_id],
-                    },
-                )
-            )
         submission.status = "EVALUATED"
         await db.commit()
         if score_values:
@@ -180,6 +121,108 @@ async def _score_submission(
                 composite_score,
                 db_factory,
             )
+
+
+async def _score_two_phase(
+    db,
+    submission: Submission,
+    contest: Contest,
+    task: Task,
+    metric_ids: list[str],
+) -> list[float] | None:
+    """Score a two-phase submission against the full evaluation-window ground truth."""
+    eval_steps = task.configuration.get("eval_steps")
+    if not eval_steps:
+        submission.status = "FAILED"
+        submission.submission_metadata = {
+            **(submission.submission_metadata or {}),
+            "error": "Task configuration missing eval_steps",
+        }
+        await db.commit()
+        return None
+
+    # Retrieve all evaluation-phase observations ordered by sequence_id.
+    obs_result = await db.execute(
+        select(SensorObservation)
+        .join(SimulationSession, SensorObservation.session_id == SimulationSession.id)
+        .where(SimulationSession.contest_id == contest.id)
+        .order_by(SensorObservation.sequence_id.asc())
+    )
+    eval_observations = list(obs_result.scalars())
+
+    if len(eval_observations) < eval_steps:
+        # Evaluation window not yet complete — defer.
+        submission.status = "PENDING"
+        await db.commit()
+        return None
+
+    # Use exactly eval_steps observations (the evaluation window).
+    eval_observations = eval_observations[:eval_steps]
+
+    # Parse and validate submission payload.
+    try:
+        forecast = submission.payload["forecast"]
+        if not isinstance(forecast, dict):
+            raise TypeError("payload.forecast must be a dict of {sensor_id: [values]}")
+        sensor_ids = list(forecast.keys())
+        for sid in sensor_ids:
+            values = forecast[sid]
+            if not isinstance(values, list) or len(values) != eval_steps:
+                raise ValueError(
+                    f"sensor '{sid}' must have exactly {eval_steps} predicted values, "
+                    f"got {len(values) if isinstance(values, list) else type(values).__name__}"
+                )
+    except (KeyError, TypeError, ValueError) as exc:
+        submission.status = "FAILED"
+        submission.submission_metadata = {
+            **(submission.submission_metadata or {}),
+            "error": str(exc),
+        }
+        await db.commit()
+        return None
+
+    # Decide what to score against.
+    # "ground_truth" uses the noiseless latent-state values stored by the engine.
+    # "sensors"      uses the corrupted sensor readings (legacy / special cases).
+    # If ground_truth was not recorded (old data or direct DB inserts in tests),
+    # fall back to sensors automatically.
+    score_against = task.configuration.get("score_against", "ground_truth")
+    use_ground_truth = (
+        score_against == "ground_truth"
+        and eval_observations[0].ground_truth is not None
+    )
+    reference_key = "ground_truth" if use_ground_truth else "sensors"
+
+    def _y_true(obs, sensor_id: str) -> float:
+        source = obs.ground_truth if use_ground_truth else obs.sensors
+        return float(source[sensor_id])
+
+    def _sensor_available(sensor_id: str) -> bool:
+        source = eval_observations[0].ground_truth if use_ground_truth else eval_observations[0].sensors
+        return sensor_id in source
+
+    # Compute all configured metrics for each sensor.
+    score_values: list[float] = []
+    for metric_id in metric_ids:
+        metric = registry_module.metric_registry.get(metric_id)
+        for sensor_id in sensor_ids:
+            if not _sensor_available(sensor_id):
+                continue
+            y_true = [_y_true(obs, sensor_id) for obs in eval_observations]
+            y_pred = [float(v) for v in forecast[sensor_id]]
+            score_value = metric.compute(y_true, y_pred)
+            score_values.append(score_value)
+            db.add(Score(
+                submission_id=submission.id,
+                metric_id=metric.metric_id,
+                value=score_value,
+                details={
+                    "sensor_id": sensor_id,
+                    "eval_steps": eval_steps,
+                    "scored_against": reference_key,
+                },
+            ))
+    return score_values
 
 
 async def _update_leaderboard(
@@ -236,27 +279,6 @@ async def ensure_registered(
     return registration
 
 
-async def ensure_observation_exists(
-    db: AsyncSession, contest_id: UUID, sequence_id: int
-) -> None:
-    result = await db.execute(
-        select(SensorObservation)
-        .join(
-            SimulationSession,
-            SensorObservation.session_id == SimulationSession.id,
-        )
-        .where(
-            SimulationSession.contest_id == contest_id,
-            SensorObservation.sequence_id == sequence_id,
-        )
-    )
-    observation = result.scalar_one_or_none()
-    if observation is None or as_utc(observation.timestamp) > datetime.now(timezone.utc):
-        raise SubmissionError(
-            "prediction_from_sequence references an observation that does not exist"
-        )
-
-
 @router.post("/contests/{contest_id}/submissions", status_code=status.HTTP_201_CREATED)
 async def create_submission(
     contest_id: str,
@@ -268,30 +290,38 @@ async def create_submission(
     if contest.status != "ACTIVE":
         raise ContestStateError("Contest is not active")
     await ensure_registered(db, contest.id, current_user.id)
-    await ensure_observation_exists(db, contest.id, request.prediction_from_sequence)
+
+    # Submissions are only accepted after the evaluation phase is complete.
+    end_of_evaluation = as_utc(contest.end_of_observation) + timedelta(
+        seconds=contest.prediction_horizon_seconds
+    )
+    if datetime.now(timezone.utc) < end_of_evaluation:
+        raise ContestStateError(
+            "Submissions are not yet accepted — the evaluation phase has not ended. "
+            f"Submissions open at {end_of_evaluation.isoformat()}"
+        )
+
+    task_result = await db.execute(
+        select(Task).where(
+            Task.contest_id == contest.id,
+            Task.task_type == request.task_id.upper(),
+        )
+    )
+    if task_result.scalars().first() is None:
+        raise SubmissionError(f"Task '{request.task_id}' does not belong to contest '{contest_id}'")
 
     submission = Submission(
         contest_id=contest.id,
         user_id=current_user.id,
         task_id=request.task_id,
-        prediction_from_sequence=request.prediction_from_sequence,
         payload=request.payload,
         status="PENDING",
     )
     db.add(submission)
     await db.commit()
     await db.refresh(submission)
-    response = {
-        "submission_id": str(submission.id),
-        "contest_id": str(submission.contest_id),
-        "user_id": str(submission.user_id),
-        "task_id": submission.task_id,
-        "prediction_from_sequence": submission.prediction_from_sequence,
-        "submitted_at": submission.submitted_at.isoformat(),
-        "status": submission.status,
-    }
     asyncio.create_task(_score_submission(submission.id, get_session_factory()))
-    return response
+    return submission_response(submission)
 
 
 @router.get("/contests/{contest_id}/submissions")

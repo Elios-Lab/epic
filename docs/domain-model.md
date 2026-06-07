@@ -82,20 +82,20 @@ Represents a machine learning competition.
 ```python
 class Contest:
     contest_id: str
-    name: str
+    name: str                           # unique platform-wide
     description: str
     status: ContestStatus
     visibility: ContestVisibility
-    twin_id: str                    # which digital twin to simulate
-    initial_conditions: dict | None # override twin defaults (e.g. position, velocity)
-    sensor_configs: list[dict]      # sensors and their parameters
-    fault_schedule: list[dict]      # faults and their activation parameters
+    twin_id: str                        # which digital twin to simulate
+    initial_conditions: dict | None     # override twin defaults (e.g. position, velocity)
+    sensor_configs: list[dict]          # sensors and their parameters
+    fault_schedule: list[dict]          # faults and their activation parameters
     sampling_rate_hz: float
-    task_type: str                  # e.g. "FORECASTING"
-    forecast_horizons: list[int]
     start_date: datetime
-    end_date: datetime
-    created_by: uuid                # FK to users.id
+    end_of_observation: datetime        # observation phase ends; stream closes
+    prediction_horizon_seconds: float   # length of hidden evaluation window
+    end_date: datetime                  # submission window closes
+    created_by: uuid                    # FK to users.id
     created_at: datetime
     updated_at: datetime
 ```
@@ -212,9 +212,21 @@ class Task:
     configuration: dict
 ```
 
-A contest may contain multiple tasks.
+A contest may contain multiple tasks. Tasks are created automatically when the contest is created; there are currently no dedicated task management endpoints (`GET/PATCH /api/v1/contests/{contest_id}/tasks`). Tasks are embedded in the contest response under the `tasks` key. See [API Specification](api-specification.md) for details.
 
-Example:
+For a forecasting task the `configuration` always includes:
+
+```json
+{
+  "prediction_horizon_seconds": 60.0,
+  "eval_steps": 600,
+  "score_against": "ground_truth"
+}
+```
+
+`eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)` is computed automatically. `score_against` controls whether the MAE is measured against the clean latent state (`"ground_truth"`, default) or the noisy sensor reading (`"sensors"`).
+
+Example multi-task score:
 
 ```text
 Final score =
@@ -234,24 +246,29 @@ class Submission:
     contest_id: str
     user_id: str
     task_id: str
-    submitted_at: datetime          # set by the server, not the client
-    prediction_from_sequence: int   # sequence_id of the last observation
-                                    # the participant used to build this prediction
-    payload: dict
+    submitted_at: datetime   # set by the server, not the client
+    payload: dict            # {"forecast": {"sensor_id": [v1, v2, …]}}
     status: SubmissionStatus
     metadata: dict
 ```
 
-`prediction_from_sequence` is the `sequence_id` of the most recent observation the participant claims to have used when producing their prediction. The server validates at submission time that this sequence_id was actually published at or before `submitted_at` — i.e., the participant cannot anchor their prediction from a future observation they could not yet have received.
+**Temporal integrity** is enforced by the two-phase contest structure: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`, ensuring every forecast was built on data that was available before the hidden evaluation window ran. No per-submission anchor field is needed.
 
-This is the primary mechanism EPIC uses to guarantee **temporal honesty**: predictions must be genuinely prospective. See [Scoring](scoring.md) for how this anchor is used during evaluation.
+The `payload` for a forecasting task must contain exactly `eval_steps` values for every sensor being forecast:
+
+```json
+{
+  "forecast": {
+    "position": [0.12, 0.13, 0.14, …],
+    "velocity": [0.01, 0.02, 0.01, …]
+  }
+}
+```
 
 Supported statuses:
 
 ```text
 PENDING
-ACCEPTED
-REJECTED
 EVALUATED
 FAILED
 ```
@@ -375,11 +392,14 @@ class SimulationSession:
 Supported statuses:
 
 ```text
-CREATED
-RUNNING
-COMPLETED
-FAILED
+CREATED     ← session record created, engine not yet started
+RUNNING     ← engine active, observations being produced
+PAUSED      ← organizer or admin paused the contest; engine stopped
+COMPLETED   ← contest reached end_date or was closed normally
+FAILED      ← unrecoverable engine error
 ```
+
+On unclean server shutdown, any session left in `RUNNING` or `CREATED` state is automatically set to `PAUSED` at the next startup, allowing the organizer to resume the simulation.
 
 Relationships:
 
@@ -402,24 +422,27 @@ class SensorObservation:
     session_id: str
     sequence_id: int
     timestamp: datetime
-    sensors: dict[str, float]
-    labels: dict | None        # stored privately for scoring; never sent to participants
+    sensors: dict[str, float]        # noisy sensor readings — visible via WebSocket stream
+    ground_truth: dict[str, float] | None  # clean latent-state values — hidden, used for scoring
+    labels: dict | None              # fault metadata — hidden, never sent to participants
     obs_metadata: dict | None
 ```
 
-The `sensors` field is intentionally generic.
+The `sensors` field carries the realistic measurement pipeline output (noise, drift, quantisation, etc.). The `ground_truth` field carries the noiseless latent-state value for each sensor — the ideal reading before any corruption is applied. Both fields are populated by the engine during the evaluation phase.
 
-Example:
+`sensors` example (participant-visible via WebSocket):
 
 ```json
-{
-  "position": 0.15,
-  "velocity": 1.82,
-  "temperature": 31.5
-}
+{"position": 0.153, "velocity": 1.82}
 ```
 
-`labels` always contains fault ground truth:
+`ground_truth` example (server-side only, used for scoring when `score_against = "ground_truth"`):
+
+```json
+{"position": 0.148, "velocity": 1.79}
+```
+
+`labels` example (server-side only, used for anomaly-detection scoring):
 
 ```json
 {
@@ -429,7 +452,7 @@ Example:
 }
 ```
 
-This information is used by the scoring engine to evaluate submissions. It is never returned by any participant-facing API endpoint.
+None of `ground_truth`, `labels`, or `obs_metadata` is returned by any participant-facing API endpoint.
 
 ---
 
@@ -529,11 +552,15 @@ Persist only:
 
 # Data Visibility Rules
 
-The simulation produces sensor readings and ground-truth labels at every time step.
+The simulation produces three categories of data at every evaluation-phase time step:
 
-Participants receive sensor readings only, through the WebSocket stream. Labels and latent state are never exposed to participants through any API endpoint.
+| Field | Who sees it | Purpose |
+|-------|-------------|---------|
+| `sensors` | Participants (WebSocket stream during observation phase) | Raw material for model building |
+| `ground_truth` | Server only | Clean latent-state values used by the scoring engine |
+| `labels` | Server only | Fault metadata used for anomaly-detection scoring |
 
-The persistence layer stores all observations (including labels) privately for use by the scoring engine.
+None of `ground_truth` or `labels` is ever returned by a participant-facing endpoint. During the observation phase the stream is open and participants receive `sensors` values. The stream closes at `end_of_observation`; from that point the evaluation window runs privately and participants cannot see any further data before submitting.
 
 ---
 

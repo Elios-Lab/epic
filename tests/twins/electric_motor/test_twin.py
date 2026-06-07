@@ -120,6 +120,7 @@ def test_metadata_supported_quantities_faults_and_plugin_registration():
         PhysicalQuantity.VOLTAGE,
         PhysicalQuantity.ROTATIONAL_SPEED,
         PhysicalQuantity.TEMPERATURE,
+        PhysicalQuantity.TORQUE,
     } == twin.supported_quantities()
     assert all(isinstance(fault, FaultDescriptor) for fault in twin.get_faults())
     assert {fault.fault_id for fault in twin.get_faults()} == {

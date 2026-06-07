@@ -95,7 +95,7 @@ Tasks and scoring configuration are linked entities managed separately. See [Dom
 
 # Contest Lifecycle
 
-Every contest follows a lifecycle.
+Every contest follows a linear lifecycle. Transitions must follow the order below — skipping states (e.g. `DRAFT → ACTIVE`) is not allowed.
 
 ```text
 DRAFT
@@ -108,6 +108,17 @@ CLOSED
     ↓
 ARCHIVED
 ```
+
+**Allowed transitions:**
+
+| From | To | Who |
+|---|---|---|
+| `DRAFT` | `SCHEDULED` | ORGANIZER (own) or ADMINISTRATOR |
+| `SCHEDULED` | `ACTIVE` | ORGANIZER (own) or ADMINISTRATOR |
+| `ACTIVE` | `CLOSED` | ORGANIZER (own) or ADMINISTRATOR |
+| `CLOSED` | `ARCHIVED` | ADMINISTRATOR only |
+
+No other transitions are permitted. Attempts to perform an invalid transition return `409 Conflict` with error code `CONTEST_STATE_ERROR`.
 
 ---
 
@@ -133,15 +144,17 @@ Submissions are disabled.
 
 ## ACTIVE
 
-Contest is running.
+Contest is running. The ACTIVE state spans three sub-phases defined by `end_of_observation` and `prediction_horizon_seconds`:
 
-The platform automatically creates and starts the contest's simulation session. The simulation runs in real wall-clock time and cannot be paused, stopped, or modified.
+| Sub-phase | When | What happens |
+|-----------|------|-------------|
+| **Observation** | `start_date` → `end_of_observation` | Simulation runs; participants receive live sensor readings via WebSocket. |
+| **Evaluation** | `end_of_observation` → `end_of_observation + prediction_horizon_seconds` | Simulation continues; WebSocket stream closes; ground truth is recorded privately. |
+| **Submission** | Evaluation ends → `end_date` | Participants submit forecasts; submissions are scored and the leaderboard updates. |
 
-Participants connect via WebSocket to receive live sensor readings.
+The platform automatically creates and starts the contest's simulation session. Organizers and administrators can pause and resume the session; participants cannot.
 
-Participants may submit solutions.
-
-Leaderboards are active.
+Leaderboards are active once submissions are accepted.
 
 ---
 
@@ -235,13 +248,15 @@ Organizers and administrators must be able to configure:
 
 # Contest Templates
 
-Future versions should support reusable templates.
+Predefined contest templates are available for all five built-in twins and are exposed via the API. An organizer can instantiate a template and override individual parameters without configuring the simulation from scratch.
 
-Examples:
+Available template categories:
 
 - Forecasting Challenge
 - Anomaly Detection Challenge
 - Predictive Maintenance Challenge
+
+User-defined reusable templates (saved configurations that can be shared between organizers) are a planned future extension.
 
 ---
 
@@ -304,8 +319,8 @@ PARTICIPANT     ← registers for contests and submits predictions
 # Participant Permissions
 
 - Register for contests (SCHEDULED or ACTIVE)
-- Connect to contest WebSocket stream and collect data client-side
-- Submit predictions with temporal anchor
+- Connect to contest WebSocket stream and collect data during the observation phase
+- Submit forecasts once the submission window opens (after the evaluation phase ends)
 - View own scores and rankings
 
 ---
@@ -355,16 +370,14 @@ class Submission:
 
     submitted_at: datetime              # set by the server
 
-    prediction_from_sequence: int       # temporal integrity anchor
-
-    payload: dict
+    payload: dict                       # {"forecast": {"sensor_id": [v1, v2, …]}}
 
     status: SubmissionStatus
 
     submission_metadata: dict | None
 ```
 
-`prediction_from_sequence` is the `sequence_id` of the last observation the participant used to build their prediction. The server validates at submission time that this sequence_id was published before `submitted_at`. See [Scoring](scoring.md) for the full explanation.
+**Temporal integrity** is enforced by the two-phase structure: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`. Forecasts must cover exactly `eval_steps` values per sensor. See [Scoring](scoring.md) for the full explanation.
 
 Scores are stored separately as `Score` entities linked to the submission.
 

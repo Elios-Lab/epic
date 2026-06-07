@@ -67,11 +67,16 @@ class EPICClient:
                     first_attempt = False
                     async for message in websocket:
                         payload = json.loads(message)
+                        # The server sends {"event": "evaluation_started", ...} when the
+                        # observation phase ends, then closes the stream.  Stop iterating.
+                        if payload.get("event") == "evaluation_started":
+                            return
                         yield {
                             "sequence_id": payload["sequence_id"],
                             "timestamp": payload["timestamp"],
                             "sensors": payload["sensors"],
                         }
+                # Clean close without evaluation_started — reconnect.
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -79,7 +84,7 @@ class EPICClient:
                     raise RuntimeError(
                         f"Could not connect to contest stream: {exc}"
                     ) from exc
-                await asyncio.sleep(reconnect_delay)
+            await asyncio.sleep(reconnect_delay)
 
     async def collect(
         self,
@@ -110,6 +115,8 @@ class EPICClient:
                     observation = await asyncio.wait_for(stream.__anext__(), remaining)
                 except asyncio.TimeoutError:
                     break
+                except StopAsyncIteration:
+                    break
                 observations.append(observation)
                 if writer is not None:
                     writer.writerow(
@@ -129,7 +136,6 @@ class EPICClient:
         self,
         contest_id: str,
         task_id: str,
-        prediction_from_sequence: int,
         payload: dict,
     ) -> dict:
         return self._request(
@@ -137,7 +143,6 @@ class EPICClient:
             f"/api/v1/contests/{contest_id}/submissions",
             {
                 "task_id": task_id,
-                "prediction_from_sequence": prediction_from_sequence,
                 "payload": payload,
             },
         )

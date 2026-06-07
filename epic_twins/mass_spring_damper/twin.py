@@ -125,6 +125,16 @@ class MassSpringDamperTwin(DigitalTwin):
         )
 
         self._apply_active_faults(new_state, dt)
+        # Recompute acceleration with fault-modified stiffness/damping so that
+        # state.acceleration is always consistent with the current system parameters.
+        new_state.acceleration = self._acceleration(
+            new_state.position,
+            new_state.velocity,
+            new_state.mass,
+            new_state.stiffness,
+            new_state.damping,
+            new_state.time,
+        )
         return new_state
 
     def _tick_fault_schedule(self) -> None:

@@ -87,6 +87,12 @@ class Contest(Base):
     end_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    end_of_observation: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    prediction_horizon_seconds: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
     )
@@ -196,7 +202,6 @@ class Submission(Base):
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    prediction_from_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
     submission_metadata: Mapped[dict[str, Any] | None] = mapped_column(
@@ -267,5 +272,6 @@ class SensorObservation(Base):
         DateTime(timezone=True), nullable=False, index=True
     )
     sensors: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
+    ground_truth: Mapped[dict[str, float] | None] = mapped_column(JSON, nullable=True)
     labels: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     obs_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
