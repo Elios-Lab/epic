@@ -547,51 +547,25 @@
                           class="rounded-md border border-slate-200 bg-slate-50 p-5 transition hover:border-cyan-200"
                           @click="toggleLeaderboard(contest)"
                         >
-                          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div class="min-w-0">
-                              <div class="flex flex-wrap items-center gap-2">
-                                <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
-                                <span
-                                  x-text="contest.status"
-                                  :class="statusBadgeClass(contest.status)"
-                                  class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                                ></span>
-                                <template x-if="contest.end_of_observation && contest.status === 'ACTIVE'">
-                                  <span
-                                    :class="contestPhaseClass(contest)"
-                                    class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                                    x-text="contestPhaseLabel(contest)"
-                                  ></span>
-                                </template>
-                              </div>
-                              <dl class="mt-3 space-y-1 text-sm text-slate-600">
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">Twin</dt>
-                                  <dd x-text="contest.twin_id" class="text-right"></dd>
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">Participants</dt>
-                                  <dd x-text="contest.participant_count ?? '-'" class="text-right"></dd>
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">Start</dt>
-                                  <dd x-text="formatDate(contest.start_date)" class="text-right"></dd>
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">Observation horizon</dt>
-                                  <dd x-text="formatDate(contest.end_of_observation)" class="text-right"></dd>
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">Prediction horizon</dt>
-                                  <dd class="text-right"><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                  <dt class="font-medium text-slate-500">End</dt>
-                                  <dd x-text="formatDate(contest.end_date)" class="text-right"></dd>
-                                </div>
-                              </dl>
-                            </div>
-                            <div class="flex shrink-0 flex-wrap gap-2" @click.stop>
+                          <!-- Title and badges -->
+                          <div class="flex flex-wrap items-center gap-2">
+                            <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                            <span
+                              x-text="contest.status"
+                              :class="statusBadgeClass(contest.status)"
+                              class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                            ></span>
+                            <template x-if="contest.end_of_observation && contest.status === 'ACTIVE'">
+                              <span
+                                :class="contestPhaseClass(contest)"
+                                class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                x-text="contestPhaseLabel(contest)"
+                              ></span>
+                            </template>
+                          </div>
+
+                          <!-- Action buttons -->
+                          <div class="mt-3 flex flex-wrap gap-2" @click.stop>
                               <button
                                 x-show="contest.status === 'DRAFT'"
                                 type="button"
@@ -655,7 +629,34 @@
                                 <span x-show="organizer.deletingContestId === contestId(contest)">Deleting…</span>
                               </button>
                             </div>
-                          </div>
+
+                          <!-- Contest details -->
+                          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600 sm:grid-cols-3">
+                            <div>
+                              <dt class="font-medium text-slate-500">Twin</dt>
+                              <dd x-text="contest.twin_id"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Participants</dt>
+                              <dd x-text="contest.participant_count ?? '-'"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Start</dt>
+                              <dd x-text="formatDate(contest.start_date)"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Observation horizon</dt>
+                              <dd x-text="formatDate(contest.end_of_observation)"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Prediction horizon</dt>
+                              <dd><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">End</dt>
+                              <dd x-text="formatDate(contest.end_date)"></dd>
+                            </div>
+                          </dl>
 
                           <form
                             x-show="organizer.extendingContestId === contestId(contest)"
@@ -940,16 +941,7 @@
                               <button type="button" @click="sortAdminContests('name')" class="hover:text-epic-navy">Name</button>
                             </th>
                             <th class="px-4 py-3 font-semibold">
-                              <button type="button" @click="sortAdminContests('created_by')" class="hover:text-epic-navy">Organizer</button>
-                            </th>
-                            <th class="px-4 py-3 font-semibold">
-                              <button type="button" @click="sortAdminContests('twin_id')" class="hover:text-epic-navy">Twin</button>
-                            </th>
-                            <th class="px-4 py-3 font-semibold">
                               <button type="button" @click="sortAdminContests('status')" class="hover:text-epic-navy">Status</button>
-                            </th>
-                            <th class="px-4 py-3 font-semibold">
-                              <button type="button" @click="sortAdminContests('sampling_rate_hz')" class="hover:text-epic-navy">Sampling</button>
                             </th>
                             <th class="px-4 py-3 font-semibold">
                               <button type="button" @click="sortAdminContests('start_date')" class="hover:text-epic-navy">Start</button>
@@ -967,12 +959,9 @@
                           <template x-for="contest in sortedAdminContests()" :key="contest.contest_id || contest.id">
                             <tr>
                               <td class="px-4 py-3 font-medium text-slate-900" x-text="contest.name"></td>
-                              <td class="px-4 py-3 text-slate-600" x-text="contest.created_by || '-'"></td>
-                              <td class="px-4 py-3 text-slate-600" x-text="contest.twin_id"></td>
                               <td class="px-4 py-3">
                                 <span x-text="contest.status" :class="statusBadgeClass(contest.status)" class="rounded-full px-2.5 py-1 text-xs font-semibold"></span>
                               </td>
-                              <td class="px-4 py-3 text-slate-600"><span x-text="contest.sampling_rate_hz"></span> Hz</td>
                               <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.start_date)"></td>
                               <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.end_date)"></td>
                               <td class="px-4 py-3">

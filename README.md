@@ -6,9 +6,8 @@
 
 | Endpoint | URL |
 |---|---|
-| Web interface | `https://epic.elioslab.net` |
-| REST API | `https://epic.elioslab.net/api/v1` |
-| Swagger UI | `https://epic.elioslab.net/docs` |
+| REST API | [https://epic.elioslab.net/api/v1`](https://epic.elioslab.net/api/v1`) |
+| Swagger UI | [https://epic.elioslab.net/docs`](https://epic.elioslab.net/docs`) |
 
 ---
 
