@@ -99,11 +99,50 @@ def organizer_token(live_server):
             user.role = "ORGANIZER"
             await db.commit()
 
-    asyncio.run(_promote())
+    # asyncio.run() can't be called when there's already a running event loop
+    # (pytest-asyncio starts one for the session).  Run the promotion in a
+    # fresh background thread that has its own loop.
+    import threading
+    exc_box: list = []
+    def _run():
+        try:
+            asyncio.run(_promote())
+        except Exception as e:
+            exc_box.append(e)
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+    if exc_box:
+        raise exc_box[0]
 
     login = requests.post(
         f"{live_server}/api/v1/auth/login",
         json={"username": "organizer_ui", "password": "org-pass"},
+    )
+    return login.json()["access_token"]
+
+
+@pytest.fixture(scope="session")
+def participant_token(live_server):
+    """Create a participant user and return a valid JWT token."""
+    import requests
+
+    admin_login = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+    admin_token = admin_login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    requests.post(
+        f"{live_server}/api/v1/users",
+        json={"username": "participant_ui", "email": "part@test.com", "password": "part-pass"},
+        headers=headers,
+    )
+
+    login = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": "participant_ui", "password": "part-pass"},
     )
     return login.json()["access_token"]
 
@@ -117,6 +156,18 @@ def browser_context(live_server):
         context = browser.new_context(base_url=live_server)
         yield context
         browser.close()
+
+
+@pytest.fixture
+def unauth_page(browser_context, live_server):
+    """Open a fresh page with no token — shows the landing/login state."""
+    pg = browser_context.new_page()
+    pg.goto(live_server)
+    pg.evaluate("() => localStorage.removeItem('epic_token')")
+    pg.reload()
+    pg.wait_for_load_state("networkidle")
+    yield pg
+    pg.close()
 
 
 @pytest.fixture

@@ -24,6 +24,10 @@ asyncio_mode = "strict"
 # tests/ui requires Playwright; excluded from the default run.
 # Run explicitly with: uv run pytest tests/ui
 norecursedirs = ["epic_client", "tests/ui"]
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets",
+    "ignore::DeprecationWarning:uvicorn",
+]
 
 [dependency-groups]
 dev = [
