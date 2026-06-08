@@ -1408,6 +1408,7 @@
           monitor: {
             monitoredContest: null,
             monitorChart: null,
+            monitorChartPending: false,
             monitorSocket: null,
             monitorError: "",
           },
@@ -1775,6 +1776,17 @@
           createMonitorChart() {
             const canvas = this.$refs.monitorChart;
             if (!canvas || typeof Chart === "undefined") return;
+            // Guard: if the canvas has no dimensions yet (parent still hidden),
+            // retry until the browser has completed layout.
+            if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+              setTimeout(() => this.createMonitorChart(), 50);
+              return;
+            }
+            if (this.monitor.monitorChart) {
+              this.monitor.monitorChart.destroy();
+              this.monitor.monitorChart = null;
+            }
+            this.monitor.monitorChartPending = false;
             this.monitor.monitorChart = new Chart(canvas, {
               type: "line",
               data: { labels: [], datasets: [] },
@@ -1830,7 +1842,16 @@
               if (dataset.data.length > 150) dataset.data.shift();
             }
             if (chart.data.labels.length > 150) chart.data.labels.shift();
-            chart.update("none");
+            // Throttle redraws: at high sampling rates (e.g. 20 Hz) calling
+            // chart.update() on every message saturates the render thread.
+            // Schedule one repaint per animation frame instead.
+            if (!this.monitor.monitorChartPending) {
+              this.monitor.monitorChartPending = true;
+              requestAnimationFrame(() => {
+                this.monitor.monitorChartPending = false;
+                if (this.monitor.monitorChart) this.monitor.monitorChart.update("none");
+              });
+            }
           },
           createSensorChart() {
             if (!this.$refs.sensorChart || typeof Chart === "undefined") {
