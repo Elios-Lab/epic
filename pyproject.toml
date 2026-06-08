@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "aiosqlite",
     "alembic",
-    "bcrypt<5",
+    "bcrypt>=3.2,<4.1",
     "fastapi",
     "numpy",
     "passlib[bcrypt]",

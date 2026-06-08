@@ -13,7 +13,7 @@
 
 ## What is EPIC?
 
-EPIC (ELIOS Predictive Intelligence Challenge) is a framework for running machine learning competitions based on simulated physical systems — called **digital twins**. Rather than handing participants a static CSV file, EPIC runs a simulation in real time and lets participants collect their own data by streaming live sensor readings over a WebSocket connection. Participants then train predictive models and submit forecasts to be scored against hidden ground-truth trajectories.
+EPIC (ELIOS Predictive Intelligence Challenge) is a framework for running machine learning competitions based on simulated physical systems, called **digital twins**. Rather than handing participants a static dataset, EPIC runs a simulation in real time and lets participants collect their own data by streaming live sensor readings over a WebSocket connection. Participants then train predictive models and submit forecasts to be scored against hidden ground-truth trajectories.
 
 The platform is designed to support:
 
@@ -35,7 +35,7 @@ From `start_date` to `end_of_observation`, the digital twin simulation runs in r
 
 ### Phase 2 — Evaluation window
 
-From `end_of_observation` to `end_of_observation + prediction_horizon_seconds`, the simulation keeps running but the sensor stream is closed. The ground-truth values for this window are recorded by the platform but hidden from participants. This prevents any post-hoc prediction.
+From `end_of_observation` and for `prediction_horizon_seconds`, the simulation keeps running but the sensor stream is closed. The ground-truth values for this window are recorded by the platform but hidden from participants. This prevents any post-hoc prediction.
 
 ### Submission window
 
@@ -50,6 +50,10 @@ eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
 ---
 
 ## Participating
+
+### Registration
+
+Ask your contest organizer for the contest ID and an invitation link. If you don't have one, contact the EPIC maintainers to request access. You will need to create an account and register for the contest before you can collect data or submit forecasts.
 
 ### Install the SDK
 
