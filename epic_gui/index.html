@@ -1407,7 +1407,7 @@
           },
           monitor: {
             monitoredContest: null,
-            monitorChart: null,
+            monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this._monitorChart (non-reactive)
             monitorSocket: null,
             monitorError: "",
           },
@@ -1754,44 +1754,56 @@
             this.stopMonitor();
             this.monitor.monitoredContest = contest;
             this.monitor.monitorError = "";
-            // Use setTimeout so the browser fully paints the canvas (resolves
-            // x-show dimension issues) before Chart.js measures it.
-            this.$nextTick(() => setTimeout(() => {
-              this.createMonitorChart();
-              this.openMonitorStream(contest);
-            }, 50));
+            this._monitorChartReady = false;
+            // Open the stream immediately so no messages are missed while the
+            // chart initialises. Messages are buffered and flushed once the
+            // chart is ready.
+            this._monitorBuffer = [];
+            this.openMonitorStream(contest);
+            // Wait for Alpine to show the canvas, then create the chart.
+            this.$nextTick(() => this.createMonitorChart());
           },
           stopMonitor() {
             if (this.monitor.monitorSocket) {
               this.monitor.monitorSocket.close();
               this.monitor.monitorSocket = null;
             }
-            if (this.monitor.monitorChart) {
-              this.monitor.monitorChart.destroy();
-              this.monitor.monitorChart = null;
+            if (this._monitorChart) {
+              this._monitorChart.destroy();
+              this._monitorChart = null;
             }
+            this.monitor.monitorChart = null;
             this.monitor.monitoredContest = null;
+            this._monitorChartReady = false;
+            this._monitorBuffer = [];
           },
           createMonitorChart() {
             const canvas = this.$refs.monitorChart;
-            if (!canvas || typeof Chart === "undefined") return;
-            // Guard: if the canvas has no dimensions yet (parent still hidden),
-            // retry until the browser has completed layout.
+            if (!canvas || typeof Chart === "undefined") {
+              setTimeout(() => this.createMonitorChart(), 50);
+              return;
+            }
+            // Wait until the canvas has real pixel dimensions (x-show may still
+            // be applying display:none on the parent at this tick).
             if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
               setTimeout(() => this.createMonitorChart(), 50);
               return;
             }
-            if (this.monitor.monitorChart) {
-              this.monitor.monitorChart.destroy();
-              this.monitor.monitorChart = null;
+            if (this._monitorChart) {
+              this._monitorChart.destroy();
+              this._monitorChart = null;
             }
             this._monitorChartPending = false;
-            this.monitor.monitorChart = new Chart(canvas, {
+            // Use responsive:false and set pixel size explicitly to avoid
+            // Chart.js infinite resize loops caused by CSS percentage heights.
+            canvas.width  = canvas.parentElement.clientWidth  || 600;
+            canvas.height = canvas.parentElement.clientHeight || 288;
+            this._monitorChart = new Chart(canvas, {
               type: "line",
               data: { labels: [], datasets: [] },
               options: {
                 animation: false,
-                responsive: true,
+                responsive: false,
                 maintainAspectRatio: false,
                 interaction: { intersect: false, mode: "nearest" },
                 scales: {
@@ -1801,28 +1813,59 @@
                 plugins: { legend: { labels: { color: "#0f172a" } } },
               },
             });
+            this._monitorChartReady = true;
+            // Flush any observations that arrived before the chart was ready.
+            for (const obs of (this._monitorBuffer || [])) this.appendMonitorObservation(obs);
+            this._monitorBuffer = [];
           },
           openMonitorStream(contest) {
             const contestId = this.contestId(contest);
             const protocol = window.location.protocol === "https:" ? "wss" : "ws";
             const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${contestId}?token=${encodeURIComponent(this.token)}`;
-            this.monitor.monitorSocket = new WebSocket(url);
-            this.monitor.monitorSocket.onmessage = (event) => {
-              const observation = JSON.parse(event.data);
-              this.appendMonitorObservation(observation);
+            const connect = () => {
+              if (!this.monitor.monitoredContest) return; // monitor was stopped
+              const ws = new WebSocket(url);
+              this.monitor.monitorSocket = ws;
+              ws.onmessage = (event) => {
+                const observation = JSON.parse(event.data);
+                if (observation.event === "evaluation_started") {
+                  this.monitor.monitorError = "Observation phase ended — the stream has closed.";
+                  return;
+                }
+                if (observation.event === "contest_closed") {
+                  this.monitor.monitorError = "Contest has been closed.";
+                  return;
+                }
+                this.appendMonitorObservation(observation);
+              };
+              ws.onerror = () => {
+                this.monitor.monitorError = "Monitor stream connection failed.";
+              };
+              ws.onclose = () => {
+                if (!this.monitor.monitoredContest) return; // intentional stop
+                if (!this.monitor.monitorError) {
+                  // Transient disconnect — reconnect after 2 s.
+                  this.monitor.monitorError = "Stream disconnected — reconnecting…";
+                  setTimeout(() => {
+                    if (this.monitor.monitoredContest) {
+                      this.monitor.monitorError = "";
+                      connect();
+                    }
+                  }, 2000);
+                }
+              };
             };
-            this.monitor.monitorSocket.onerror = () => {
-              this.monitor.monitorError = "Monitor stream connection failed.";
-            };
-            this.monitor.monitorSocket.onclose = () => {
-              if (this.monitor.monitoredContest) {
-                this.monitor.monitorError = "Monitor stream disconnected. The contest simulation may not be running.";
-              }
-            };
+            connect();
           },
           appendMonitorObservation(observation) {
-            if (observation.event) return;   // ignore evaluation_started and other control events
-            const chart = this.monitor.monitorChart;
+            if (observation.event) return;
+            // Buffer observations that arrive before the chart is initialised.
+            if (!this._monitorChartReady) {
+              if (!this._monitorBuffer) this._monitorBuffer = [];
+              if (this._monitorBuffer.length < 300) this._monitorBuffer.push(observation);
+              return;
+            }
+            const chart = this._monitorChart;
             if (!chart) return;
             const sensors = observation.sensors || {};
             const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
@@ -1849,7 +1892,7 @@
               this._monitorChartPending = true;
               requestAnimationFrame(() => {
                 this._monitorChartPending = false;
-                if (this.monitor.monitorChart) this.monitor.monitorChart.update("none");
+                if (this._monitorChart) this._monitorChart.update("none");
               });
             }
           },

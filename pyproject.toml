@@ -21,14 +21,18 @@ include = ["epic_api*", "epic_client*", "epic_core*", "epic_sensors*", "epic_twi
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-norecursedirs = ["epic_client"]
+# tests/ui requires Playwright; excluded from the default run.
+# Run explicitly with: uv run pytest tests/ui
+norecursedirs = ["epic_client", "tests/ui"]
 
 [dependency-groups]
 dev = [
     "httpx2",
+    "playwright",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-playwright",
     "requests>=2.34.2",
     "websocket-client>=1.9.0",
 ]

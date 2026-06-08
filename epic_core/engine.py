@@ -207,6 +207,11 @@ class SimulationEngine:
                         paused = True
                         break
                     if refreshed.status == "CLOSED":
+                        # Notify connected clients so their WebSocket closes cleanly.
+                        await self._broadcast(
+                            str(session.contest_id),
+                            {"event": "contest_closed"},
+                        )
                         break
 
                 # ── Broadcast only during the observation phase ───────

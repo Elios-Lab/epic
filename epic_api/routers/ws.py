@@ -66,7 +66,7 @@ async def contest_stream(
             # The engine broadcasts a special "evaluation_started" event when
             # the observation phase ends.  Forward it to the client, then close
             # the stream — participants must not receive evaluation-phase data.
-            if payload.get("event") == "evaluation_started":
+            if payload.get("event") in ("evaluation_started", "contest_closed"):
                 break
     except WebSocketDisconnect:
         pass
