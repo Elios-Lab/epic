@@ -320,6 +320,14 @@
                                       <dd x-text="formatDate(contest.start_date)" class="text-right"></dd>
                                     </div>
                                     <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Observation horizon</dt>
+                                      <dd x-text="formatDate(contest.end_of_observation)" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Prediction horizon</dt>
+                                      <dd class="text-right"><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
                                       <dt class="font-medium text-slate-500">End</dt>
                                       <dd x-text="formatDate(contest.end_date)" class="text-right"></dd>
                                     </div>
@@ -556,22 +564,30 @@
                                   ></span>
                                 </template>
                               </div>
-                              <dl class="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                                <div>
+                              <dl class="mt-3 space-y-1 text-sm text-slate-600">
+                                <div class="flex justify-between gap-4">
                                   <dt class="font-medium text-slate-500">Twin</dt>
-                                  <dd x-text="contest.twin_id"></dd>
+                                  <dd x-text="contest.twin_id" class="text-right"></dd>
                                 </div>
-                                <div>
+                                <div class="flex justify-between gap-4">
                                   <dt class="font-medium text-slate-500">Participants</dt>
-                                  <dd x-text="contest.participant_count ?? '-'"></dd>
+                                  <dd x-text="contest.participant_count ?? '-'" class="text-right"></dd>
                                 </div>
-                                <div>
+                                <div class="flex justify-between gap-4">
                                   <dt class="font-medium text-slate-500">Start</dt>
-                                  <dd x-text="formatDate(contest.start_date)"></dd>
+                                  <dd x-text="formatDate(contest.start_date)" class="text-right"></dd>
                                 </div>
-                                <div>
+                                <div class="flex justify-between gap-4">
+                                  <dt class="font-medium text-slate-500">Observation horizon</dt>
+                                  <dd x-text="formatDate(contest.end_of_observation)" class="text-right"></dd>
+                                </div>
+                                <div class="flex justify-between gap-4">
+                                  <dt class="font-medium text-slate-500">Prediction horizon</dt>
+                                  <dd class="text-right"><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
+                                </div>
+                                <div class="flex justify-between gap-4">
                                   <dt class="font-medium text-slate-500">End</dt>
-                                  <dd x-text="formatDate(contest.end_date)"></dd>
+                                  <dd x-text="formatDate(contest.end_date)" class="text-right"></dd>
                                 </div>
                               </dl>
                             </div>
@@ -789,7 +805,6 @@
                           </label>
                           <label class="block">
                             <span class="text-sm font-medium text-slate-700">Score against</span>
-                            <p class="mt-0.5 text-xs text-slate-500">Choose what the submission MAE/RMSE is computed against.</p>
                             <select x-model="organizer.form.score_against" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
                               <option value="ground_truth">Ground truth — noiseless latent state (recommended)</option>
                               <option value="sensors">Sensor readings — noisy measurements</option>
@@ -806,9 +821,9 @@
                             </div>
                             <div class="grid gap-4 sm:grid-cols-2">
                               <label class="block">
-                                <span class="text-sm font-medium text-slate-700">End of observation phase</span>
-                                <p class="mt-0.5 text-xs text-slate-500">Sensor stream is visible to participants until this date.</p>
-                                <input x-model="organizer.form.end_of_observation" type="datetime-local" required
+                                <span class="text-sm font-medium text-slate-700">Observation horizon (days)</span>
+                                <p class="mt-0.5 text-xs text-slate-500">Duration of the live sensor stream, starting from the contest start date.</p>
+                                <input x-model.number="organizer.form.observation_horizon_days" type="number" min="1" step="1" required
                                   class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
                               </label>
                               <label class="block">
@@ -823,11 +838,17 @@
                         <div class="grid gap-4 lg:grid-cols-2">
                           <label class="block">
                             <span class="text-sm font-medium text-slate-700">Sensor configs</span>
-                            <textarea readonly rows="10" x-text="JSON.stringify(organizer.form.sensor_configs, null, 2)" class="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-700"></textarea>
+                            <textarea rows="10" x-model="organizer.form.sensor_configs_text"
+                              @input="organizer.sensorConfigsError = ''"
+                              class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                            <p x-show="organizer.sensorConfigsError" x-text="organizer.sensorConfigsError" class="mt-1 text-xs text-red-600"></p>
                           </label>
                           <label class="block">
                             <span class="text-sm font-medium text-slate-700">Fault schedule</span>
-                            <textarea readonly rows="10" x-text="JSON.stringify(organizer.form.fault_schedule, null, 2)" class="mt-2 w-full rounded-md border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-700"></textarea>
+                            <textarea rows="10" x-model="organizer.form.fault_schedule_text"
+                              @input="organizer.faultScheduleError = ''"
+                              class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                            <p x-show="organizer.faultScheduleError" x-text="organizer.faultScheduleError" class="mt-1 text-xs text-red-600"></p>
                           </label>
                         </div>
                         <button
@@ -1317,6 +1338,8 @@
             creating: false,
             deletingContestId: null,
             pausingContestId: null,
+            sensorConfigsError: "",
+            faultScheduleError: "",
             contests: [],
             templates: [],
             selectedTemplate: null,
@@ -1335,7 +1358,7 @@
               task_type: "FORECASTING",
               metric_ids: ["mae"],
               score_against: "ground_truth",
-              end_of_observation: "",
+              observation_horizon_days: 2,
               prediction_horizon_seconds: 3600,
             },
             expandedContestId: null,
@@ -2075,20 +2098,39 @@
                 sampling_rate_hz: fullTemplate.sampling_rate_hz,
                 twin_id: fullTemplate.twin_id,
                 sensor_configs: fullTemplate.sensor_configs || [],
+                sensor_configs_text: JSON.stringify(fullTemplate.sensor_configs || [], null, 2),
                 fault_schedule: fullTemplate.fault_schedule || [],
+                fault_schedule_text: JSON.stringify(fullTemplate.fault_schedule || [], null, 2),
                 initial_conditions: fullTemplate.initial_conditions || null,
                 task_type: fullTemplate.task_type || "FORECASTING",
                 metric_ids: fullTemplate.metric_ids || ["mae"],
                 score_against: "ground_truth",
-                end_of_observation: "",
+                observation_horizon_days: 2,
                 prediction_horizon_seconds: 3600,
               };
+              this.organizer.sensorConfigsError = "";
+              this.organizer.faultScheduleError = "";
               this.organizer.newStep = 2;
             } catch (error) {
               this.organizer.error = error.message || "Unable to load template.";
             }
           },
           async createContest() {
+            this.organizer.sensorConfigsError = "";
+            this.organizer.faultScheduleError = "";
+            let sensor_configs, fault_schedule;
+            try {
+              sensor_configs = JSON.parse(this.organizer.form.sensor_configs_text);
+            } catch (e) {
+              this.organizer.sensorConfigsError = "Invalid JSON: " + e.message;
+              return;
+            }
+            try {
+              fault_schedule = JSON.parse(this.organizer.form.fault_schedule_text);
+            } catch (e) {
+              this.organizer.faultScheduleError = "Invalid JSON: " + e.message;
+              return;
+            }
             this.organizer.creating = true;
             this.organizer.error = "";
             this.organizer.success = "";
@@ -2100,13 +2142,16 @@
                 task_type: this.organizer.form.task_type,
                 metric_ids: this.organizer.form.metric_ids,
                 twin_id: this.organizer.form.twin_id,
-                sensor_configs: this.organizer.form.sensor_configs,
-                fault_schedule: this.organizer.form.fault_schedule,
+                sensor_configs: sensor_configs,
+                fault_schedule: fault_schedule,
                 initial_conditions: this.organizer.form.initial_conditions,
                 sampling_rate_hz: Number(this.organizer.form.sampling_rate_hz),
                 start_date: this.toApiDateTime(this.organizer.form.start_date),
                 end_date: this.toApiDateTime(this.organizer.form.end_date),
-                end_of_observation: this.toApiDateTime(this.organizer.form.end_of_observation),
+                end_of_observation: new Date(
+                  new Date(this.organizer.form.start_date).getTime() +
+                  Number(this.organizer.form.observation_horizon_days) * 86400 * 1000
+                ).toISOString(),
                 prediction_horizon_seconds: Number(this.organizer.form.prediction_horizon_seconds),
                 score_against: this.organizer.form.score_against,
               };
