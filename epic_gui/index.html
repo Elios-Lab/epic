@@ -1408,7 +1408,6 @@
           monitor: {
             monitoredContest: null,
             monitorChart: null,
-            monitorChartPending: false,
             monitorSocket: null,
             monitorError: "",
           },
@@ -1786,7 +1785,7 @@
               this.monitor.monitorChart.destroy();
               this.monitor.monitorChart = null;
             }
-            this.monitor.monitorChartPending = false;
+            this._monitorChartPending = false;
             this.monitor.monitorChart = new Chart(canvas, {
               type: "line",
               data: { labels: [], datasets: [] },
@@ -1844,11 +1843,12 @@
             if (chart.data.labels.length > 150) chart.data.labels.shift();
             // Throttle redraws: at high sampling rates (e.g. 20 Hz) calling
             // chart.update() on every message saturates the render thread.
-            // Schedule one repaint per animation frame instead.
-            if (!this.monitor.monitorChartPending) {
-              this.monitor.monitorChartPending = true;
+            // Use a plain (non-Alpine-reactive) flag so setting it does NOT
+            // trigger a re-render that would detach the canvas.
+            if (!this._monitorChartPending) {
+              this._monitorChartPending = true;
               requestAnimationFrame(() => {
-                this.monitor.monitorChartPending = false;
+                this._monitorChartPending = false;
                 if (this.monitor.monitorChart) this.monitor.monitorChart.update("none");
               });
             }
