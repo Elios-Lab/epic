@@ -1407,7 +1407,7 @@
           },
           monitor: {
             monitoredContest: null,
-            monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this._monitorChart (non-reactive)
+            monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this.$el._monitorChart (non-reactive)
             monitorSocket: null,
             monitorError: "",
           },
@@ -1754,11 +1754,11 @@
             this.stopMonitor();
             this.monitor.monitoredContest = contest;
             this.monitor.monitorError = "";
-            this._monitorChartReady = false;
+            this.$el._monitorChartReady = false;
             // Open the stream immediately so no messages are missed while the
             // chart initialises. Messages are buffered and flushed once the
             // chart is ready.
-            this._monitorBuffer = [];
+            this.$el._monitorBuffer = [];
             this.openMonitorStream(contest);
             // Wait for Alpine to show the canvas, then create the chart.
             this.$nextTick(() => this.createMonitorChart());
@@ -1768,14 +1768,14 @@
               this.monitor.monitorSocket.close();
               this.monitor.monitorSocket = null;
             }
-            if (this._monitorChart) {
-              this._monitorChart.destroy();
-              this._monitorChart = null;
+            if (this.$el._monitorChart) {
+              this.$el._monitorChart.destroy();
+              this.$el._monitorChart = null;
             }
             this.monitor.monitorChart = null;
             this.monitor.monitoredContest = null;
-            this._monitorChartReady = false;
-            this._monitorBuffer = [];
+            this.$el._monitorChartReady = false;
+            this.$el._monitorBuffer = [];
           },
           createMonitorChart() {
             const canvas = this.$refs.monitorChart;
@@ -1789,15 +1789,15 @@
               setTimeout(() => this.createMonitorChart(), 50);
               return;
             }
-            if (this._monitorChart) {
-              this._monitorChart.destroy();
-              this._monitorChart = null;
+            if (this.$el._monitorChart) {
+              this.$el._monitorChart.destroy();
+              this.$el._monitorChart = null;
             }
             // Use responsive:false and set pixel size explicitly to avoid
             // Chart.js infinite resize loops caused by CSS percentage heights.
             canvas.width  = canvas.parentElement.clientWidth  || 600;
             canvas.height = canvas.parentElement.clientHeight || 288;
-            this._monitorChart = new Chart(canvas, {
+            this.$el._monitorChart = new Chart(canvas, {
               type: "line",
               data: { labels: [], datasets: [] },
               options: {
@@ -1812,10 +1812,10 @@
                 plugins: { legend: { labels: { color: "#0f172a" } } },
               },
             });
-            this._monitorChartReady = true;
+            this.$el._monitorChartReady = true;
             // Flush any observations that arrived before the chart was ready.
-            for (const obs of (this._monitorBuffer || [])) this.appendMonitorObservation(obs);
-            this._monitorBuffer = [];
+            for (const obs of (this.$el._monitorBuffer || [])) this.appendMonitorObservation(obs);
+            this.$el._monitorBuffer = [];
           },
           openMonitorStream(contest) {
             const contestId = this.contestId(contest);
@@ -1859,12 +1859,12 @@
           appendMonitorObservation(observation) {
             if (observation.event) return;
             // Buffer observations that arrive before the chart is initialised.
-            if (!this._monitorChartReady) {
-              if (!this._monitorBuffer) this._monitorBuffer = [];
-              if (this._monitorBuffer.length < 300) this._monitorBuffer.push(observation);
+            if (!this.$el._monitorChartReady) {
+              if (!this.$el._monitorBuffer) this.$el._monitorBuffer = [];
+              if (this.$el._monitorBuffer.length < 300) this.$el._monitorBuffer.push(observation);
               return;
             }
-            const chart = this._monitorChart;
+            const chart = this.$el._monitorChart;
             if (!chart) return;
             const sensors = observation.sensors || {};
             const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
