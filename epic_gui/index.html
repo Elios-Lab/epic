@@ -1789,10 +1789,10 @@
               setTimeout(() => this.createMonitorChart(), 50);
               return;
             }
-            if (this.$el._monitorChart) {
-              this.$el._monitorChart.destroy();
-              this.$el._monitorChart = null;
-            }
+            // Destroy any existing instance — both our reference and any
+            // Chart.js-internal registration against the canvas element.
+            Chart.getChart(canvas)?.destroy();
+            this.$el._monitorChart = null;
             // Use responsive:false and set pixel size explicitly to avoid
             // Chart.js infinite resize loops caused by CSS percentage heights.
             canvas.width  = canvas.parentElement.clientWidth  || 600;
