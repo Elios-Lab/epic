@@ -123,6 +123,7 @@ def test_no_console_errors_during_streaming(
     (catches the Chart.js fullSize / stack-overflow regressions)."""
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
+    page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
 
     contest = create_active_contest(live_server, organizer_token)
     try:

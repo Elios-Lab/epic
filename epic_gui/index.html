@@ -1793,7 +1793,6 @@
               this._monitorChart.destroy();
               this._monitorChart = null;
             }
-            this._monitorChartPending = false;
             // Use responsive:false and set pixel size explicitly to avoid
             // Chart.js infinite resize loops caused by CSS percentage heights.
             canvas.width  = canvas.parentElement.clientWidth  || 600;
@@ -1884,15 +1883,14 @@
               if (dataset.data.length > 150) dataset.data.shift();
             }
             if (chart.data.labels.length > 150) chart.data.labels.shift();
-            // Throttle redraws: at high sampling rates (e.g. 20 Hz) calling
-            // chart.update() on every message saturates the render thread.
-            // Use a plain (non-Alpine-reactive) flag so setting it does NOT
-            // trigger a re-render that would detach the canvas.
-            if (!this._monitorChartPending) {
-              this._monitorChartPending = true;
+            // Throttle redraws: store the pending flag on the chart object
+            // itself (not on Alpine's reactive `this`) so the RAF callback
+            // never triggers an Alpine re-render that would detach the canvas.
+            if (!chart._rafPending) {
+              chart._rafPending = true;
               requestAnimationFrame(() => {
-                this._monitorChartPending = false;
-                if (this._monitorChart) this._monitorChart.update("none");
+                chart._rafPending = false;
+                if (chart.canvas?.isConnected) chart.update("none");
               });
             }
           },

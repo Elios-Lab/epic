@@ -51,9 +51,15 @@ eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
 
 ## Participating
 
+EPIC defines two primary user roles:
+
+1. **Organizers**, who create and manage competitions, invite participants, configure digital twins and fault scenarios, monitor submissions, and oversee the evaluation process.
+
+2. **Participants**, who register for competitions, collect data from the available digital twins, develop forecasting or diagnostic models, submit predictions, and track their performance on the leaderboard.
+
 ### Registration
 
-Ask your contest organizer for the contest ID and an invitation link. If you don't have one, contact the EPIC maintainers to request access. You will need to create an account and register for the contest before you can collect data or submit forecasts.
+Participation in a competition is by invitation. To join a contest, contact the organizer and request an invitation. The organizer will send you an email containing a secure registration link that can be used to create your account. During registration, you will be asked to provide your personal information, including your name, email address, phone number, and a password. Once your account has been created, it will be associated with the corresponding competition, allowing you to access the available data streams, interact with the digital twins, and submit your forecasts or solutions. You must complete the registration process before you can collect data, access competition resources, or submit entries.
 
 ### Install the SDK
 
@@ -102,13 +108,15 @@ Full SDK documentation and a step-by-step Jupyter notebook are available in the 
 
 ## Architecture
 
-EPIC separates three concerns that are often entangled in similar platforms:
+The architecture is organized around three clearly separated layers of responsibility:
 
-1. **Competition management** — contest lifecycle, user registration, submission handling, scoring, and leaderboards
-2. **Simulation infrastructure** — the real-time engine that drives digital twins at a configurable sampling rate and fans out sensor readings to all connected participants via WebSocket
-3. **Digital twin implementations** — self-contained physical models with their own fault management, decoupled from both the engine and the contest logic
+1. **Competition management**, which handles the complete contest lifecycle, including organizer and participant registration, competition configuration, submission management, scoring, and leaderboard generation.
 
-This separation means a new twin, sensor, or fault model can be introduced by implementing a small interface and registering it at startup — no changes to the platform core are required.
+2. **Simulation infrastructure**, which executes digital twin simulations in real time at a configurable sampling rate and distributes sensor measurements to connected participants through a scalable communication layer.
+
+3. **Digital twin implementations**, which encapsulate the physical models, sensor definitions, and fault injection mechanisms. These models operate independently from both the simulation engine and the competition management layer.
+
+By maintaining a strict separation between these concerns, the system achieves a high degree of modularity and extensibility. New digital twins, sensor types, or fault models can be added by implementing well-defined interfaces and registering the new components within the platform. This approach allows the platform to evolve and support new application domains without requiring modifications to its core architecture.
 
 ### Key components
 
