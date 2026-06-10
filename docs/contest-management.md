@@ -2,597 +2,110 @@
 
 > Related: [Domain Model](domain-model.md) — canonical entity definitions · [API Specification](api-specification.md) — REST endpoints · [Scoring](scoring.md) — metrics and leaderboards
 
-The Contest Management Framework is responsible for creating, managing and evaluating machine learning competitions within EPIC.
+The Contest Management Framework is responsible for creating, managing and evaluating machine learning competitions within EPIC. A contest is the primary organizational unit of the platform: participants never interact directly with digital twins, they interact with contests that use a digital twin as a problem generator.
 
-A contest is the primary organizational unit of the platform.
-
-Participants do not interact directly with digital twins.
-
-Participants interact with contests that use one or more digital twins as problem generators.
-
----
-
-# Design Goals
-
-The contest framework must support:
-
-- Multiple simultaneous contests
-- Multiple participant groups
-- Different tasks
-- Different scoring policies
-- Different digital twins
-- Different difficulty levels
-- Automatic evaluation
-- Leaderboards
-- Reproducible competitions
-
-The framework must remain independent from any particular digital twin.
+The framework is designed to run multiple simultaneous contests with distinct participant groups, different tasks and scoring policies, different digital twins, and different difficulty levels, while keeping evaluation fully automatic and competitions reproducible. Crucially, it must remain independent from any particular digital twin — a contest references a twin only by its registered identifier.
 
 ---
 
 # Core Concepts
 
-The contest system is built around the following entities:
+The contest system is built around seven entities: `User`, `Contest`, `ContestRegistration`, `Task`, `Submission`, `Score`, and `LeaderboardEntry`. A contest carries the simulation configuration and the schedule; tasks define what participants must produce and how it is scored; registrations link users to contests; submissions hold the predictions; scores and leaderboard entries hold the evaluation results. See [Domain Model](domain-model.md) for the canonical entity definitions and the full relational structure.
 
-```text
-User
-Contest
-ContestRegistration
-Task
-Submission
-Score
-LeaderboardEntry
-```
-
-See [Domain Model](domain-model.md) for canonical entity definitions.
-
----
-
-# Contest
-
-A contest defines a machine learning challenge.
-
-A contest contains:
-
-- metadata
-- schedule
-- tasks
-- scoring configuration
-- allowed digital twins
-- leaderboard configuration
-
----
-
-## Contest Structure
-
-```python
-class Contest:
-
-    contest_id: str
-
-    name: str
-
-    description: str
-
-    status: ContestStatus
-
-    visibility: ContestVisibility
-
-    start_date: datetime
-
-    end_date: datetime
-
-    created_by: str
-
-    created_at: datetime
-
-    updated_at: datetime
-```
-
-Tasks and scoring configuration are linked entities managed separately. See [Domain Model](domain-model.md) for the full relational structure.
+A contest itself bundles metadata (name, description, visibility), the schedule (start, end, and the two-phase boundaries), the simulation configuration (twin, sensor configs, fault schedule, initial conditions, sampling rate), and ownership information. Tasks and scoring configuration are linked entities managed separately.
 
 ---
 
 # Contest Lifecycle
 
-Every contest follows a linear lifecycle. Transitions must follow the order below — skipping states (e.g. `DRAFT → ACTIVE`) is not allowed.
+Every contest follows a linear lifecycle:
 
 ```text
-DRAFT
-    ↓
-SCHEDULED
-    ↓
-ACTIVE
-    ↓
-CLOSED
-    ↓
-ARCHIVED
+DRAFT → SCHEDULED → ACTIVE → CLOSED → ARCHIVED
 ```
 
-**Allowed transitions:**
+Transitions must follow this order — skipping states (for example `DRAFT → ACTIVE`) is not allowed, and any attempt to perform an invalid transition returns `409 Conflict` with error code `CONTEST_STATE_ERROR`. The transitions from `DRAFT` to `SCHEDULED`, from `SCHEDULED` to `ACTIVE`, and from `ACTIVE` to `CLOSED` can be performed by the contest's own organizer or by an administrator; the final transition from `CLOSED` to `ARCHIVED` is reserved to administrators.
 
-| From | To | Who |
-|---|---|---|
-| `DRAFT` | `SCHEDULED` | ORGANIZER (own) or ADMINISTRATOR |
-| `SCHEDULED` | `ACTIVE` | ORGANIZER (own) or ADMINISTRATOR |
-| `ACTIVE` | `CLOSED` | ORGANIZER (own) or ADMINISTRATOR |
-| `CLOSED` | `ARCHIVED` | ADMINISTRATOR only |
+In the **DRAFT** state the contest is being configured. It is visible only to its creator and to administrators, and submissions are disabled. Once published to **SCHEDULED**, the contest becomes visible and participants may register, but submissions remain disabled and no simulation runs yet.
 
-No other transitions are permitted. Attempts to perform an invalid transition return `409 Conflict` with error code `CONTEST_STATE_ERROR`.
+The **ACTIVE** state is where the actual competition happens, and it spans three sub-phases defined by `end_of_observation` and `prediction_horizon_seconds`. During the *observation* sub-phase, from `start_date` to `end_of_observation`, the simulation runs and participants receive live sensor readings over the WebSocket stream. During the *evaluation* sub-phase, which lasts `prediction_horizon_seconds` from the end of observation, the simulation continues running but the stream is closed; the ground truth produced in this window is recorded privately and hidden from participants. Finally, in the *submission* sub-phase, which opens when the evaluation window ends and lasts until `end_date`, participants submit their forecasts, submissions are scored automatically, and the leaderboard updates. The platform creates and starts the contest's simulation session automatically on activation; organizers and administrators can pause and resume the session, participants cannot.
+
+When the contest is **CLOSED**, the simulation session is stopped and marked COMPLETED, new submissions are rejected, scores become final, and participants can no longer connect to the WebSocket stream. The **ARCHIVED** state preserves the contest read-only for historical purposes.
 
 ---
 
-## DRAFT
+# Visibility
 
-Contest is being configured.
-
-Visible only to administrators.
-
-Submissions are disabled.
-
----
-
-## SCHEDULED
-
-Contest is published.
-
-Participants may register.
-
-Submissions are disabled.
-
----
-
-## ACTIVE
-
-Contest is running. The ACTIVE state spans three sub-phases defined by `end_of_observation` and `prediction_horizon_seconds`:
-
-| Sub-phase | When | What happens |
-|-----------|------|-------------|
-| **Observation** | `start_date` → `end_of_observation` | Simulation runs; participants receive live sensor readings via WebSocket. |
-| **Evaluation** | `end_of_observation` → `end_of_observation + prediction_horizon_seconds` | Simulation continues; WebSocket stream closes; ground truth is recorded privately. |
-| **Submission** | Evaluation ends → `end_date` | Participants submit forecasts; submissions are scored and the leaderboard updates. |
-
-The platform automatically creates and starts the contest's simulation session. Organizers and administrators can pause and resume the session; participants cannot.
-
-Leaderboards are active once submissions are accepted.
-
----
-
-## CLOSED
-
-Contest has ended.
-
-The simulation session is stopped. The platform sets the session status to COMPLETED.
-
-Submissions are rejected.
-
-Scores become final.
-
-Participants can no longer connect to the WebSocket stream.
-
----
-
-## ARCHIVED
-
-Contest is preserved for historical purposes.
-
-Read-only access.
-
----
-
-# Contest Visibility
-
-Supported visibility modes:
-
-```text
-PUBLIC
-PRIVATE
-INVITATION_ONLY
-```
+A contest declares one of three visibility modes: `PUBLIC`, `PRIVATE`, or `INVITATION_ONLY`. Public contests are listed for every authenticated user; private and invitation-only contests restrict who can discover and join them.
 
 ---
 
 # Tasks
 
-A contest may contain one or more tasks.
+A contest may contain one or more tasks, evaluated independently. A task is defined by its type, the metrics used to score it, a weight for composite scoring, and a free-form `configuration` dictionary whose content depends on the task type (for forecasting it carries `eval_steps` and `score_against`).
 
-Examples:
-
-- Forecasting
-- Anomaly Detection
-- Fault Classification
-- Remaining Useful Life Estimation
-
-Tasks are evaluated independently.
+The currently implemented task type is `FORECASTING`. Anomaly detection, fault classification, and remaining-useful-life estimation are planned task types; the entity model already accommodates them, since tasks carry their own type, metrics, and configuration.
 
 ---
 
-# Task Definition
+# Templates
 
-```python
-class Task:
-
-    task_id: str
-
-    contest_id: str
-
-    task_type: TaskType
-
-    name: str
-
-    description: str
-
-    metric_ids: list[str]
-
-    weight: float
-
-    configuration: dict
-```
+Predefined contest templates are available for all five built-in twins and are exposed via `GET /api/v1/templates`. A template is a complete, working configuration for a specific twin — sensor configs with realistic noise levels, a fault schedule, initial conditions, and a sampling rate — that an organizer can instantiate and then override parameter by parameter, instead of configuring a simulation from scratch. User-defined reusable templates, saved and shared between organizers, are a planned extension.
 
 ---
 
-# Contest Configuration
+# Users, Roles, and Permissions
 
-Organizers and administrators must be able to configure:
+Three roles exist. The **ADMINISTRATOR** has full control over all contests and all users — everything an organizer can do, platform-wide, plus user management and archival. The **ORGANIZER** creates contests and manages their own through the full lifecycle: they can extend deadlines, view every submission made to their contests, and pause or resume their simulation sessions, but they cannot touch other organizers' contests or manage users. The **PARTICIPANT** registers for contests in the SCHEDULED or ACTIVE state, connects to the WebSocket stream to collect data during the observation phase, submits forecasts once the submission window opens, and views their own scores and ranking.
 
-- title
-- description
-- dates
-- rules
-- tasks
-- scoring policies
-- visibility
-- digital twins
-
----
-
-# Contest Templates
-
-Predefined contest templates are available for all five built-in twins and are exposed via the API. An organizer can instantiate a template and override individual parameters without configuring the simulation from scratch.
-
-Available template categories:
-
-- Forecasting Challenge
-- Anomaly Detection Challenge
-- Predictive Maintenance Challenge
-
-User-defined reusable templates (saved configurations that can be shared between organizers) are a planned future extension.
-
----
-
-# Users
-
-Users interact with contests.
-
-```python
-class User:
-
-    user_id: str
-
-    username: str
-
-    email: str
-
-    password_hash: str
-
-    role: UserRole
-
-    is_active: bool
-
-    created_at: datetime
-
-    updated_at: datetime
-```
-
-See [Domain Model](domain-model.md) for the full definition.
-
----
-
-# Roles
-
-```text
-ADMINISTRATOR   ← full platform management
-ORGANIZER       ← creates and manages own contests
-PARTICIPANT     ← registers for contests and submits predictions
-```
-
----
-
-# Administrator Permissions
-
-- Full control over all contests and all users
-- Everything an ORGANIZER can do, platform-wide
-
----
-
-# Organizer Permissions
-
-- Create contests
-- Manage own contests through full lifecycle (DRAFT → ACTIVE → CLOSED)
-- Extend deadlines on own contests
-- View all submissions to own contests
-- Cannot modify other organizers' contests
-- Cannot manage users
-
----
-
-# Participant Permissions
-
-- Register for contests (SCHEDULED or ACTIVE)
-- Connect to contest WebSocket stream and collect data during the observation phase
-- Submit forecasts once the submission window opens (after the evaluation phase ends)
-- View own scores and rankings
+How accounts are created differs by role: organizers self-register through a request queue reviewed by an administrator, while participants are invited per-contest by the organizer. See [Authentication](authentication.md) for the complete registration workflows.
 
 ---
 
 # Registrations
 
-A registration links a user to a contest.
-
-```python
-class ContestRegistration:
-
-    registration_id: str
-
-    contest_id: str
-
-    user_id: str
-
-    registered_at: datetime
-
-    status: RegistrationStatus
-```
-
-Supported statuses: `REGISTERED`, `WITHDRAWN`, `BANNED`.
-
-The pair `(user_id, contest_id)` must be unique.
-
-Only registered users may submit solutions.
+A registration links a user to a contest, with statuses `REGISTERED`, `WITHDRAWN`, and `BANNED`. The pair `(user_id, contest_id)` is unique — a user registers at most once per contest — and only users with an active registration may connect to the data stream or submit solutions.
 
 ---
 
-# Submission System
+# Submissions
 
-Submissions are the primary evaluation mechanism.
+Submissions are the primary evaluation mechanism. A submission records who submitted what for which task and when: it carries the contest, the user, the task identifier, a server-assigned timestamp, the prediction payload (for forecasting, one list of values per sensor under the `forecast` key), a status that progresses from `PENDING` to `EVALUATED` or `FAILED`, and an optional metadata dictionary where the platform records error details when validation or scoring fails.
 
-A submission contains:
+Temporal integrity is enforced by the two-phase structure rather than by trust: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`, when the full ground truth for the evaluation window already exists, and forecasts must cover exactly `eval_steps` values per sensor. This makes retroactive "predictions" structurally impossible. See [Scoring](scoring.md) for the full explanation.
 
-```python
-class Submission:
+Every submission then follows the same pipeline: validation of the contest state, the registration, the payload format, and the task compatibility; scoring against the recorded ground truth; storage of one `Score` row per metric per sensor; and finally a leaderboard update. Invalid submissions are rejected with an explanatory error in their metadata.
 
-    submission_id: str
-
-    contest_id: str
-
-    user_id: str
-
-    task_id: str
-
-    submitted_at: datetime              # set by the server
-
-    payload: dict                       # {"forecast": {"sensor_id": [v1, v2, …]}}
-
-    status: SubmissionStatus
-
-    submission_metadata: dict | None
-```
-
-**Temporal integrity** is enforced by the two-phase structure: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`. Forecasts must cover exactly `eval_steps` values per sensor. See [Scoring](scoring.md) for the full explanation.
-
-Scores are stored separately as `Score` entities linked to the submission.
-
-See [Domain Model](domain-model.md) for the full entity definition.
-
----
-
-# Submission Policies
-
-Different contests may use different policies.
-
-Examples:
-
-## Unlimited
-
-Unlimited submissions.
-
-## Daily Limit
-
-Maximum N submissions per day.
-
-## Best Score
-
-Leaderboard uses best submission.
-
-## Latest Submission
-
-Leaderboard uses latest submission.
-
----
-
-# Submission Validation
-
-The evaluation engine must validate:
-
-- contest state
-- registration status
-- submission format
-- task compatibility
-
-Invalid submissions must be rejected.
-
----
-
-# Evaluation Pipeline
-
-Every submission follows the same workflow.
-
-```text
-Submission
-      ↓
-Validation
-      ↓
-Scoring
-      ↓
-Storage
-      ↓
-Leaderboard Update
-```
+Submission *policies* — how many submissions a participant may make and which one counts — are a configuration axis of the framework. The current implementation accepts unlimited submissions and ranks each participant by their best score; daily limits and latest-submission ranking are planned policy options.
 
 ---
 
 # Leaderboards
 
-Each contest owns a leaderboard.
+Each contest owns one leaderboard, generated automatically as submissions are evaluated. An entry records the participant, their best submission, its composite score, and the resulting rank; ranks are recomputed across the whole contest on every accepted score, so the leaderboard is always current.
 
-Leaderboards are generated automatically.
-
----
-
-# Ranking Modes
-
-## Best Score
-
-Highest score wins.
-
----
-
-## Latest Submission
-
-Most recent valid submission wins.
-
----
-
-## Multi-Metric
-
-Several metrics are combined.
-
-Example:
-
-```text
-Final Score =
-0.7 * Forecast Score +
-0.3 * Anomaly Score
-```
-
----
-
-# Leaderboard Entry
-
-```python
-class LeaderboardEntry:
-
-    entry_id: str
-
-    contest_id: str
-
-    user_id: str
-
-    submission_id: str
-
-    rank: int
-
-    score: float
-
-    updated_at: datetime
-```
-
----
-
-# Public vs Private Leaderboards
-
-Supported modes:
-
-```text
-PUBLIC
-PARTICIPANT_ONLY
-ADMIN_ONLY
-```
-
----
-
-# Contest Resources
-
-Each contest may provide:
-
-- documentation
-- starter code
-- WebSocket client examples
-- API examples
-- baseline models
-
----
-
-# Contest-Specific Digital Twins
-
-A contest may restrict participants to:
-
-```python
-allowed_twins = [
-    "mechanical_system"
-]
-```
-
-or
-
-```python
-allowed_twins = [
-    "industrial_pump",
-    "electric_motor"
-]
-```
-
----
+Ranking supports three conceptual modes: *best score*, where each participant's strongest submission counts; *latest submission*, where the most recent valid one counts; and *multi-metric*, where several metric values are combined into a single ranking score through configured weights (for example seventy percent forecasting quality, thirty percent anomaly detection). The current implementation provides best-score ranking on the value returned by the task's evaluator, honouring the metric's declared direction — lowest-first for minimized metrics like MAE, highest-first for maximized ones like F1. The leaderboard visibility modes `PUBLIC`, `PARTICIPANT_ONLY`, and `ADMIN_ONLY`, as well as Kaggle-style public/private leaderboard splits, are part of the roadmap.
 
 ---
 
 # Deadline Management
 
-Organizers (for own contests) and administrators must be able to modify:
-
-- start date
-- end date
-
-even after publication.
-
-Typical use case:
-
-```text
-Contest deadline extension
-```
-
-without requiring contest recreation.
+Organizers (for their own contests) and administrators can modify the contest schedule — including the end date — even after publication, without recreating the contest. The typical use case is a deadline extension while a contest is running: the simulation engine picks up end-date changes dynamically.
 
 ---
 
 # Auditability
 
-The system should maintain logs of:
-
-- contest creation
-- contest updates
-- registrations
-- submissions
-- score changes
-
-This is important for educational and research use.
+The system keeps a durable record of contest creation and updates, registrations, submissions, and score changes, each carrying server-side timestamps. For educational and research use this matters twice over: instructors can reconstruct exactly what every participant did and when, and researchers can verify that reported results correspond to what the platform actually recorded.
 
 ---
 
 # Future Extensions
 
-Possible future features:
-
-- Team-based contests
-- Multi-stage competitions
-- Hidden test sets
-- Kaggle-style private leaderboards
-- Peer-reviewed solutions
-- Automatic report generation
+Several extensions are anticipated and deliberately kept out of the current scope: team-based contests, multi-stage competitions, hidden test sets, private leaderboards, peer-reviewed solutions, and automatic report generation. None of them require changes to the entity model beyond additive ones, which is the test applied before accepting any of these features into the roadmap.
 
 ---
 
 # Long-Term Goal
 
-The Contest Management Framework should allow instructors and researchers to create new competitions without writing code.
-
-A contest should be definable primarily through configuration, while digital twins provide the underlying simulation environment.
+The Contest Management Framework should allow instructors and researchers to create new competitions without writing code. A contest should be definable purely through configuration — twin, sensors, faults, schedule, tasks, metrics — while digital twins provide the underlying simulation environment.

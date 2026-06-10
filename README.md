@@ -6,8 +6,8 @@
 
 | Endpoint | URL |
 |---|---|
-| REST API | [https://epic.elioslab.net/api/v1`](https://epic.elioslab.net/api/v1`) |
-| Swagger UI | [https://epic.elioslab.net/docs`](https://epic.elioslab.net/docs`) |
+| REST API | [https://epic.elioslab.net/api/v1](https://epic.elioslab.net/api/v1) |
+| Swagger UI | [https://epic.elioslab.net/docs](https://epic.elioslab.net/docs) |
 
 ---
 
@@ -59,7 +59,11 @@ EPIC defines two primary user roles:
 
 ### Registration
 
-Participation in a competition is by invitation. To join a contest, contact the organizer and request an invitation. The organizer will send you an email containing a secure registration link that can be used to create your account. During registration, you will be asked to provide your personal information, including your name, email address, phone number, and a password. Once your account has been created, it will be associated with the corresponding competition, allowing you to access the available data streams, interact with the digital twins, and submit your forecasts or solutions. You must complete the registration process before you can collect data, access competition resources, or submit entries.
+EPIC supports two distinct registration paths depending on the role.
+
+**Organizers** register through a self-service form at `POST /api/v1/organizer-requests`. The request enters a PENDING queue and is reviewed by an administrator. On approval the account is created automatically and the organizer receives an email with their login link. On rejection they receive a notification explaining the outcome.
+
+**Participants** are invited by the organizer of a specific competition. The organizer uploads a list of email addresses for their contest; each address receives a personal, one-time invitation link valid for 7 days. Following the link brings the participant to a registration form where they provide their name, phone number, and a password. Once submitted, the account is created and immediately linked to that competition — no further steps are required before accessing data streams, interacting with digital twins, and submitting forecasts.
 
 ### Install the SDK
 
@@ -173,6 +177,8 @@ EPIC ships with five digital twins covering a range of industrial domains:
 
 Each twin is fully self-contained: it manages its own physical state, fault injection, and sensor compatibility. Adding a new twin requires only implementing the `DigitalTwin` interface — no changes to EPIC Core.
 
+A detailed description of each twin — the physics it simulates, the faults it supports, and the initial conditions it accepts — is available in the [Digital Twin Catalog](docs/twin-catalog.md).
+
 ---
 
 ## Getting started (self-hosting)
@@ -269,6 +275,10 @@ Fault models are defined inside the twin that owns them, keeping physical realis
 
 Implement the `ScoringMetric` interface and register it with `metric_registry`. New metrics become available in the `metric_ids` field of the contest creation request. See [Scoring](docs/scoring.md).
 
+### Adding a contest task type
+
+Implement the `TaskEvaluator` interface — payload validation, metric application, and the leaderboard ranking policy for one task type — and register it with `task_evaluator_registry`. The new task type is immediately accepted at contest creation and scored automatically, with no changes to EPIC Core or the API. See [Scoring](docs/scoring.md).
+
 ---
 
 ## Documentation
@@ -285,6 +295,7 @@ Implement the `ScoringMetric` interface and register it with `metric_registry`. 
 | [Error Handling](docs/error-handling.md) | Exception hierarchy and API error envelope |
 | [Testing](docs/testing.md) | Testing strategy, fixtures, and end-to-end tests |
 | [Digital Twins](docs/digital-twins.md) | Guide for implementing a new digital twin |
+| [Digital Twin Catalog](docs/twin-catalog.md) | Detailed description of the five built-in twins |
 | [Sensors](docs/sensors.md) | Guide for implementing a new sensor |
 | [Faults](docs/faults.md) | Guide for implementing fault models |
 | [Scoring](docs/scoring.md) | Metrics, scoring policies, and leaderboard computation |

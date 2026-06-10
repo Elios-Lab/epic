@@ -6,6 +6,7 @@ from epic_sensors.acceleration import AccelerationSensor
 from epic_sensors.co2_concentration import CO2ConcentrationSensor
 from epic_sensors.current import CurrentSensor
 from epic_sensors.flow_rate import FlowRateSensor
+from epic_sensors.humidity import HumiditySensor
 from epic_sensors.occupancy import OccupancySensor
 from epic_sensors.power import PowerSensor
 from epic_sensors.position import PositionSensor
@@ -47,6 +48,7 @@ def test_sensor_properties_and_metadata():
         ),
         (OccupancySensor(), "occupancy", "people", PhysicalQuantity.OCCUPANCY),
         (PowerSensor(), "power", "W", PhysicalQuantity.POWER),
+        (HumiditySensor(), "humidity", "%RH", PhysicalQuantity.HUMIDITY),
     ]
 
     for sensor, sensor_id, unit, quantity in sensors:
@@ -157,3 +159,53 @@ def test_quantization_rounds_to_resolution():
     assert sensor.observe(MockState(value=1.1)) == pytest.approx(1.0)
     assert sensor.observe(MockState(value=1.15)) == pytest.approx(1.25)
     assert sensor.observe(MockState(value=1.0)) == pytest.approx(1.0)
+
+
+def test_injected_rng_reproduces_sequence():
+    """Two sensors seeded with identical Random instances produce identical
+    noisy readings, independent of the global random module state."""
+    import random
+
+    state = MockState(value=1.0)
+    sensor_a = PositionSensor(noise_std=0.5, rng=random.Random(42))
+    sensor_b = PositionSensor(noise_std=0.5, rng=random.Random(42))
+
+    random.seed(0)  # perturb global state — must not matter
+    readings_a = [sensor_a.observe(state) for _ in range(10)]
+    random.seed(99999)
+    readings_b = [sensor_b.observe(state) for _ in range(10)]
+
+    assert readings_a == readings_b
+
+
+def test_injected_rng_isolated_from_global_random():
+    """Draws on the global random module must not influence a sensor with an
+    injected RNG (concurrent sessions must not interfere)."""
+    import random
+
+    state = MockState(value=1.0)
+    sensor_a = PositionSensor(noise_std=0.5, rng=random.Random(7))
+    readings_clean = [sensor_a.observe(state) for _ in range(5)]
+
+    sensor_b = PositionSensor(noise_std=0.5, rng=random.Random(7))
+    readings_interleaved = []
+    for _ in range(5):
+        random.random()  # simulate another session drawing from global RNG
+        readings_interleaved.append(sensor_b.observe(state))
+
+    assert readings_clean == readings_interleaved
+
+
+def test_sensor_without_rng_uses_global_seeding():
+    """Backward compatibility: without an injected RNG, global random.seed()
+    still makes readings reproducible."""
+    import random
+
+    state = MockState(value=1.0)
+
+    random.seed(123)
+    readings_a = [PositionSensor(noise_std=0.5).observe(state) for _ in range(5)]
+    random.seed(123)
+    readings_b = [PositionSensor(noise_std=0.5).observe(state) for _ in range(5)]
+
+    assert readings_a == readings_b

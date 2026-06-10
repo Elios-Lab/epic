@@ -14,6 +14,7 @@ from epic_core.interfaces import (
     ScoringMetric,
     Sensor,
     SimulationState,
+    TaskEvaluator,
 )
 from epic_core.quantities import PhysicalQuantity
 from epic_core.registry import PluginRegistry
@@ -176,21 +177,25 @@ def test_registry_context(
     twins: list[DigitalTwin] | None = None,
     sensors: list[Sensor] | None = None,
     metrics: list[ScoringMetric] | None = None,
+    task_evaluators: list[TaskEvaluator] | None = None,
 ) -> Iterator[SimpleNamespace]:
     original = SimpleNamespace(
         twin=registry_module.twin_registry,
         sensor=registry_module.sensor_registry,
         metric=registry_module.metric_registry,
+        task_evaluator=registry_module.task_evaluator_registry,
     )
     fresh = SimpleNamespace(
         twin=PluginRegistry(DigitalTwin, "twin_id"),
         sensor=PluginRegistry(Sensor, "sensor_id"),
         metric=PluginRegistry(ScoringMetric, "metric_id"),
+        task_evaluator=PluginRegistry(TaskEvaluator, "task_type"),
     )
 
     registry_module.twin_registry = fresh.twin
     registry_module.sensor_registry = fresh.sensor
     registry_module.metric_registry = fresh.metric
+    registry_module.task_evaluator_registry = fresh.task_evaluator
 
     try:
         for plugin in twins or []:
@@ -199,8 +204,11 @@ def test_registry_context(
             fresh.sensor.register(plugin)
         for plugin in metrics or []:
             fresh.metric.register(plugin)
+        for plugin in task_evaluators or []:
+            fresh.task_evaluator.register(plugin)
         yield fresh
     finally:
         registry_module.twin_registry = original.twin
         registry_module.sensor_registry = original.sensor
         registry_module.metric_registry = original.metric
+        registry_module.task_evaluator_registry = original.task_evaluator

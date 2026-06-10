@@ -8,14 +8,7 @@ EPIC does not generate or export datasets on the server. Dataset collection is t
 
 # Philosophy
 
-A core educational principle of EPIC is that collecting data from a live system is itself a skill. Participants are expected to:
-
-- Connect to the contest's WebSocket stream
-- Decide what to record and at what granularity
-- Handle connection interruptions gracefully
-- Curate and engineer their own dataset for model training
-
-This mirrors real-world industrial monitoring, where an engineer does not receive a pre-packaged dataset — they instrument the system and collect what they need.
+A core educational principle of EPIC is that collecting data from a live system is itself a skill. Participants connect to the contest's WebSocket stream themselves, decide what to record and at what granularity, handle connection interruptions gracefully, and curate and engineer their own dataset for model training. This mirrors real-world industrial monitoring, where an engineer does not receive a pre-packaged dataset — they instrument the system and collect what they need.
 
 ---
 
@@ -44,13 +37,7 @@ Participants receive sensor readings only. Labels and fault information are neve
 
 # Client-Side Storage
 
-Participants choose their own storage format and location. Common approaches:
-
-- Append each message to a CSV file
-- Stream into a local database (SQLite, DuckDB)
-- Buffer in memory and write periodically
-
-A minimal Python example:
+Participants choose their own storage format and location. Common approaches include appending each message to a CSV file, streaming into a local database such as SQLite or DuckDB, or buffering in memory and writing periodically. A minimal Python example:
 
 ```python
 import asyncio

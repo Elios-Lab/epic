@@ -14,6 +14,9 @@ from epic_core.config import Settings, get_settings as core_get_settings
 from epic_core.db.models import User
 from epic_core.db.session import get_db
 from epic_core.exceptions import InsufficientPermissionsError, InvalidCredentialsError
+from epic_core.notifications import NotificationService, NullNotificationService
+# imported lazily inside get_notification_service to avoid a circular import
+# and to keep epic_core free of delivery-layer imports
 
 # Kept only for OpenAPI / Swagger UI — the lock icon and token input box.
 # Not used in the actual auth logic.
@@ -77,6 +80,22 @@ async def require_admin(
     if current_user.role != "ADMINISTRATOR":
         raise InsufficientPermissionsError("Administrator privileges required")
     return current_user
+
+
+def get_notification_service(
+    settings: Settings = Depends(get_settings),
+) -> NotificationService:
+    """Auto-select the NotificationService based on configuration.
+
+    - smtp_host set  → EmailNotificationService (production)
+    - smtp_host unset → NullNotificationService (no-op)
+
+    Override this dependency in tests with a CollectingNotificationService.
+    """
+    if settings.smtp_host:
+        from epic_api.email_service import EmailNotificationService
+        return EmailNotificationService(settings)
+    return NullNotificationService()
 
 
 async def require_organizer_or_admin(

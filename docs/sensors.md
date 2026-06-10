@@ -8,584 +8,149 @@ Sensor implementations live in `epic_sensors/` and are completely independent of
 
 ---
 
-# Package Structure
-
-```text
-epic_sensors/
-├── __init__.py
-├── registry.py          ← register() call for all sensors at startup
-├── linear/
-│   ├── position.py      ← PositionSensor  (LINEAR_POSITION)
-│   ├── velocity.py      ← VelocitySensor  (LINEAR_VELOCITY)
-│   └── acceleration.py  ← AccelerationSensor (LINEAR_ACCELERATION)
-├── thermal/
-│   └── temperature.py   ← TemperatureSensor (TEMPERATURE)
-└── mechanical/
-    └── pressure.py      ← PressureSensor  (PRESSURE)  [future]
-```
-
----
-
 # Design Philosophy
 
-A sensor is:
-
-- **Independent from a specific twin** — coupled only through `PhysicalQuantity`
-- **Reusable across domains** — a `TemperatureSensor` works for a mechanical twin, an industrial pump, or a biomedical system
-- **Configurable** — noise, drift, quantization, latency, saturation are constructor parameters
-- **Honest about its limitations** — the measurement pipeline documents exactly how the signal degrades
+A sensor in EPIC is independent of any specific twin: the only coupling between the two is the `PhysicalQuantity` it declares to measure, so a temperature sensor works equally well on a mechanical twin, an industrial pump, or a biomedical system. Every aspect of its measurement behavior — noise, drift, quantization, latency, saturation, probabilistic failures — is a constructor parameter, which makes the entire degradation pipeline configurable per contest without writing code. The pipeline is also deliberately transparent: the implementation documents exactly how the signal degrades, stage by stage, so that an organizer knows precisely what kind of challenge a given configuration produces.
 
 The EPIC Core never knows what physical quantity a sensor measures. It only receives the final `float` from `sensor.observe()`.
 
 ---
 
-# Sensor Responsibilities
+# Package Structure
 
-A sensor is responsible for:
+The sensor package is flat: one module per sensor, a shared base class, and a registration entry point.
 
-- Declaring which physical quantity it measures (`measured_quantity`)
-- Reading that quantity from the state via `state.get_quantity()`
-- Applying the measurement pipeline
-- Producing a scalar `float` measurement
+```text
+epic_sensors/
+├── __init__.py
+├── base.py              ← _BaseSensor: the full measurement pipeline
+├── plugin.py            ← register() call for all sensors at startup
+├── acceleration.py      ← AccelerationSensor   (LINEAR_ACCELERATION, m/s²)
+├── co2_concentration.py ← CO2ConcentrationSensor (CO2_CONCENTRATION, ppm)
+├── current.py           ← CurrentSensor        (CURRENT, A)
+├── flow_rate.py         ← FlowRateSensor       (FLOW_RATE, m³/h)
+├── humidity.py          ← HumiditySensor       (HUMIDITY, %RH)
+├── occupancy.py         ← OccupancySensor      (OCCUPANCY, people)
+├── position.py          ← PositionSensor       (LINEAR_POSITION, m)
+├── power.py             ← PowerSensor          (POWER, W)
+├── pressure.py          ← PressureSensor       (PRESSURE, bar)
+├── rotational_speed.py  ← RotationalSpeedSensor (ROTATIONAL_SPEED, RPM)
+├── temperature.py       ← TemperatureSensor    (TEMPERATURE, °C)
+├── velocity.py          ← VelocitySensor       (LINEAR_VELOCITY, m/s)
+├── vibration.py         ← VibrationSensor      (VIBRATION, mm/s)
+└── voltage.py           ← VoltageSensor        (VOLTAGE, V)
+```
 
-A sensor is not responsible for:
+Each concrete sensor is a thin declaration on top of `_BaseSensor`: it sets its identifier, display name, unit, measured quantity, and description, and inherits the entire measurement pipeline. Adding a new sensor for an already-supported quantity is therefore a file of a dozen lines.
 
-- State evolution
-- Fault scheduling
-- Contest management
-- Scoring
-- Deciding which twin it works with (that is the engine's job, via compatibility validation)
+---
+
+# Responsibilities
+
+A sensor has a narrow, well-defined job. It declares which physical quantity it measures through the `measured_quantity` property, reads that quantity from the simulation state via `state.get_quantity()`, pushes the value through its measurement pipeline, and returns a single scalar `float`.
+
+Everything else is explicitly outside its scope. A sensor does not evolve state — that is the twin's job. It does not schedule or apply faults, manage contests, or score submissions. It does not even decide which twins it works with: compatibility is validated by the engine, which checks that the sensor's measured quantity is among the twin's supported quantities before a session starts.
 
 ---
 
 # Sensor Interface
 
-Every sensor must implement the `Sensor` abstract class defined in `epic_core/interfaces.py`.
+Every sensor must implement the `Sensor` abstract class defined in `epic_core/interfaces.py`. The interface requires `sensor_id`, `name`, `unit`, and `measured_quantity` as properties, plus the `observe(state, dt)` method that produces the measurement and a `metadata()` method that returns a dictionary used by the API, the documentation, the user interface, and contest configuration tooling.
 
-The interface requires implementing: `sensor_id`, `name`, `unit`, `measured_quantity`, `observe(state, dt)`, and `metadata()`.
-
----
-
-# Measurement Pipeline
-
-Conceptually, every sensor implements:
-
-```text
-Latent Variable
-        ↓
-Gain
-        ↓
-Bias
-        ↓
-Noise
-        ↓
-Saturation
-        ↓
-Quantization
-        ↓
-Filtering
-        ↓
-Sensor Fault
-        ↓
-Measurement
-```
-
-Not all stages need to be active.
-
-The pipeline should be configurable.
-
----
-
-# Sensor Metadata
-
-Every sensor must expose metadata.
-
-Example:
+A typical metadata payload looks like this:
 
 ```python
 {
-    "sensor_id": "temperature_sensor",
+    "sensor_id": "temperature",
     "name": "Temperature Sensor",
     "unit": "°C",
-    "version": "1.0.0"
+    "measured_quantity": "temperature",
+    "version": "1.0.0",
+    "description": "Measures temperature in degrees Celsius",
 }
 ```
 
-Metadata is used by:
+---
 
-- APIs
-- Documentation
-- User Interfaces
-- Contest configuration
+# The Measurement Pipeline
+
+Every call to `observe()` reads the clean latent value from the twin's state and transforms it through a fixed sequence of stages, each controlled by a constructor parameter and each inactive by default:
+
+```text
+latent value
+    → gain                 (gain)
+    → offset               (bias)
+    → Gaussian noise       (noise_std)
+    → accumulated drift    (drift_rate)
+    → saturation           (min_value, max_value)
+    → quantization         (quantization)
+    → latency              (latency_steps)
+    → false reading        (p_false_reading)
+    → outlier injection    (p_outlier)
+    → measurement
+```
+
+The first stages model calibration and electronics. *Gain* multiplies the latent value, modeling scale error; *bias* adds a constant offset, useful both as a calibration parameter and as a way to simulate a miscalibrated instrument. *Noise* adds a zero-mean Gaussian sample with standard deviation `noise_std`, the most common way to make a forecasting task non-trivial. *Drift* accumulates over time: at every observation the internal drift state grows by `drift_rate × dt` and is added to the measurement, so a sensor with a small positive drift rate reads progressively higher over the course of a long contest — exactly like a real instrument losing calibration.
+
+The next stages model the physical limits of an instrument. *Saturation* clips the measurement to the `[min_value, max_value]` operating range, the way a thermometer rated for −40 °C to 125 °C simply cannot report values outside that interval. *Quantization* rounds the measurement to the nearest multiple of the configured resolution, so a temperature sensor with `quantization=0.1` reports 21.3 rather than 21.2974. *Latency* delays the reported value by a configurable number of steps using an internal buffer: with `latency_steps=3`, the participant sees at each step the measurement taken three steps earlier.
+
+The final stages are probabilistic failure modes, important for anomaly-detection-style challenges. With probability `p_false_reading` per observation, the sensor discards the true measurement entirely and returns a random value drawn from its operating range — a wrong reading indistinguishable from a real one. With probability `p_outlier`, an extreme spike of about ten noise standard deviations is added on top of the measurement. A contest that sets `p_false_reading=0.02` will corrupt roughly two percent of observations, which is enough to defeat naive models without making the stream useless.
+
+These failure modes are intrinsic sensor properties, configured as parameters of the measurement pipeline. They are deliberately *not* `FaultDescriptor` objects: physical faults belong to the twin and alter the latent state itself, while sensor failures only corrupt the observation of an otherwise healthy state. See [Faults](faults.md) for the full discussion of this distinction. Additional failure modes found in real instruments — stuck-at values, dropout (missing readings), step changes in noise level — follow the same philosophy and are natural candidates for future pipeline parameters.
 
 ---
 
-# Basic Sensor Parameters
+# Ground Truth Is Not Affected
 
-All sensors should support:
+The pipeline corrupts only what participants see. The engine separately records the clean latent value (`state.get_quantity()`) as ground truth for every evaluation-phase observation, so scoring can compare forecasts against the true physical signal rather than against the corrupted measurement. The organizer chooses which reference to score against through the `score_against` task configuration field, as described in [Scoring](scoring.md).
+
+---
+
+# Configuration and Instantiation
+
+The registry holds one **prototype** instance per sensor type, registered at application startup. The prototype is used exclusively for discovery and metadata retrieval, for validating sensor–twin compatibility, and as a type reference during session initialization. It never performs observations for a contest.
+
+When a contest session starts, the engine obtains a fresh sensor instance through the `Sensor.configure()` contract, applying the contest's `sensor_configs` overrides:
 
 ```python
-sensor_id: str
-
-unit: str
-
-sampling_rate_hz: float
-
-gain: float
-
-bias: float
-
-noise_std: float
-
-resolution: float
-
-min_value: float
-
-max_value: float
+configured_sensor = registered_sensor.configure(overrides, rng)   # fresh instance, independent per session
 ```
 
-These parameters provide a generic abstraction that applies to many domains.
+`configure()` is part of the `Sensor` interface and is the formal configuration mechanism: the engine never calls a sensor constructor directly. The default implementation reconstructs the sensor through its own class with the overrides as constructor keyword arguments, injecting the per-session RNG when the constructor declares an `rng` parameter; a sensor with a different configuration mechanism can override the method.
 
----
+This mirrors how digital twins are instantiated. Each contest session gets its own independent sensor instances, carrying their own drift accumulator, latency buffer, and any other stateful pipeline components, so two concurrent contests using the same sensor type never share state.
 
-# Sampling Rate
+Randomness is injected the same way: the engine passes a per-session `random.Random` instance through the `rng` constructor parameter (it is the one key of `sensor_configs` that is never user-configurable). All stochastic pipeline stages — noise, false readings, outliers — draw from this generator, which is what makes seeded sessions reproducible even when several contests run concurrently. A sensor built without an `rng` falls back to the module-level generator.
 
-A sensor may operate at a specific frequency.
-
-Example:
-
-```text
-Position Sensor:
-100 Hz
-
-Temperature Sensor:
-1 Hz
-```
-
-The simulation engine should support heterogeneous sensor rates.
-
-Future implementations may support asynchronous sampling.
-
----
-
-# Gain
-
-Gain scales the measured quantity.
-
-Example:
-
-```text
-measurement = gain * value
-```
-
----
-
-# Bias
-
-Bias adds a constant offset.
-
-Example:
-
-```text
-measurement = value + bias
-```
-
-Bias is useful both as a calibration parameter and as a fault mechanism.
-
----
-
-# Noise
-
-Noise models measurement uncertainty.
-
-Initial implementation:
-
-```text
-Gaussian Noise
-```
-
-Example:
-
-```python
-measurement += N(0, sigma)
-```
-
-Future implementations may support:
-
-- Uniform noise
-- Laplacian noise
-- Colored noise
-- Shot noise
-- Quantization noise
-
----
-
-# Saturation
-
-Sensors may have finite operating ranges.
-
-Example:
-
-```text
-Temperature Sensor:
-[-40°C, 125°C]
-```
-
-Values outside the range are clipped.
-
-```python
-measurement = clip(value)
-```
-
----
-
-# Resolution
-
-Sensors may have limited precision.
-
-Example:
-
-```text
-Resolution = 0.1°C
-```
-
-Observed values are quantized.
-
-```python
-measurement = round(value / resolution) * resolution
-```
-
----
-
-# Filtering
-
-Many real sensors behave as low-pass filters.
-
-Example:
-
-```text
-True Temperature:
-changes instantly
-
-Measured Temperature:
-changes gradually
-```
-
-Future versions should support:
-
-- Low-pass filters
-- High-pass filters
-- Band-pass filters
-
----
-
-# Latency
-
-Sensors may introduce delays.
-
-Example:
-
-```text
-Real Event
-      ↓
-Delay
-      ↓
-Measurement
-```
-
-Latency should be optional.
-
----
-
-# Drift
-
-Drift represents slow changes in calibration.
-
-Example:
-
-```text
-Day 1:
-+0.0°C
-
-Day 30:
-+1.5°C
-```
-
-Future versions should support:
-
-- Linear drift
-- Random walk drift
-- Thermal drift
-
----
-
-# Sensor Failure Modes
-
-Sensors may exhibit probabilistic failure modes that are important for anomaly detection challenges.
-
-Unlike physical system faults (which are owned by the twin), these are intrinsic sensor properties modelled as sensor parameters — not as `FaultDescriptor` objects. See [Faults](faults.md) for the distinction.
-
-Examples:
-
-- Bias
-- Drift
-- Stuck value
-- Increased noise
-- Dropout
-- Saturation
-
----
-
-# Probabilistic Failure Modes
-
-Sensor failures — stuck values, false readings, outliers, dropout — are modelled as sensor parameters, not as Fault objects. They are part of the measurement pipeline:
-
-```python
-# Constructor parameters
-p_false_reading: float = 0.0   # probability of returning a random wrong value
-p_outlier: float = 0.0         # probability of an extreme spike
-p_dropout: float = 0.0         # probability of returning NaN (missing data)
-outlier_scale: float = 10.0    # how many std deviations the outlier spans
-```
-
-These are off by default. When a contest uses a sensor configured with `p_false_reading=0.02`, 2% of observations will be wrong values indistinguishable from real readings — a realistic challenge for anomaly detection tasks.
-
----
-
-# Stuck Sensor
-
-The sensor remains frozen.
-
-Example:
-
-```text
-True Value:
-10
-12
-15
-18
-
-Observed Value:
-10
-10
-10
-10
-```
-
----
-
-# Increased Noise
-
-Variance increases significantly.
-
-Example:
-
-```text
-Normal:
-σ = 0.1
-
-Fault:
-σ = 2.0
-```
-
----
-
-# Dropout
-
-Measurements disappear.
-
-Example:
-
-```text
-10.2
-10.3
-null
-null
-10.4
-```
-
-Useful for realistic streaming challenges.
-
----
-
-# Sensor Categories
-
-The framework should support many sensor categories.
-
----
-
-## Scalar Sensors
-
-Return a single value.
-
-Examples:
-
-- Temperature
-- Pressure
-- Humidity
-- Voltage
-
----
-
-## Vector Sensors
-
-Return multiple values.
-
-Examples:
-
-- Accelerometer
-- Gyroscope
-- Magnetic Field Sensor
-
-Example:
+In a contest configuration this looks like:
 
 ```json
-{
-  "x": 0.1,
-  "y": 0.2,
-  "z": -0.3
-}
+"sensor_configs": [
+    {"sensor_id": "position", "noise_std": 0.002},
+    {"sensor_id": "temperature", "noise_std": 0.05, "drift_rate": 0.001}
+]
 ```
 
----
-
-## Time-Series Sensors
-
-Generate signals at high frequency.
-
-Examples:
-
-- Vibration
-- Audio
-- ECG
-
-These may require specialized storage and streaming.
+Every key other than `sensor_id` is passed to the sensor constructor, so the full pipeline described above is reachable from configuration alone.
 
 ---
 
-## Event Sensors
+# Sampling
 
-Generate events rather than continuous measurements.
-
-Examples:
-
-- Switches
-- Alarms
-- Network Events
+In the current implementation all sensors of a contest are sampled together at the contest's `sampling_rate_hz` — the engine calls `observe()` on every configured sensor at every simulation step. Heterogeneous per-sensor rates (a position sensor at 100 Hz next to a temperature sensor at 1 Hz) and asynchronous sampling are planned future extensions; they will be expressed as additional sensor configuration parameters, not as changes to the sensor interface.
 
 ---
 
-# Sensor Registry
+# Beyond Scalar Sensors
 
-The registry holds one **prototype** instance per sensor type, registered at application startup. The prototype is used exclusively for:
+All built-in sensors are scalar: one quantity, one `float` per observation. The framework is expected to grow toward other categories over time — vector sensors such as three-axis accelerometers, high-frequency time-series sensors such as raw vibration or ECG waveforms, and event sensors such as switches and alarms. These will require extensions to the observation payload and possibly to storage and streaming, which is why they are kept out of the minimal `Sensor` interface today.
 
-- Discovery and metadata retrieval
-- Compatibility validation (sensor ↔ twin quantity matching)
-- Type reference during session initialisation
-
-The prototype is never used directly for observation. When a contest session starts, the engine constructs a **fresh sensor instance** from the prototype's class, applying the contest's `sensor_configs` overrides:
-
-```python
-sensor_class = registered_sensor.__class__
-configured_sensor = sensor_class(**overrides)   # fresh instance, independent per session
-```
-
-This mirrors how digital twins are instantiated: each contest session gets its own independent sensor instances, carrying their own `_drift` accumulator, `_latency_buffer`, and any other stateful pipeline components. Two concurrent contests using the same sensor type never share state.
-
-Example registration:
-
-```python
-sensor_registry.register(PositionSensor())
-
-sensor_registry.register(TemperatureSensor())
-```
-
----
-
-# First EPIC Sensors
-
-The first implementation should include:
-
-```text
-Position Sensor
-
-Velocity Sensor
-
-Acceleration Sensor
-
-Temperature Sensor
-```
-
-These are sufficient for the first mechanical twin.
-
----
-
-# Future Sensor Library
-
-Potential future sensors:
-
-## Industrial
-
-- Pressure Sensor
-- Flow Sensor
-- Vibration Sensor
-- Current Sensor
-- Voltage Sensor
-
-## Environmental
-
-- Humidity Sensor
-- Air Quality Sensor
-- Wind Sensor
-
-## Biomedical
-
-- ECG Sensor
-- Heart Rate Sensor
-- SpO₂ Sensor
-
-## Cyber Systems
-
-- Packet Rate Sensor
-- CPU Utilization Sensor
-- Memory Usage Sensor
-
----
-
-# Data Representation
-
-Measurements should be represented as JSON-compatible values.
-
-Example:
-
-```json
-{
-  "temperature": 25.4,
-  "pressure": 1.2
-}
-```
-
-The API layer must not assume fixed sensor names.
+The sensor library itself grows with the twin catalog. The current fourteen sensors cover every quantity exposed by the five built-in twins except torque; obvious next additions are a torque sensor for the electric motor and domain packs (biomedical, cyber-physical, environmental) as new twins arrive. A new sensor for an existing quantity requires no Core change — implement, register, done.
 
 ---
 
 # Design Requirement
 
-A sensor should be reusable across multiple digital twins.
-
-For example:
-
-```text
-Temperature Sensor
-```
-
-should be usable in:
-
-- Industrial Pump Twin
-- Electric Motor Twin
-- Smart Building Twin
-- Biomedical Twin
-
-without modification.
+A sensor must be reusable across multiple digital twins without modification. The temperature sensor is the canonical test: it works today on the mass-spring-damper, the industrial pump, the electric motor, the rotating machinery, and the smart building, because each of those twins exposes `TEMPERATURE` among its supported quantities. If a proposed sensor design only works with one specific twin, the coupling is a design error — either the shared quantity belongs in the [Physical Quantities](quantities.md) ontology, or the logic belongs inside the twin.
 
 This requirement is a key measure of success for the Sensor Framework.

@@ -1,4 +1,4 @@
-"""User registration endpoints."""
+"""User management endpoints (admin only)."""
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -9,25 +9,28 @@ from epic_api.dependencies import get_settings, require_admin
 from epic_api.utils import parse_uuid
 from epic_core.auth import create_access_token, hash_password
 from epic_core.config import Settings
-from epic_core.db.models import User
+from epic_core.db.models import User, USER_STATUS_ACTIVE, USER_STATUS_SUSPENDED, USER_STATUS_DELETED
 from epic_core.db.session import get_db
 from epic_core.exceptions import EPICValidationError, RegistrationError, SessionNotFoundError
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+ALLOWED_ROLES = {"ADMINISTRATOR", "ORGANIZER", "PARTICIPANT"}
+ALLOWED_STATUSES = {USER_STATUS_ACTIVE, USER_STATUS_SUSPENDED, USER_STATUS_DELETED}
 
 
 class CreateUserRequest(BaseModel):
     username: str
     email: str
     password: str
+    first_name: str | None = None
+    last_name: str | None = None
+    phone_number: str | None = None
 
 
 class UpdateUserRequest(BaseModel):
     role: str | None = None
-    is_active: bool | None = None
-
-
-ALLOWED_ROLES = {"ADMINISTRATOR", "ORGANIZER", "PARTICIPANT"}
+    status: str | None = None
 
 
 def user_response(user: User) -> dict:
@@ -35,8 +38,12 @@ def user_response(user: User) -> dict:
         "id": str(user.id),
         "username": user.username,
         "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "phone_number": user.phone_number,
         "role": user.role,
-        "is_active": user.is_active,
+        "status": user.status,
+        "is_active": user.is_active,   # backward-compat shim
         "created_at": user.created_at,
     }
 
@@ -62,6 +69,9 @@ async def create_user(
         username=request.username,
         email=request.email,
         password_hash=hash_password(request.password),
+        first_name=request.first_name,
+        last_name=request.last_name,
+        phone_number=request.phone_number,
     )
     db.add(user)
     await db.commit()
@@ -72,6 +82,7 @@ async def create_user(
 @router.get("")
 async def list_users(
     role: str | None = Query(None),
+    user_status: str | None = Query(None, alias="status"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_admin),
@@ -82,6 +93,9 @@ async def list_users(
     if role is not None:
         query = query.where(User.role == role)
         count_query = count_query.where(User.role == role)
+    if user_status is not None:
+        query = query.where(User.status == user_status)
+        count_query = count_query.where(User.status == user_status)
 
     total_result = await db.execute(count_query)
     result = await db.execute(query.offset(offset).limit(limit))
@@ -129,8 +143,12 @@ async def update_user(
         if request.role not in ALLOWED_ROLES:
             raise EPICValidationError(f"role '{request.role}' is not supported")
         user.role = request.role
-    if request.is_active is not None:
-        user.is_active = request.is_active
+    if request.status is not None:
+        if request.status not in ALLOWED_STATUSES:
+            raise EPICValidationError(f"status '{request.status}' is not supported")
+        if request.status == USER_STATUS_DELETED and user_uuid == current_user.id:
+            raise EPICValidationError("Cannot delete self")
+        user.status = request.status
     await db.commit()
     await db.refresh(user)
     return user_response(user)
@@ -142,18 +160,19 @@ async def delete_user(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """Soft-delete: sets status to DELETED (irreversible via this endpoint)."""
     user_uuid = parse_uuid(
         user_id,
         SessionNotFoundError,
         f"User '{user_id}' does not exist",
     )
     if user_uuid == current_user.id:
-        raise EPICValidationError("Cannot deactivate self")
+        raise EPICValidationError("Cannot delete self")
     result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
     if user is None:
         raise SessionNotFoundError(f"User '{user_id}' does not exist")
-    user.is_active = False
+    user.status = USER_STATUS_DELETED
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

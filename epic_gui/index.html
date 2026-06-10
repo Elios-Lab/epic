@@ -163,6 +163,106 @@
         </main>
       </template>
 
+      <template x-if="state === 'register'">
+        <main class="flex min-h-screen items-center justify-center px-6 py-12">
+          <section class="w-full max-w-md rounded-lg border border-cyan-300/20 bg-white p-8 text-slate-900 shadow-2xl shadow-cyan-950/30">
+            <h2 class="text-2xl font-semibold text-epic-deep">Join EPIC</h2>
+
+            <template x-if="registration.checking">
+              <p class="mt-6 text-sm text-slate-600">Checking your invitation…</p>
+            </template>
+
+            <template x-if="!registration.checking && !registration.valid">
+              <div class="mt-6 space-y-4">
+                <p
+                  x-text="registration.error || 'This invitation link is invalid, expired, or already used.'"
+                  class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+                ></p>
+                <p class="text-sm text-slate-600">
+                  Please contact the contest organizer to request a new invitation.
+                </p>
+              </div>
+            </template>
+
+            <template x-if="!registration.checking && registration.valid">
+              <div>
+                <p class="mt-4 text-sm text-slate-600">
+                  You have been invited to
+                  <span class="font-semibold text-epic-navy" x-text="registration.contestName"></span>.
+                  Complete your details to create your participant account for
+                  <span class="font-medium" x-text="registration.email"></span>.
+                </p>
+                <form class="mt-6 space-y-4" @submit.prevent="acceptInvitation()">
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">First name</span>
+                    <input
+                      x-model="registration.form.first_name"
+                      type="text"
+                      required
+                      autocomplete="given-name"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Last name</span>
+                    <input
+                      x-model="registration.form.last_name"
+                      type="text"
+                      required
+                      autocomplete="family-name"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Phone number (optional)</span>
+                    <input
+                      x-model="registration.form.phone_number"
+                      type="tel"
+                      autocomplete="tel"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Password</span>
+                    <input
+                      x-model="registration.form.password"
+                      type="password"
+                      required
+                      minlength="8"
+                      autocomplete="new-password"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Confirm password</span>
+                    <input
+                      x-model="registration.form.password_confirm"
+                      type="password"
+                      required
+                      autocomplete="new-password"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <p
+                    x-show="registration.error"
+                    x-text="registration.error"
+                    class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+                  ></p>
+                  <button
+                    type="submit"
+                    :disabled="registration.submitting"
+                    class="w-full rounded-md bg-epic-navy px-5 py-3 font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span x-show="!registration.submitting">Create account</span>
+                    <span x-show="registration.submitting">Creating account...</span>
+                  </button>
+                </form>
+              </div>
+            </template>
+          </section>
+        </main>
+      </template>
+
       <template x-if="state === 'dashboard'">
         <main class="min-h-screen bg-slate-50 text-slate-900">
           <div
@@ -372,7 +472,7 @@
                              class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
                           <div class="rounded-md border border-slate-200 bg-white p-4">
                             <div class="h-72">
-                              <canvas x-ref="monitorChart" class="h-full w-full"></canvas>
+                              <canvas id="monitorChartParticipant" class="h-full w-full"></canvas>
                             </div>
                           </div>
                         </div>
@@ -733,7 +833,7 @@
                          class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
                       <div class="rounded-md border border-slate-200 bg-white p-4">
                         <div class="h-72">
-                          <canvas x-ref="monitorChart" class="h-full w-full"></canvas>
+                          <canvas id="monitorChartOrganizer" class="h-full w-full"></canvas>
                         </div>
                       </div>
                     </div>
@@ -1167,7 +1267,7 @@
                          class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
                       <div class="rounded-md border border-slate-200 bg-white p-4">
                         <div class="h-72">
-                          <canvas x-ref="monitorChart" class="h-full w-full"></canvas>
+                          <canvas id="monitorChartAdmin" class="h-full w-full"></canvas>
                         </div>
                       </div>
                     </div>
@@ -1405,6 +1505,22 @@
             username: "",
             role: "",
           },
+          registration: {
+            token: "",
+            checking: false,
+            valid: false,
+            submitting: false,
+            contestName: "",
+            email: "",
+            error: "",
+            form: {
+              first_name: "",
+              last_name: "",
+              phone_number: "",
+              password: "",
+              password_confirm: "",
+            },
+          },
           monitor: {
             monitoredContest: null,
             monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this.$el._monitorChart (non-reactive)
@@ -1505,6 +1621,12 @@
           sensorChart: null,
           streamSocket: null,
           init() {
+            // Invitation deep link: /register?token=… from the invitation email.
+            if (window.location.pathname === "/register") {
+              const inviteToken = new URLSearchParams(window.location.search).get("token");
+              this.startRegistration(inviteToken || "");
+              return;
+            }
             const token = localStorage.getItem("epic_token");
             if (!token) {
               return;
@@ -1516,6 +1638,81 @@
               this.state = "dashboard";
             } else {
               this.logout();
+            }
+          },
+          async startRegistration(inviteToken) {
+            this.state = "register";
+            this.registration.token = inviteToken;
+            this.registration.error = "";
+            if (!inviteToken) {
+              this.registration.valid = false;
+              this.registration.error = "This invitation link is missing its token.";
+              return;
+            }
+            this.registration.checking = true;
+            try {
+              const response = await fetch(
+                `/api/v1/invitations/${encodeURIComponent(inviteToken)}`
+              );
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok || !data.valid) {
+                this.registration.valid = false;
+                this.registration.error =
+                  "This invitation link is invalid, expired, or already used.";
+                return;
+              }
+              this.registration.valid = true;
+              this.registration.contestName = data.contest_name || "an EPIC contest";
+              this.registration.email = data.email || "";
+            } catch (error) {
+              this.registration.valid = false;
+              this.registration.error = "Could not verify the invitation. Please try again.";
+            } finally {
+              this.registration.checking = false;
+            }
+          },
+          async acceptInvitation() {
+            this.registration.error = "";
+            if (this.registration.form.password !== this.registration.form.password_confirm) {
+              this.registration.error = "Passwords do not match.";
+              return;
+            }
+            this.registration.submitting = true;
+            try {
+              const response = await fetch(
+                `/api/v1/invitations/${encodeURIComponent(this.registration.token)}/accept`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    first_name: this.registration.form.first_name,
+                    last_name: this.registration.form.last_name,
+                    phone_number: this.registration.form.phone_number || null,
+                    password: this.registration.form.password,
+                  }),
+                }
+              );
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                const message =
+                  data.error?.message ||
+                  data.detail?.error?.message ||
+                  "Registration failed. The invitation may have expired.";
+                throw new Error(message);
+              }
+              // Log the new participant straight in.
+              this.token = data.access_token;
+              localStorage.setItem("epic_token", this.token);
+              const payload = this.decodeToken(this.token);
+              this.user = { username: payload.username, role: payload.role };
+              this.registration.form.password = "";
+              this.registration.form.password_confirm = "";
+              window.history.replaceState({}, "", "/");
+              this.state = "dashboard";
+            } catch (error) {
+              this.registration.error = error.message || "Registration failed.";
+            } finally {
+              this.registration.submitting = false;
             }
           },
           showLogin() {
@@ -1778,7 +1975,8 @@
             this.$el._monitorBuffer = [];
           },
           createMonitorChart() {
-            const canvas = this.$refs.monitorChart;
+            const ids = ["monitorChartParticipant", "monitorChartOrganizer", "monitorChartAdmin"];
+            const canvas = ids.map(id => document.getElementById(id)).find(el => el && el.offsetParent !== null);
             if (!canvas || typeof Chart === "undefined") {
               setTimeout(() => this.createMonitorChart(), 50);
               return;
@@ -2594,7 +2792,9 @@
             try {
               const updated = await this.apiRequest(`/api/v1/users/${account.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ is_active: !account.is_active }),
+                body: JSON.stringify({
+                  status: account.is_active ? "SUSPENDED" : "ACTIVE",
+                }),
               });
               this.replaceAdminUser(updated);
               this.admin.success = updated.is_active

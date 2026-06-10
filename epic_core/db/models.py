@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import (
@@ -22,6 +23,18 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from epic_core.db.base import Base
+
+# Valid values for User.status
+USER_STATUS_ACTIVE = "ACTIVE"
+USER_STATUS_SUSPENDED = "SUSPENDED"
+USER_STATUS_DELETED = "DELETED"
+
+# Valid values for OrganizerRequest.status
+ORGANIZER_REQUEST_PENDING = "PENDING"
+ORGANIZER_REQUEST_APPROVED = "APPROVED"
+ORGANIZER_REQUEST_REJECTED = "REJECTED"
+
+INVITATION_TOKEN_TTL_DAYS = 7
 
 
 class User(Base):
@@ -43,12 +56,94 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         String(32), nullable=False, default="PARTICIPANT"
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # ACTIVE | SUSPENDED | DELETED (soft delete)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=USER_STATUS_ACTIVE, index=True
+    )
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
+    )
+
+    @property
+    def is_active(self) -> bool:
+        """Backward-compat shim: True only when status is ACTIVE."""
+        return self.status == USER_STATUS_ACTIVE
+
+
+class OrganizerRequest(Base):
+    """Pending organizer self-registration requests awaiting admin approval."""
+
+    __tablename__ = "organizer_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    first_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(256), unique=True, nullable=False, index=True
+    )
+    phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    # PENDING | APPROVED | REJECTED
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ORGANIZER_REQUEST_PENDING, index=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # Set to the new User.id when the request is approved
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Invitation(Base):
+    """Competition-scoped, one-time-use participant invitations."""
+
+    __tablename__ = "invitations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    email: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contests.id"), nullable=False, index=True
+    )
+    invited_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False, index=True,
+        default=lambda: secrets.token_urlsafe(32),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=INVITATION_TOKEN_TTL_DAYS),
+    )
+    used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set to the new User.id when the invitation is accepted
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
@@ -69,8 +164,11 @@ class Contest(Base):
         String(32), nullable=False, default="PUBLIC"
     )
     twin_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # No default sensor configuration: EPIC Core is domain-independent and
+    # must not assume any specific sensor. The API requires an explicit,
+    # non-empty sensor_configs at contest creation.
     sensor_configs: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=lambda: [{"sensor_id": "position"}]
+        JSON, nullable=False, default=list
     )
     fault_schedule: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, nullable=False, default=list

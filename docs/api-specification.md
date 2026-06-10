@@ -1,21 +1,6 @@
 # API Specification
 
-This document defines the REST and WebSocket APIs exposed by EPIC.
-
-The API provides access to:
-
-- Authentication
-- Users
-- Contests
-- Tasks
-- Digital Twins
-- Sensors
-- Simulation Sessions
-- Submissions
-- Scores
-- Leaderboards
-
-The API follows REST principles and uses JSON payloads.
+This document defines the REST and WebSocket APIs exposed by EPIC. The API provides access to every resource of the platform — authentication, users, contests, tasks, digital twins, sensors, simulation sessions, submissions, scores, and leaderboards — following REST principles with JSON payloads throughout.
 
 ---
 
@@ -102,7 +87,7 @@ Administrator only.
 POST /api/v1/users
 ```
 
-Administrator only. EPIC uses a closed registration model — user accounts are created by administrators, not by self-service.
+Administrator only. Direct account creation bypasses the self-registration flows. New accounts receive `PARTICIPANT` role by default; a different role may be specified at creation time.
 
 Request:
 
@@ -122,6 +107,7 @@ Response `201 Created`:
   "username": "student1",
   "email": "student@example.com",
   "role": "PARTICIPANT",
+  "status": "ACTIVE",
   "is_active": true,
   "created_at": "2027-01-01T10:00:00Z"
 }
@@ -143,6 +129,7 @@ Response `200 OK`:
   "username": "student1",
   "email": "student@example.com",
   "role": "PARTICIPANT",
+  "status": "ACTIVE",
   "is_active": true,
   "created_at": "2027-01-01T10:00:00Z"
 }
@@ -172,7 +159,174 @@ Example request:
 DELETE /api/v1/users/{user_id}
 ```
 
-Response `204 No Content`.
+Response `204 No Content`. This is a soft delete — the account status is set to `DELETED` and the user can no longer log in.
+
+---
+
+# Registration
+
+EPIC provides two self-service registration flows: one for prospective organizers and one for participants invited to a specific contest. Administrators may also create accounts directly via `POST /api/v1/users`.
+
+---
+
+## Submit Organizer Request
+
+```http
+POST /api/v1/organizer-requests
+```
+
+No authentication required.
+
+Request:
+
+```json
+{
+  "first_name": "Alice",
+  "last_name": "Rossi",
+  "email": "alice@example.com",
+  "phone_number": "+39 010 000 0000",
+  "password": "..."
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "request_id": "req_abc123",
+  "email": "alice@example.com",
+  "status": "PENDING",
+  "created_at": "2027-01-01T10:00:00Z"
+}
+```
+
+The platform notifies the administrator by email. The request stays PENDING until reviewed.
+
+---
+
+## List Organizer Requests
+
+```http
+GET /api/v1/organizer-requests
+```
+
+Administrator only. Optional query parameter: `status` (`PENDING` | `APPROVED` | `REJECTED`).
+
+---
+
+## Approve Organizer Request
+
+```http
+POST /api/v1/organizer-requests/{request_id}/approve
+```
+
+Administrator only. Creates an ORGANIZER account (username = email), sets the request to APPROVED, and sends an approval email to the applicant.
+
+Response `200 OK`:
+
+```json
+{
+  "request_id": "req_abc123",
+  "status": "APPROVED"
+}
+```
+
+---
+
+## Reject Organizer Request
+
+```http
+POST /api/v1/organizer-requests/{request_id}/reject
+```
+
+Administrator only. Sets the request to REJECTED and sends a rejection notification.
+
+Response `200 OK`:
+
+```json
+{
+  "request_id": "req_abc123",
+  "status": "REJECTED"
+}
+```
+
+---
+
+## Send Participant Invitations
+
+```http
+POST /api/v1/contests/{contest_id}/invitations
+```
+
+ORGANIZER (own contest) or ADMINISTRATOR. Accepts a list of email addresses. For each address that has not already been invited, the platform creates a one-time invitation token (valid for 7 days) and sends an email containing the acceptance link.
+
+Request:
+
+```json
+{
+  "emails": ["alice@example.com", "bob@example.com"]
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "created": 2,
+  "skipped": 0
+}
+```
+
+The invitation token is not exposed in the API response — it is delivered only via email.
+
+---
+
+## Validate Invitation Token
+
+```http
+GET /api/v1/invitations/{token}
+```
+
+No authentication required. Returns whether the token is still valid (not used, not expired).
+
+Response `200 OK`:
+
+```json
+{
+  "valid": true,
+  "contest_name": "EPIC Forecasting Challenge 2027"
+}
+```
+
+---
+
+## Accept Invitation
+
+```http
+POST /api/v1/invitations/{token}/accept
+```
+
+No authentication required. Completes participant registration: creates a PARTICIPANT account, links it to the contest, marks the token as used, and returns a JWT.
+
+Request:
+
+```json
+{
+  "first_name": "Alice",
+  "last_name": "Rossi",
+  "phone_number": "+39 010 000 0000",
+  "password": "..."
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "access_token": "...",
+  "token_type": "bearer"
+}
+```
 
 ---
 
@@ -927,13 +1081,4 @@ through FastAPI.
 
 # Design Requirement
 
-The API layer must remain completely independent from:
-
-- Digital Twin implementations
-- Sensors
-- Fault models
-- Physical domains
-
-The API should only interact with abstractions exposed by the EPIC Core.
-
-This ensures that new digital twins, sensors and contest types can be introduced without changing the API structure.
+The API layer must remain completely independent from digital twin implementations, sensors, fault models, and physical domains. It interacts only with the abstractions exposed by the EPIC Core — registries, interfaces, and entities — never with a concrete plugin. This is what guarantees that new digital twins, sensors, and contest types can be introduced without changing the API structure.

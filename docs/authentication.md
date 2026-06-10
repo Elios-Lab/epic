@@ -1,159 +1,44 @@
 # Authentication and Authorization
 
-The Authentication and Authorization subsystem is responsible for:
+> Related: [API Specification](api-specification.md) · [Contest Management](contest-management.md) · [Configuration](configuration.md)
 
-- User identity management
-- Access control
-- Contest permissions
-- Administrative operations
-- API security
-
-The system should be simple in the first implementation while remaining extensible for future integrations.
+The authentication and authorization subsystem covers user identity management, access control, contest permissions, administrative operations, and API security. It is deliberately simple in the current implementation — username and password, JWT bearer tokens, three roles — while remaining structurally open to the integrations an academic deployment eventually needs: OAuth providers, university identity systems, single sign-on, and multi-factor authentication.
 
 ---
 
-# Design Goals
+# Architecture
 
-The authentication system must support:
-
-- Login
-- Logout
-- JWT-based authentication
-- Role-based access control
-- Contest participation permissions
-- Administrative permissions
-
-Future versions should support:
-
-- OAuth
-- University authentication systems
-- Single Sign-On (SSO)
-- Multi-factor authentication
-
----
-
-# Authentication Architecture
-
-The recommended architecture is:
+The flow is conventional and that is a feature. A client presents credentials to the login endpoint, the authentication service verifies them and issues a JWT access token, and from then on every protected request carries that token in the `Authorization` header. The API layer validates the token on each request and extracts the user identity and role from it; no server-side session state is kept.
 
 ```text
-Client
-    ↓
-Login Request
-    ↓
-Authentication Service
-    ↓
-JWT Token
-    ↓
-Protected API Access
+Client → Login Request → Authentication Service → JWT Token → Protected API Access
 ```
-
-The API layer validates tokens and extracts user information.
 
 ---
 
-# User Identity
+# User Identity and Password Storage
 
-Each user must have:
+A user record carries a unique identifier, a username, an email address, a password hash, a role, and a status (`ACTIVE`, `SUSPENDED`, or `DELETED` — deletion is a soft delete that preserves referential integrity for past contests and submissions). The full entity is defined in [Domain Model](domain-model.md).
 
-```python
-class User:
-
-    user_id: str
-
-    username: str
-
-    email: str
-
-    password_hash: str
-
-    role: UserRole
-
-    is_active: bool
-```
-
-Passwords must never be stored in plaintext.
+Passwords are never stored in plaintext, and never stored encrypted either — encryption is reversible, and reversibility is precisely the property a credential store must not have. EPIC stores only bcrypt hashes. Argon2 is an acceptable alternative should the hashing backend ever need to change; nothing in the system depends on the specific algorithm beyond the hashing module itself.
 
 ---
 
-# Password Storage
+# User Registration
 
-Passwords must be stored using secure hashing.
+There is no open self-registration for participants. EPIC supports three account-creation paths, each matched to a role.
 
-Recommended:
+**Organizer self-registration.** Anyone can submit an organizer request through `POST /api/v1/organizer-requests`, with no authentication required. The request enters a PENDING queue that administrators review. On approval, an ORGANIZER account is created automatically — the username is the submitted email address — and the applicant receives an email notification with their login link. On rejection, they receive a notification explaining the outcome.
 
-```text
-bcrypt
-```
+**Participant invitation.** Organizers invite participants to a specific contest through `POST /api/v1/contests/{contest_id}/invitations`, which requires the ORGANIZER or ADMINISTRATOR role. The platform generates a personal, one-time token for each invited email address and sends an invitation link valid for seven days. The participant follows the link and completes registration through `POST /api/v1/invitations/{token}/accept` — again without prior authentication, since the token itself is the credential. On success the account is created with the PARTICIPANT role, immediately linked to the inviting contest, and a JWT is returned so the participant can start working at once.
 
-or
-
-```text
-argon2
-```
-
-Never store:
-
-```text
-raw passwords
-```
-
-Never store:
-
-```text
-encrypted passwords
-```
-
-Store only hashes.
+**Administrator-created accounts.** Administrators can always create accounts directly through `POST /api/v1/users`. New accounts default to the PARTICIPANT role, but the administrator may specify any role at creation time.
 
 ---
 
-# User Creation
+# Login and Tokens
 
-EPIC uses a closed registration model: only administrators can create user accounts. Self-service registration is not supported.
-
-Endpoint:
-
-```http
-POST /api/v1/users
-```
-
-Requires `ADMINISTRATOR` role.
-
-Required information:
-
-```json
-{
-  "username": "student1",
-  "email": "student@example.com",
-  "password": "..."
-}
-```
-
-New accounts are assigned the `PARTICIPANT` role by default. Administrators may specify a different role at creation time.
-
----
-
-# Login
-
-Users authenticate using credentials.
-
-Endpoint:
-
-```http
-POST /api/v1/auth/login
-```
-
-Request:
-
-```json
-{
-  "username": "student1",
-  "password": "..."
-}
-```
-
-Response:
+Users authenticate with `POST /api/v1/auth/login`, sending their username and password and receiving a bearer token:
 
 ```json
 {
@@ -162,13 +47,7 @@ Response:
 }
 ```
 
----
-
-# JWT Tokens
-
-EPIC should use JWT access tokens.
-
-Example payload:
+The token is a JWT whose payload identifies the user and their role and carries an expiry:
 
 ```json
 {
@@ -179,348 +58,50 @@ Example payload:
 }
 ```
 
----
+Access tokens expire after one hour by default; the lifetime is configurable through `ACCESS_TOKEN_EXPIRE_MINUTES` (see [Configuration](configuration.md)). There are currently no refresh tokens — a client whose token expires simply logs in again — and no server-side revocation, which means a leaked token remains valid until expiry. Refresh tokens and revocation are candidate future additions, as is rate limiting on login, submissions, and the API in general.
 
-# Token Expiration
-
-Access tokens should expire.
-
-Recommended:
-
-```text
-1 hour
-```
-
-Refresh tokens may be added later.
-
----
-
-# Current User
-
-Authenticated users should be retrievable.
-
-Endpoint:
-
-```http
-GET /api/v1/auth/me
-```
-
-Example response:
-
-```json
-{
-  "user_id": "123",
-  "username": "student1",
-  "role": "PARTICIPANT"
-}
-```
+The authenticated identity behind a token is retrievable at any time through `GET /api/v1/auth/me`, which returns the user id, username, and role.
 
 ---
 
 # Roles
 
-Supported roles:
+EPIC defines three roles, and their names are intentionally domain-independent: an ORGANIZER can be a professor, a researcher, or a company; a PARTICIPANT can be a student, an engineer, or an external competitor.
 
-```text
-ADMINISTRATOR   ← full platform management (users, system settings)
-ORGANIZER       ← creates and manages own contests
-PARTICIPANT     ← registers for contests, collects data, submits predictions
-```
+The **PARTICIPANT** registers for contests in the SCHEDULED or ACTIVE state, connects to the contest WebSocket stream to collect data client-side, submits predictions once the submission window opens, and views their own registrations, submissions, and scores.
 
-Future roles (Phase 4+):
+The **ORGANIZER** creates contests and manages their own through the full lifecycle, extends deadlines, and views every submission made to their contests for evaluation and grading. The boundary is ownership: an organizer cannot modify contests created by other organizers, and cannot manage users.
 
-```text
-EXPERT          ← registers new digital twin and sensor plugins at runtime
-```
+The **ADMINISTRATOR** can do everything an organizer can do across all contests, manages all users (creation, suspension, role changes), inspects all submissions and scores platform-wide, and can override any contest configuration.
 
-The role names are intentionally domain-independent. ORGANIZER can be a professor,
-researcher, or company. PARTICIPANT can be a student, engineer, or external competitor.
+A fourth role is anticipated for a later phase: an **EXPERT** role permitted to register new digital twin and sensor plugins at runtime, separating plugin governance from platform administration.
 
 ---
 
-# Role-Based Access Control
+# Access Control in Practice
 
-Authorization is based on roles.
+Authorization is enforced per endpoint, based on the role carried in the token. Contest management endpoints (`POST /api/v1/contests`, `PATCH /api/v1/contests/{id}`) require ORGANIZER or ADMINISTRATOR, with the organizer path additionally checking ownership. User management endpoints (`GET /api/v1/users`, `POST /api/v1/users`) are administrator-only. The only fully public endpoints are login, the organizer request form, and invitation acceptance — everything else expects `Authorization: Bearer <token>`.
 
-## PARTICIPANT can:
+For contest participation a second condition stacks on top of authentication: a participant must hold an active registration for the specific contest before the platform accepts their submissions. An authenticated but unregistered user is rejected. Contest ownership is tracked through `contest.created_by`, which is what makes the organizer's "own contests only" rule enforceable and leaves room for richer ownership-based permissions later.
 
-- Register for contests (SCHEDULED or ACTIVE)
-- Connect to contest WebSocket stream and collect data client-side
-- Submit predictions (with temporal integrity anchor)
-- View own registrations, submissions, and scores
-
-## ORGANIZER can:
-
-- Create contests
-- Manage own contests through full lifecycle (DRAFT → ACTIVE → CLOSED)
-- Extend deadlines on own contests
-- View all submissions to own contests (for evaluation and grading)
-- Cannot modify contests created by other organizers
-- Cannot manage users
-
-## ADMINISTRATOR can:
-
-- Everything an ORGANIZER can do, across all contests
-- Manage all users (create, deactivate, change roles)
-- Inspect all submissions and scores platform-wide
-- Override any contest configuration
+So, as a concrete pair of examples: a participant submitting a solution to a contest they are registered for is allowed; the same participant attempting to modify that contest's settings is rejected, because contest modification belongs to the organizer who owns it and to administrators.
 
 ---
 
-# Protected Endpoints
+# Auditability and Privacy
 
-Contest management endpoints require ORGANIZER or ADMINISTRATOR role.
-User management endpoints require ADMINISTRATOR role.
+The platform keeps durable records of user creation, login events, contest creation and updates, submissions, and administrative actions. These records serve security review, research reproducibility, and day-to-day contest management equally — an instructor reconstructing what happened during a course competition needs the same trail as a security audit.
 
-Examples:
-
-```http
-POST /api/v1/contests        ← ORGANIZER or ADMINISTRATOR
-PATCH /api/v1/contests/{id}  ← ORGANIZER (own contest) or ADMINISTRATOR
-GET  /api/v1/users           ← ADMINISTRATOR only
-POST /api/v1/users           ← ADMINISTRATOR only
-```
+On the privacy side, the platform stores only what it needs to identify users, manage contests, and evaluate submissions. Personal information is minimized deliberately: name, email, and an optional phone number collected at registration, nothing more.
 
 ---
 
-# Contest Access Control
+# Planned Integrations
 
-A participant must satisfy:
-
-```text
-Authenticated
-```
-
-and
-
-```text
-Registered for Contest
-```
-
-before submitting solutions.
-
----
-
-# Registration Validation
-
-Submission workflow:
-
-```text
-User
-    ↓
-Contest Registration
-    ↓
-Submission Allowed
-```
-
-Unregistered users must be rejected.
-
----
-
-# Authorization Examples
-
-## Allowed
-
-```text
-Participant submits solution
-to registered contest.
-```
-
----
-
-## Rejected
-
-```text
-Participant attempts
-to modify contest settings.
-```
-
----
-
-# Contest Ownership
-
-Every contest should track its creator.
-
-Example:
-
-```python
-contest.created_by
-```
-
-This allows future ownership-based permissions.
-
----
-
-# API Security
-
-Protected endpoints must require:
-
-```http
-Authorization: Bearer <token>
-```
-
-Example:
-
-```http
-GET /api/v1/contests
-
-Authorization: Bearer eyJ...
-```
-
----
-
-# Public Endpoints
-
-Examples:
-
-```http
-POST /api/v1/auth/login
-```
-
-No authentication required.
-
-`POST /api/v1/users` requires ADMINISTRATOR authentication (see [User Creation](#user-creation)).
-
----
-
-# Rate Limiting
-
-Future versions should support:
-
-- Login rate limiting
-- Submission rate limiting
-- API rate limiting
-
-This helps prevent abuse.
-
----
-
-# Audit Logging
-
-The system should log:
-
-- User creation
-- Login events
-- Contest creation
-- Contest updates
-- Submissions
-- Administrative actions
-
-Audit logs are useful for:
-
-- Security
-- Research reproducibility
-- Contest management
-
----
-
-# Session Revocation
-
-Future versions may support:
-
-```text
-Logout
-```
-
-and
-
-```text
-Token revocation
-```
-
-for improved security.
-
----
-
-# OAuth Integration
-
-Future versions should support:
-
-```text
-Google OAuth
-GitHub OAuth
-University OAuth
-```
-
-without changing application logic.
-
----
-
-# Single Sign-On
-
-Future integration targets:
-
-```text
-SAML
-OpenID Connect
-University Identity Providers
-```
-
-This is particularly useful for academic deployments.
-
----
-
-# Privacy Requirements
-
-The platform should store only the information necessary to:
-
-- Identify users
-- Manage contests
-- Evaluate submissions
-
-Personal information should be minimized.
-
----
-
-# Authentication Flow
-
-Typical workflow:
-
-```text
-Admin creates account
-    ↓
-Login
-    ↓
-Receive JWT
-    ↓
-Join Contest
-    ↓
-Connect to WebSocket stream
-    ↓
-Collect data client-side
-    ↓
-Submit Solution
-    ↓
-View Leaderboard
-```
-
----
-
-# Future Team Support
-
-Future versions may introduce:
-
-```python
-Team
-
-TeamMembership
-```
-
-allowing team-based competitions.
-
-The authentication architecture should not prevent this extension.
+The roadmap includes OAuth providers (Google, GitHub, university OAuth), and SSO through SAML and OpenID Connect for academic deployments where students already hold institutional identities. Team-based competitions will introduce `Team` and `TeamMembership` entities. The current architecture was shaped so that none of these additions require changes to application logic — they extend the identity layer, not the permission model.
 
 ---
 
 # Design Requirement
 
-Authentication and authorization must remain independent from:
-
-- Digital twins
-- Sensors
-- Fault models
-- Scoring metrics
-
-The security subsystem should operate entirely at the platform level.
-
-This guarantees that new domains can be added without modifying authentication logic.
+Authentication and authorization must remain independent from digital twins, sensors, fault models, and scoring metrics. The security subsystem operates entirely at the platform level: no plugin can observe, influence, or depend on it.

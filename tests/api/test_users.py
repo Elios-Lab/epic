@@ -15,8 +15,30 @@ def test_create_user_returns_201_and_user_fields(client, admin_headers):
     assert body["username"] == "student1"
     assert body["email"] == "student@example.com"
     assert body["role"] == "PARTICIPANT"
-    assert body["is_active"] is True
+    assert body["status"] == "ACTIVE"
+    assert body["is_active"] is True   # backward-compat shim
     assert body["created_at"]
+
+
+def test_create_user_with_profile_fields(client, admin_headers):
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "username": "student2",
+            "email": "student2@example.com",
+            "password": "correct-password",
+            "first_name": "Alice",
+            "last_name": "Smith",
+            "phone_number": "+39012345678",
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["first_name"] == "Alice"
+    assert body["last_name"] == "Smith"
+    assert body["phone_number"] == "+39012345678"
 
 
 def test_create_user_response_excludes_password_fields(client, admin_headers):
@@ -100,7 +122,34 @@ def test_patch_user_as_admin_changes_role(client, admin_headers, registered_user
     assert response.json()["role"] == "ORGANIZER"
 
 
-def test_delete_user_as_admin_deactivates_user(client, admin_headers, registered_user):
+def test_patch_user_as_admin_suspends_user(client, admin_headers, registered_user):
+    response = client.patch(
+        f"/api/v1/users/{registered_user['id']}",
+        json={"status": "SUSPENDED"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "SUSPENDED"
+    assert body["is_active"] is False
+
+
+def test_suspended_user_cannot_login(client, admin_headers, registered_user):
+    client.patch(
+        f"/api/v1/users/{registered_user['id']}",
+        json={"status": "SUSPENDED"},
+        headers=admin_headers,
+    )
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": registered_user["username"], "password": "correct-password"},
+    )
+    assert login.status_code == 401
+
+
+def test_delete_user_as_admin_soft_deletes_user(client, admin_headers, registered_user):
     response = client.delete(
         f"/api/v1/users/{registered_user['id']}",
         headers=admin_headers,
@@ -112,6 +161,7 @@ def test_delete_user_as_admin_deactivates_user(client, admin_headers, registered
         headers=admin_headers,
     )
     assert get_response.status_code == 200
+    assert get_response.json()["status"] == "DELETED"
     assert get_response.json()["is_active"] is False
 
 

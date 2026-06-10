@@ -1,0 +1,15 @@
+Subject: [EPIC] Your organizer registration request was not approved
+
+Hello,
+
+Thank you for your interest in the EPIC platform.
+
+After review, we are unable to approve your organizer registration request
+at this time.
+
+If you believe this decision was made in error, or if you have additional
+information to provide, please contact the platform administrator directly.
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

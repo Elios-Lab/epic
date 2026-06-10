@@ -11,9 +11,9 @@ from tests.ui.conftest import close_contest, create_active_contest
 def _login_as(page: Page, live_server: str, username: str, password: str):
     page.goto(live_server)
     page.wait_for_load_state("networkidle")
-    page.get_by_role("link", name="Log in").click()
-    page.get_by_placeholder("Username").fill(username)
-    page.get_by_placeholder("Password").fill(password)
+    page.get_by_role("button", name="Log in").click()
+    page.get_by_label("Username").fill(username)
+    page.get_by_label("Password").fill(password)
     page.get_by_role("button", name="Log in").click()
 
 

@@ -2,15 +2,7 @@
 
 This document defines the main domain entities of EPIC and their relationships.
 
-The domain model is designed to support:
-
-- digital twin registration;
-- simulation sessions;
-- contest management;
-- user registration;
-- submissions;
-- scoring;
-- leaderboards.
+The domain model is designed to support the whole life of a competition: digital twin registration and discovery, simulation sessions, contest management, user registration, submissions, scoring, and leaderboards.
 
 The persistence layer should be independent from the simulation layer.
 
@@ -45,12 +37,17 @@ class User:
     user_id: str
     username: str
     email: str
+    first_name: str | None
+    last_name: str | None
+    phone_number: str | None
     password_hash: str
     role: UserRole
+    status: str  # ACTIVE | SUSPENDED | DELETED
     created_at: datetime
     updated_at: datetime
-    is_active: bool
 ```
+
+`status` controls account access: `ACTIVE` users can log in; `SUSPENDED` users cannot but the account is preserved and can be reactivated; `DELETED` is a soft delete — the record is retained for audit purposes but login is permanently blocked. The field `is_active` is exposed in API responses as a convenience alias (`status == "ACTIVE"`).
 
 Supported roles:
 
@@ -71,6 +68,65 @@ Relationships:
 ```text
 User 1 -> N ContestRegistration
 User 1 -> N Submission
+User 1 -> N Invitation (as invited_by)
+```
+
+---
+
+# OrganizerRequest
+
+Represents a pending application for an organizer account. Submitted without authentication; reviewed by an administrator.
+
+```python
+class OrganizerRequest:
+    request_id: str
+    first_name: str
+    last_name: str
+    email: str           # unique; becomes username on approval
+    phone_number: str | None
+    password_hash: str
+    status: str          # PENDING | APPROVED | REJECTED
+    reviewed_at: datetime | None
+    reviewed_by: str | None  # FK → User (administrator)
+    user_id: str | None      # FK → User (created on approval)
+    created_at: datetime
+```
+
+Relationships:
+
+```text
+OrganizerRequest N -> 1 User (reviewed_by, nullable)
+OrganizerRequest 1 -> 1 User (user_id, created on approval, nullable)
+```
+
+---
+
+# Invitation
+
+Represents a competition-scoped, one-time registration token sent to a prospective participant.
+
+```python
+class Invitation:
+    invitation_id: str
+    email: str
+    contest_id: str          # FK → Contest
+    invited_by: str          # FK → User (organizer or admin)
+    token: str               # unique, secrets.token_urlsafe(32)
+    expires_at: datetime     # created_at + 7 days
+    used: bool
+    used_at: datetime | None
+    user_id: str | None      # FK → User (created on acceptance)
+    created_at: datetime
+```
+
+The token is delivered only by email and is never exposed in API responses. Once used or expired it cannot be reused.
+
+Relationships:
+
+```text
+Invitation N -> 1 Contest
+Invitation N -> 1 User (invited_by)
+Invitation 1 -> 1 User (user_id, created on acceptance, nullable)
 ```
 
 ---
@@ -463,13 +519,18 @@ High-level relationship model:
 ```text
 User
  ├── ContestRegistration
- └── Submission
+ ├── Submission
+ └── Invitation (as invited_by)
+
+OrganizerRequest
+ └── (approved by User → creates User)
 
 Contest
  ├── ContestRegistration
  ├── Task
  ├── Submission
  ├── LeaderboardEntry
+ ├── Invitation
  └── SimulationSession (1:1)
 
 DigitalTwinMetadata
@@ -537,16 +598,7 @@ The database should persist metadata and results.
 
 The actual Python implementation of digital twins, sensors and faults lives in `epic_twins/` and `epic_sensors/`.
 
-Do not persist executable logic in the database.
-
-Persist only:
-
-- identifiers;
-- metadata;
-- configuration;
-- observations;
-- submissions;
-- scores.
+Do not persist executable logic in the database. What the database holds is purely descriptive — identifiers, metadata, configuration, observations, submissions, and scores. The behavior those records refer to always lives in code, loaded through the plugin registries.
 
 ---
 
@@ -622,16 +674,7 @@ sensor_observations.sequence_id
 
 # Reproducibility
 
-For reproducibility, store:
-
-- twin_id;
-- twin version;
-- seed;
-- simulation configuration;
-- contest configuration;
-- scoring configuration.
-
-This allows past contests and submissions to be audited and reproduced.
+For reproducibility, every session must remain reconstructible from what is stored: the twin identifier and its version, the random seed, and the full simulation, contest, and scoring configurations. With these recorded, past contests and submissions can be audited and reproduced even after the platform itself has evolved.
 
 ---
 
@@ -642,7 +685,6 @@ Possible future entities:
 ```text
 Team
 TeamMembership
-ContestInvitation
 PrivateLeaderboard
 PublicLeaderboard
 BaselineModel
@@ -658,18 +700,6 @@ These should not be required in the first implementation.
 
 # Implementation Priority
 
-For the first implementation, create persistence support for:
+The first implementation provides persistence for the entities that make a competition run end to end: `User`, `Contest`, `ContestRegistration`, `Task`, `Submission`, `Score`, `LeaderboardEntry`, `SimulationSession`, and `SensorObservation`, plus the registration-workflow entities `OrganizerRequest` and `Invitation`. Digital twin metadata is not persisted — it is served live from the registry, which keeps the database free of anything that could go stale when a plugin is updated.
 
-1. User
-2. Contest
-3. ContestRegistration
-4. Task
-5. Submission
-6. Score
-7. DigitalTwinMetadata
-8. SimulationSession
-11. SensorObservation
-
-Keep the schema simple but extensible.
-
-The model should support future migrations without forcing a redesign.
+Keep the schema simple but extensible. The model should support future migrations without forcing a redesign.

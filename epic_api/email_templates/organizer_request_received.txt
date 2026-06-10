@@ -1,0 +1,18 @@
+Subject: [EPIC] New organizer registration request
+
+Hello,
+
+A new organizer registration request has been submitted and is awaiting your review.
+
+Request ID : {{ request_id }}
+Applicant  : {{ requester_email }}
+
+To review this request, log in to the EPIC administration panel:
+
+  {{ base_url }}/admin/organizer-requests/{{ request_id }}
+
+Please approve or reject the request at your earliest convenience.
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

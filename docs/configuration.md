@@ -186,10 +186,6 @@ database_url
 
 # Adding New Configuration Keys
 
-To add a new configuration key:
-
-1. Add the field to the `Settings` class in `epic_core/config.py`.
-2. Document it in the table above.
-3. Add a default value unless the key is genuinely required.
+To add a new configuration key, add the field to the `Settings` class in `epic_core/config.py`, document it in the table above, and give it a default value unless the key is genuinely required — required keys without defaults make local development needlessly painful.
 
 Plugin packages must not define their own `Settings` subclasses. If a plugin needs configuration, it should read from the main `Settings` object using a namespaced prefix (e.g. `MECHANICAL_TWIN_MASS=1.5`), declared as an optional field with a default.

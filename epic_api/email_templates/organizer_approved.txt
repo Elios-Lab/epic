@@ -1,0 +1,18 @@
+Subject: [EPIC] Your organizer account has been approved
+
+Hello,
+
+Your registration request for the EPIC platform has been approved.
+Your account is now active and you can log in immediately.
+
+  {{ base_url }}/login
+
+Your login username is your email address: {{ organizer_email }}
+
+If you have any questions, please contact the platform administrator.
+
+Welcome aboard!
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

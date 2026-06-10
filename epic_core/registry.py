@@ -9,7 +9,7 @@ from epic_core.exceptions import (
     PluginNotFoundError,
     PluginValidationError,
 )
-from epic_core.interfaces import DigitalTwin, ScoringMetric, Sensor
+from epic_core.interfaces import DigitalTwin, ScoringMetric, Sensor, TaskEvaluator
 
 T = TypeVar("T")
 
@@ -82,4 +82,7 @@ twin_registry: PluginRegistry[DigitalTwin] = PluginRegistry(DigitalTwin, "twin_i
 sensor_registry: PluginRegistry[Sensor] = PluginRegistry(Sensor, "sensor_id")
 metric_registry: PluginRegistry[ScoringMetric] = PluginRegistry(
     ScoringMetric, "metric_id"
+)
+task_evaluator_registry: PluginRegistry[TaskEvaluator] = PluginRegistry(
+    TaskEvaluator, "task_type"
 )

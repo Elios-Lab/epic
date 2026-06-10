@@ -241,6 +241,42 @@ def test_post_on_non_active_contest_returns_409(client, db_factory, auth_headers
     assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
 
 
+def test_post_on_non_two_phase_contest_returns_409(client, db_factory, auth_headers):
+    """Regression: a contest without end_of_observation must reject submissions
+    with a clean validation error, not crash with a 500."""
+
+    async def create_records():
+        now = datetime.now(timezone.utc)
+        async with db_factory() as db:
+            contest = Contest(
+                name="Non two-phase submission",
+                description="Classic contest without evaluation window",
+                status="ACTIVE",
+                visibility="PUBLIC",
+                twin_id="mass_spring_damper",
+                sensor_configs=[{"sensor_id": "position"}],
+                sampling_rate_hz=_SAMPLING_RATE,
+                start_date=now - timedelta(seconds=10),
+                end_date=now + timedelta(seconds=30),
+                end_of_observation=None,
+                prediction_horizon_seconds=None,
+                created_by=None,
+            )
+            db.add(contest)
+            await db.commit()
+            await db.refresh(contest)
+            return contest
+
+    contest = asyncio.run(create_records())
+    register_participant(client, auth_headers, str(contest.id))
+
+    response = submit(client, auth_headers, str(contest.id))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+    assert "two-phase" in response.json()["error"]["message"]
+
+
 def test_get_contest_submissions_returns_only_own_submissions(
     client, db_factory, auth_headers, admin_headers
 ):

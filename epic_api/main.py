@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -15,7 +16,9 @@ from epic_api.routers import (
     auth,
     catalog,
     contests,
+    invitations,
     leaderboard,
+    organizer_requests,
     registrations,
     sessions,
     submissions,
@@ -31,6 +34,7 @@ from epic_core.db.models import Contest, SimulationSession, Submission
 from epic_core.db.session import get_session_factory
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
+from epic_core.evaluators import ForecastingEvaluator
 import epic_core.registry as registry_module
 from epic_core.scoring import F1Score, MAE
 from epic_sensors.plugin import register as register_sensors
@@ -108,6 +112,8 @@ async def lifespan(app: FastAPI):
         registry_module.metric_registry.register(MAE())
     if not registry_module.metric_registry.contains("f1"):
         registry_module.metric_registry.register(F1Score())
+    if not registry_module.task_evaluator_registry.contains("FORECASTING"):
+        registry_module.task_evaluator_registry.register(ForecastingEvaluator())
     await _recover_after_restart()
     yield
 
@@ -128,7 +134,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(catalog.router, prefix="/api/v1")
     app.include_router(contests.router, prefix="/api/v1")
+    app.include_router(invitations.router, prefix="/api/v1")
     app.include_router(leaderboard.router, prefix="/api/v1")
+    app.include_router(organizer_requests.router, prefix="/api/v1")
     app.include_router(registrations.router, prefix="/api/v1")
     app.include_router(sessions.router, prefix="/api/v1")
     app.include_router(submissions.router, prefix="/api/v1")
@@ -136,5 +144,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(twins.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(ws.router, prefix="/api/v1/ws")
+
+    # SPA deep links (e.g. /register?token=… from invitation emails) must
+    # serve the single-page app; routes registered before the static mount
+    # take precedence over it.
+    @app.get("/register", include_in_schema=False)
+    async def spa_register():
+        return FileResponse(GUI_DIR / "index.html")
+
     app.mount("/", StaticFiles(directory=GUI_DIR, html=True), name="epic_gui")
     return app

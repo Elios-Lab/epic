@@ -54,7 +54,7 @@ def test_clicking_monitor_shows_chart_panel(
         _monitor_button(page, contest["name"]).click()
 
         # Chart container should become visible.
-        chart_panel = page.locator("canvas[x-ref='monitorChart']").locator("..")
+        chart_panel = page.locator("canvas#monitorChartOrganizer").locator("..")
         expect(chart_panel).to_be_visible(timeout=3000)
 
         # Contest name shown in the monitor header.
@@ -77,7 +77,7 @@ def test_canvas_has_nonzero_dimensions_after_monitor_start(
         # offsetWidth > 0, so we allow a generous timeout).
         time.sleep(0.5)
 
-        canvas = page.locator("canvas[x-ref='monitorChart']")
+        canvas = page.locator("canvas#monitorChartOrganizer")
         dimensions = canvas.evaluate(
             "el => ({ w: el.offsetWidth, h: el.offsetHeight })"
         )

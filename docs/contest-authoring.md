@@ -1,19 +1,6 @@
 # Contest Authoring Guide
 
-One of the primary goals of EPIC is to allow instructors and researchers to create machine learning competitions without modifying the platform code.
-
-Contest creation should be largely configuration-driven.
-
-The platform should allow a contest author to create a new competition by configuring:
-
-- A digital twin
-- Sensor pipeline parameters
-- A fault schedule (which faults, when, how severe)
-- Initial conditions
-- Tasks and scoring metrics
-- Visibility and submission rules
-
-without implementing new software components.
+One of the primary goals of EPIC is to allow instructors and researchers to create machine learning competitions without modifying the platform code. Contest creation is configuration-driven: an author defines a complete competition by choosing a digital twin, tuning the sensor pipeline parameters, scheduling faults (which ones, when they start and end, and how severe), setting the initial conditions, declaring the tasks with their scoring metrics, and choosing visibility and submission rules — all without implementing a single new software component. The five built-in twins available for this configuration are described in the [Digital Twin Catalog](twin-catalog.md).
 
 ---
 
@@ -160,9 +147,7 @@ Unspecified fields use the twin's defaults.
 
 Every contest uses a **two-phase** structure that ensures submission integrity:
 
-1. **Observation phase** (`start_date` → `end_of_observation`): the simulation runs and participants observe sensor readings via the WebSocket stream.
-2. **Evaluation phase** (`end_of_observation` → `end_of_observation + prediction_horizon_seconds`): the simulation continues generating ground truth. No submissions are accepted yet.
-3. **Submission window** (`end_of_observation + prediction_horizon_seconds` → `end_date`): participants submit their full forecast for the evaluation window.
+The contest unfolds in three consecutive windows. During the *observation phase*, from `start_date` to `end_of_observation`, the simulation runs and participants observe sensor readings via the WebSocket stream. During the *evaluation phase*, lasting `prediction_horizon_seconds` from the end of observation, the simulation continues generating ground truth but no submissions are accepted yet. Finally, the *submission window* opens when the evaluation phase ends and lasts until `end_date`; in this window participants submit their full forecast for the evaluation window.
 
 Required fields:
 
@@ -177,10 +162,7 @@ Optional fields:
 score_against: ground_truth   # "ground_truth" (default) or "sensors"
 ```
 
-`score_against` controls the reference signal used when computing the leaderboard metric:
-
-- **`ground_truth`** (recommended default) — scores are computed against the noiseless latent-state values recorded by the engine during the evaluation phase. A perfect physics model achieves a score of zero; measurement noise does not penalise it.
-- **`sensors`** — scores are computed against the actual (noisy) sensor readings. Choose this only when the task explicitly asks participants to forecast the corrupted measurement (e.g. a sensor-drift detection challenge).
+`score_against` controls the reference signal used when computing the leaderboard metric. With the recommended default, `ground_truth`, scores are computed against the noiseless latent-state values recorded by the engine during the evaluation phase, so a perfect physics model achieves a score of zero and measurement noise does not penalise it. With `sensors`, scores are computed against the actual noisy sensor readings instead; choose this only when the task explicitly asks participants to forecast the corrupted measurement, as in a sensor-drift detection challenge.
 
 The platform computes `eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)`. Participants must submit exactly `eval_steps` predicted values per sensor.
 

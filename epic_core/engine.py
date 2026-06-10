@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import random
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -61,10 +62,22 @@ class SimulationEngine:
                 f"twin '{session.twin_id}' could not be loaded"
             ) from exc
 
+        # Per-session RNG: injected into sensors that accept it, so that
+        # concurrent sessions never share random state. The global seeding
+        # is kept as a fallback for plugins using module-level RNG functions.
+        if session.seed is not None:
+            random.seed(session.seed)
+            np.random.seed(session.seed)
+            session_rng = random.Random(session.seed)
+        else:
+            session_rng = random.Random()
+
         supported = twin.supported_quantities()
         contest_sensors = []
         for cfg in contest.sensor_configs:
-            contest_sensors.append(self._build_configured_sensor(cfg, twin, supported))
+            contest_sensors.append(
+                self._build_configured_sensor(cfg, twin, supported, session_rng)
+            )
 
         available_faults = {fault.fault_id for fault in twin.get_faults()}
         for entry in contest.fault_schedule:
@@ -73,12 +86,6 @@ class SimulationEngine:
                 raise PluginExecutionError(
                     f"fault '{fault_id}' is not available for twin '{twin.twin_id}'"
                 )
-
-        if session.seed is not None:
-            import random
-
-            random.seed(session.seed)
-            np.random.seed(session.seed)
 
         state = self._call_plugin(
             twin.twin_id,
@@ -123,6 +130,13 @@ class SimulationEngine:
 
         paused = False          # set True when PAUSED status detected
         in_evaluation = False   # set True after end_of_observation is crossed
+        should_store = False    # set per step inside the loop; False if the loop
+                                # never runs (e.g. simulation_end already past)
+
+        # Absolute tick scheduling: each step is anchored to next_tick so that
+        # per-step computation time does not accumulate as wall-clock drift.
+        event_loop = asyncio.get_running_loop()
+        next_tick = event_loop.time() + dt
 
         async with db_factory() as db:
 
@@ -229,7 +243,16 @@ class SimulationEngine:
                     )
 
                 state = new_state
-                await asyncio.sleep(dt)
+                # Sleep until the next absolute tick. If a step overran its
+                # slot, skip ahead without sleeping instead of accumulating
+                # the delay into every subsequent step.
+                now_monotonic = event_loop.time()
+                delay = next_tick - now_monotonic
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                    next_tick += dt
+                else:
+                    next_tick = now_monotonic + dt
 
             if not paused and should_store:
                 await db.commit()
@@ -258,7 +281,9 @@ class SimulationEngine:
             raise PluginExecutionError(f"contest '{contest_id}' does not exist")
         return contest
 
-    def _build_configured_sensor(self, config: dict, twin, supported_quantities):
+    def _build_configured_sensor(
+        self, config: dict, twin, supported_quantities, rng: random.Random | None = None
+    ):
         sensor_id = config.get("sensor_id")
         if not sensor_id:
             raise PluginExecutionError("sensor config is missing sensor_id")
@@ -275,10 +300,17 @@ class SimulationEngine:
                 f"sensor '{sensor_id}' is not compatible with twin '{twin.twin_id}'"
             )
 
-        overrides = {key: value for key, value in config.items() if key != "sensor_id"}
-        sensor_class = registered_sensor.__class__
+        overrides = {
+            key: value
+            for key, value in config.items()
+            if key not in ("sensor_id", "rng")  # rng is never user-configurable
+        }
+
+        # Configuration goes through the Sensor.configure() contract; the
+        # default implementation reconstructs the sensor from its class and
+        # injects the per-session RNG when the constructor supports it.
         try:
-            configured_sensor = sensor_class(**overrides)
+            configured_sensor = registered_sensor.configure(overrides, rng)
         except TypeError as exc:
             raise PluginExecutionError(
                 f"sensor '{sensor_id}' could not be configured"

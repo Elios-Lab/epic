@@ -44,7 +44,8 @@ ALLOWED_TRANSITIONS = {
 }
 # Pause and resume are handled by dedicated PUT endpoints, not via PATCH.
 ALLOWED_VISIBILITIES = {"PUBLIC", "PRIVATE", "INVITATION_ONLY"}
-ALLOWED_TASK_TYPES = {"FORECASTING"}
+# Task types are not hardcoded: any task type with a registered TaskEvaluator
+# plugin is valid (see validate_task_type).
 
 
 class CreateContestRequest(BaseModel):
@@ -54,7 +55,7 @@ class CreateContestRequest(BaseModel):
     task_type: str = "FORECASTING"
     metric_ids: list[str] = Field(default_factory=lambda: ["mae"])
     twin_id: str
-    sensor_configs: list[dict] = Field(default_factory=lambda: [{"sensor_id": "position"}])
+    sensor_configs: list[dict]
     fault_schedule: list[dict] = Field(default_factory=list)
     initial_conditions: dict | None = None
     sampling_rate_hz: float
@@ -126,6 +127,8 @@ def validate_twin_config(
 ) -> None:
     twin = registry_module.twin_registry.get(twin_id)
     supported_quantities = twin.supported_quantities()
+    if not sensor_configs:
+        raise EPICValidationError("sensor_configs must contain at least one sensor")
     for sensor_config in sensor_configs:
         sensor_id = sensor_config.get("sensor_id")
         if not sensor_id:
@@ -153,7 +156,7 @@ def validate_visibility(visibility: str) -> None:
 
 
 def validate_task_type(task_type: str) -> None:
-    if task_type not in ALLOWED_TASK_TYPES:
+    if not registry_module.task_evaluator_registry.contains(task_type):
         raise EPICValidationError(f"task_type '{task_type}' is not supported")
 
 

@@ -28,7 +28,9 @@ from epic_core.db.models import (
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.exceptions import (
     ContestStateError,
+    EvaluationPendingError,
     InsufficientPermissionsError,
+    PluginNotFoundError,
     RegistrationError,
     SubmissionError,
 )
@@ -87,142 +89,102 @@ async def _score_submission(
         )
         task = task_result.scalars().first()
         if task is None:
-            submission.status = "FAILED"
-            submission.submission_metadata = {
-                **(submission.submission_metadata or {}),
-                "error": "Task not found for this contest",
-            }
+            await _fail_submission(db, submission, "Task not found for this contest")
+            return
+
+        try:
+            evaluator = registry_module.task_evaluator_registry.get(task.task_type)
+        except PluginNotFoundError:
+            await _fail_submission(
+                db,
+                submission,
+                f"No evaluator registered for task type '{task.task_type}'",
+            )
+            return
+
+        metric_ids = task.metric_ids or evaluator.default_metric_ids
+        try:
+            metrics = [
+                registry_module.metric_registry.get(metric_id)
+                for metric_id in metric_ids
+            ]
+        except PluginNotFoundError as exc:
+            await _fail_submission(db, submission, str(exc))
+            return
+
+        observations = await _load_evaluation_observations(
+            db, contest.id, evaluator.observation_limit(task.configuration)
+        )
+
+        try:
+            evaluation = evaluator.evaluate(
+                submission.payload, task.configuration, observations, metrics
+            )
+        except EvaluationPendingError:
+            submission.status = "PENDING"
             await db.commit()
             return
-        if task.task_type != "FORECASTING":
-            submission.status = "FAILED"
-            submission.submission_metadata = {
-                **(submission.submission_metadata or {}),
-                "error": f"Scoring for task type '{task.task_type}' is not yet implemented",
-            }
-            await db.commit()
+        except SubmissionError as exc:
+            await _fail_submission(db, submission, str(exc))
             return
 
-        metric_ids = task.metric_ids or ["mae"]
-        score_values = await _score_two_phase(db, submission, contest, task, metric_ids)
-
-        if score_values is None:
-            # Scoring set PENDING or FAILED on the submission — already committed.
-            return
-
+        for score in evaluation.scores:
+            db.add(Score(
+                submission_id=submission.id,
+                metric_id=score.metric_id,
+                value=score.value,
+                details=score.details,
+            ))
         submission.status = "EVALUATED"
         await db.commit()
-        if score_values:
-            composite_score = sum(score_values) / len(score_values)
+
+        if evaluation.ranking_value is not None:
             await _update_leaderboard(
                 submission.contest_id,
                 submission.user_id,
                 submission.id,
-                composite_score,
+                evaluation.ranking_value,
+                evaluation.ranking_direction,
                 db_factory,
             )
 
 
-async def _score_two_phase(
-    db,
-    submission: Submission,
-    contest: Contest,
-    task: Task,
-    metric_ids: list[str],
-) -> list[float] | None:
-    """Score a two-phase submission against the full evaluation-window ground truth."""
-    eval_steps = task.configuration.get("eval_steps")
-    if not eval_steps:
-        submission.status = "FAILED"
-        submission.submission_metadata = {
-            **(submission.submission_metadata or {}),
-            "error": "Task configuration missing eval_steps",
-        }
-        await db.commit()
-        return None
+async def _fail_submission(db, submission: Submission, error: str) -> None:
+    submission.status = "FAILED"
+    submission.submission_metadata = {
+        **(submission.submission_metadata or {}),
+        "error": error,
+    }
+    await db.commit()
 
-    # Retrieve all evaluation-phase observations ordered by sequence_id.
-    obs_result = await db.execute(
+
+async def _load_evaluation_observations(
+    db, contest_id: UUID, limit: int | None = None
+) -> list[dict]:
+    """Load evaluation-phase observations as plain dicts for the evaluator.
+
+    The limit comes from the evaluator's observation_limit() and bounds the
+    query so scoring cost is proportional to the evaluation window, not to
+    the full contest history.
+    """
+    query = (
         select(SensorObservation)
         .join(SimulationSession, SensorObservation.session_id == SimulationSession.id)
-        .where(SimulationSession.contest_id == contest.id)
+        .where(SimulationSession.contest_id == contest_id)
         .order_by(SensorObservation.sequence_id.asc())
     )
-    eval_observations = list(obs_result.scalars())
-
-    if len(eval_observations) < eval_steps:
-        # Evaluation window not yet complete — defer.
-        submission.status = "PENDING"
-        await db.commit()
-        return None
-
-    # Use exactly eval_steps observations (the evaluation window).
-    eval_observations = eval_observations[:eval_steps]
-
-    # Parse and validate submission payload.
-    try:
-        forecast = submission.payload["forecast"]
-        if not isinstance(forecast, dict):
-            raise TypeError("payload.forecast must be a dict of {sensor_id: [values]}")
-        sensor_ids = list(forecast.keys())
-        for sid in sensor_ids:
-            values = forecast[sid]
-            if not isinstance(values, list) or len(values) != eval_steps:
-                raise ValueError(
-                    f"sensor '{sid}' must have exactly {eval_steps} predicted values, "
-                    f"got {len(values) if isinstance(values, list) else type(values).__name__}"
-                )
-    except (KeyError, TypeError, ValueError) as exc:
-        submission.status = "FAILED"
-        submission.submission_metadata = {
-            **(submission.submission_metadata or {}),
-            "error": str(exc),
+    if limit is not None:
+        query = query.limit(limit)
+    obs_result = await db.execute(query)
+    return [
+        {
+            "sequence_id": obs.sequence_id,
+            "sensors": obs.sensors,
+            "ground_truth": obs.ground_truth,
+            "labels": obs.labels,
         }
-        await db.commit()
-        return None
-
-    # Decide what to score against.
-    # "ground_truth" uses the noiseless latent-state values stored by the engine.
-    # "sensors"      uses the corrupted sensor readings (legacy / special cases).
-    # If ground_truth was not recorded (old data or direct DB inserts in tests),
-    # fall back to sensors automatically.
-    score_against = task.configuration.get("score_against", "ground_truth")
-    use_ground_truth = (
-        score_against == "ground_truth"
-        and eval_observations[0].ground_truth is not None
-    )
-    reference_key = "ground_truth" if use_ground_truth else "sensors"
-
-    def _y_true(obs, sensor_id: str) -> float:
-        source = obs.ground_truth if use_ground_truth else obs.sensors
-        return float(source[sensor_id])
-
-    def _sensor_available(sensor_id: str) -> bool:
-        source = eval_observations[0].ground_truth if use_ground_truth else eval_observations[0].sensors
-        return sensor_id in source
-
-    # Compute all configured metrics for each sensor.
-    score_values: list[float] = []
-    for metric_id in metric_ids:
-        metric = registry_module.metric_registry.get(metric_id)
-        for sensor_id in sensor_ids:
-            if not _sensor_available(sensor_id):
-                continue
-            y_true = [_y_true(obs, sensor_id) for obs in eval_observations]
-            y_pred = [float(v) for v in forecast[sensor_id]]
-            score_value = metric.compute(y_true, y_pred)
-            score_values.append(score_value)
-            db.add(Score(
-                submission_id=submission.id,
-                metric_id=metric.metric_id,
-                value=score_value,
-                details={
-                    "sensor_id": sensor_id,
-                    "eval_steps": eval_steps,
-                    "scored_against": reference_key,
-                },
-            ))
-    return score_values
+        for obs in obs_result.scalars()
+    ]
 
 
 async def _update_leaderboard(
@@ -230,8 +192,11 @@ async def _update_leaderboard(
     user_id: UUID,
     submission_id: UUID,
     score_value: float,
+    direction: str,
     db_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Keep each participant's best score, honouring the metric direction."""
+    minimize = direction != "maximize"
     async with db_factory() as db:
         result = await db.execute(
             select(LeaderboardEntry).where(
@@ -249,14 +214,17 @@ async def _update_leaderboard(
                 score=score_value,
             )
             db.add(entry)
-        elif score_value < entry.score:
+        elif (score_value < entry.score) if minimize else (score_value > entry.score):
             entry.submission_id = submission_id
             entry.score = score_value
 
+        order = (
+            LeaderboardEntry.score.asc() if minimize else LeaderboardEntry.score.desc()
+        )
         result = await db.execute(
             select(LeaderboardEntry)
             .where(LeaderboardEntry.contest_id == contest_id)
-            .order_by(LeaderboardEntry.score.asc())
+            .order_by(order)
         )
         for rank, leaderboard_entry in enumerate(result.scalars(), start=1):
             leaderboard_entry.rank = rank
@@ -290,6 +258,18 @@ async def create_submission(
     if contest.status != "ACTIVE":
         raise ContestStateError("Contest is not active")
     await ensure_registered(db, contest.id, current_user.id)
+
+    # Submissions require a two-phase contest: without an evaluation window
+    # there is no ground truth to score against.
+    if (
+        contest.end_of_observation is None
+        or contest.prediction_horizon_seconds is None
+    ):
+        raise ContestStateError(
+            "Contest does not accept submissions — it is not configured as a "
+            "two-phase contest (end_of_observation and "
+            "prediction_horizon_seconds are required)"
+        )
 
     # Submissions are only accepted after the evaluation phase is complete.
     end_of_evaluation = as_utc(contest.end_of_observation) + timedelta(

@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     default_sampling_rate_hz: float = 10.0
     session_queue_capacity: int = 1000
 
+    # Base URL used to build invitation links in notification emails
+    base_url: str = "http://localhost:8000"
+
+    # SMTP — all optional; if smtp_host is unset, notifications are no-ops
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_sender: str | None = None   # falls back to admin_email if unset
+    smtp_tls: bool = True            # STARTTLS (port 587); set False for plain/SSL port 465
+
     # Plugin Discovery
     plugin_discovery: str = "explicit"
 

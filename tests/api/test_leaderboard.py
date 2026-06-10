@@ -307,3 +307,69 @@ def test_get_leaderboard_private_contest_accessible_to_registered_participant(
     )
 
     assert response.status_code == 200
+
+
+def test_update_leaderboard_honours_maximize_direction(client, db_factory):
+    """Regression: with a maximize metric the best (highest) score must win
+    rank 1 and a participant's lower new score must not replace their best."""
+    import uuid
+
+    from epic_api.routers.submissions import _update_leaderboard
+    from epic_core.db.models import LeaderboardEntry
+    from sqlalchemy import select
+
+    contest_id = uuid.uuid4()
+    user_a, user_b = uuid.uuid4(), uuid.uuid4()
+    sub_1, sub_2, sub_3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+
+    async def run_updates():
+        await _update_leaderboard(contest_id, user_a, sub_1, 0.4, "maximize", db_factory)
+        await _update_leaderboard(contest_id, user_b, sub_2, 0.9, "maximize", db_factory)
+        # user_a submits a worse (lower) score: must NOT replace their 0.4
+        await _update_leaderboard(contest_id, user_a, sub_3, 0.2, "maximize", db_factory)
+        async with db_factory() as db:
+            result = await db.execute(
+                select(LeaderboardEntry)
+                .where(LeaderboardEntry.contest_id == contest_id)
+                .order_by(LeaderboardEntry.rank.asc())
+            )
+            return list(result.scalars())
+
+    entries = asyncio.run(run_updates())
+
+    assert len(entries) == 2
+    assert entries[0].user_id == user_b          # highest score ranks first
+    assert entries[0].rank == 1
+    assert entries[0].score == 0.9
+    assert entries[1].user_id == user_a
+    assert entries[1].rank == 2
+    assert entries[1].score == 0.4               # best kept, 0.2 discarded
+
+
+def test_update_leaderboard_honours_minimize_direction(client, db_factory):
+    """With a minimize metric (e.g. MAE) the lowest score wins rank 1."""
+    import uuid
+
+    from epic_api.routers.submissions import _update_leaderboard
+    from epic_core.db.models import LeaderboardEntry
+    from sqlalchemy import select
+
+    contest_id = uuid.uuid4()
+    user_a, user_b = uuid.uuid4(), uuid.uuid4()
+
+    async def run_updates():
+        await _update_leaderboard(contest_id, user_a, uuid.uuid4(), 0.4, "minimize", db_factory)
+        await _update_leaderboard(contest_id, user_b, uuid.uuid4(), 0.1, "minimize", db_factory)
+        async with db_factory() as db:
+            result = await db.execute(
+                select(LeaderboardEntry)
+                .where(LeaderboardEntry.contest_id == contest_id)
+                .order_by(LeaderboardEntry.rank.asc())
+            )
+            return list(result.scalars())
+
+    entries = asyncio.run(run_updates())
+
+    assert entries[0].user_id == user_b          # lowest score ranks first
+    assert entries[0].score == 0.1
+    assert entries[1].user_id == user_a

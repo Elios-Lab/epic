@@ -13,7 +13,7 @@ from epic_api.dependencies import get_broadcaster, get_settings
 from epic_core.auth import decode_access_token
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.config import Settings
-from epic_core.db.models import Contest
+from epic_core.db.models import Contest, ContestRegistration
 from epic_core.db.session import get_db
 from epic_core.exceptions import InvalidCredentialsError
 
@@ -36,9 +36,11 @@ async def contest_stream(
     settings: Settings = Depends(get_settings),
 ):
     try:
-        decode_access_token(token, settings)
+        token_payload = decode_access_token(token, settings)
         contest_uuid = UUID(contest_id)
-    except (InvalidCredentialsError, ValueError):
+        user_id = UUID(token_payload["sub"])
+        role = token_payload.get("role")
+    except (InvalidCredentialsError, ValueError, KeyError, TypeError):
         await websocket.close(code=1008)
         return
 
@@ -47,6 +49,26 @@ async def contest_stream(
     if contest is None or contest.status != "ACTIVE":
         await websocket.close(code=1008)
         return
+
+    # Authorization: administrators may monitor any contest; organizers only
+    # their own; participants must hold an active registration.
+    if role == "ADMINISTRATOR":
+        pass
+    elif role == "ORGANIZER":
+        if contest.created_by != user_id:
+            await websocket.close(code=1008)
+            return
+    else:
+        registration_result = await db.execute(
+            select(ContestRegistration).where(
+                ContestRegistration.contest_id == contest_uuid,
+                ContestRegistration.user_id == user_id,
+                ContestRegistration.status == "REGISTERED",
+            )
+        )
+        if registration_result.scalar_one_or_none() is None:
+            await websocket.close(code=1008)
+            return
 
     # In two-phase mode, reject connections once the evaluation phase has started.
     # Participants must not see the evaluation-phase sensor data.

@@ -4,24 +4,13 @@
 
 A digital twin is a self-contained simulation of a physical system. It evolves an internal latent state over time, manages its own fault behaviour, and exposes observable quantities that sensors can read.
 
-Examples of systems that can be modelled as twins:
-
-- Mechanical systems (mass-spring-damper, rotating machinery)
-- Industrial equipment (pumps, compressors, motors)
-- Smart buildings
-- Power grids
-- Biomedical monitors
-- Networked systems
+Almost any dynamical system can be modelled as a twin: mechanical systems such as a mass-spring-damper or rotating machinery, industrial equipment such as pumps, compressors and motors, but equally smart buildings, power grids, biomedical monitors, or networked systems. The five twins that ship with EPIC are described in the [Digital Twin Catalog](twin-catalog.md); this document explains how to build a new one.
 
 ---
 
 # Design Philosophy
 
-A twin models three things:
-
-1. **Latent state** — the true internal variables of the system (position, velocity, temperature, bearing wear, …). Participants never observe these directly.
-2. **Dynamics** — how the state evolves over time (`step()`).
-3. **Fault management** — which faults are available, and how they alter dynamics when active.
+A twin models three things. The first is its **latent state**, the true internal variables of the system — position, velocity, temperature, bearing wear — which participants never observe directly. The second is its **dynamics**, how that state evolves over time, implemented in `step()`. The third is **fault management**: which faults are available, and how they alter the dynamics when active.
 
 Participants observe the system only through sensors configured at contest creation time. The twin's internal state remains hidden.
 
@@ -29,21 +18,9 @@ Participants observe the system only through sensors configured at contest creat
 
 # Responsibilities
 
-A digital twin must:
+A digital twin owns everything about the simulated system and nothing about the platform around it. It defines its latent state and implements state evolution in `step()`. It declares which physical quantities that state provides through `supported_quantities()`, which is how the engine validates sensor compatibility. It accepts a fault schedule once, at session start, through `configure()`, and from then on manages fault activation entirely internally; it exposes the available fault descriptors through `get_faults()` so the API can list them and contest configurations can be validated, and reports currently active faults through `get_active_faults()` so the engine can generate ground-truth labels. Finally, it exposes descriptive metadata.
 
-- define its latent state
-- implement state evolution in `step()`
-- declare which physical quantities its state provides (`supported_quantities()`)
-- accept a fault schedule at session start (`configure()`) and manage fault activation entirely internally
-- expose available fault descriptors for API listing and contest validation (`get_faults()`)
-- report currently active faults for label generation (`get_active_faults()`)
-- expose metadata
-
-A digital twin must not:
-
-- own sensors (sensors are independent and live in `epic_sensors/`)
-- manage contests, users, submissions, or scores
-- perform authentication
+Just as important is what a twin must *not* do. It does not own sensors — sensors are independent components living in `epic_sensors/`, coupled to the twin only through physical quantities. It knows nothing about contests, users, submissions, or scores, and it plays no part in authentication. A twin that needs any of these things is a design error.
 
 ---
 
@@ -278,45 +255,33 @@ Contest transitions to CLOSED → session COMPLETED
 
 ---
 
-# Reference Twin: Mechanical System
+# Reference Twin: Mass-Spring-Damper
 
-The first EPIC twin is a mass-spring-damper:
+The simplest EPIC twin, and the recommended reference implementation to read first, is the mass-spring-damper in `epic_twins/mass_spring_damper/`:
 
 ```
 m·x'' + c·x' + k·x = F(t)
 ```
 
-State variables: `position`, `velocity`, `acceleration`, `temperature`.
-
-System parameters: `mass`, `stiffness`, `damping`.
-
-Available faults (see [Faults](faults.md)):
-
-- `increased_damping` — gradually increases the damping coefficient
-- `reduced_stiffness` — gradually reduces the stiffness coefficient
-- `increased_friction` — adds energy dissipation, raising temperature
+Its state carries the variables `position`, `velocity`, `acceleration`, and `temperature` together with the system parameters `mass`, `stiffness`, and `damping`. It supports three faults, all described in detail in the [Digital Twin Catalog](twin-catalog.md): `increased_damping`, which gradually increases the damping coefficient; `reduced_stiffness`, which gradually weakens the spring; and `increased_friction`, which adds energy dissipation and raises the temperature. See [Faults](faults.md) for guidance on writing fault effects like these.
 
 ---
 
 # Registration
 
-A twin becomes available by registering it at application startup:
+A twin becomes available by registering an instance at application startup:
 
 ```python
-from epic_core.registry import twin_registry
-from epic_twins.mechanical.twin import MechanicalTwin
+import epic_core.registry as registry_module
+from epic_twins.mass_spring_damper.twin import MassSpringDamperTwin
 
-twin_registry.register(MechanicalTwin())
+registry_module.twin_registry.register(MassSpringDamperTwin())
 ```
 
-After registration, the platform exposes the twin through `GET /api/v1/twins` and related endpoints automatically. No Core file needs to be modified.
+The built-in twins wrap this call in a `plugin.py` module exposing a `register()` function, which the API application invokes in its startup hook. After registration, the platform exposes the twin through `GET /api/v1/twins` and related endpoints automatically. No Core file needs to be modified.
 
 ---
 
 # Adding a New Twin
 
-1. Define a `SimulationState` subclass with `get_quantity()`.
-2. Implement `DigitalTwin`: `configure()`, `step()`, `get_active_faults()`, `supported_quantities()`, `get_faults()`, `metadata()`.
-3. Register at startup.
-
-No EPIC Core file needs to be modified.
+The whole process takes three steps. First, define a `SimulationState` subclass — typically a dataclass — that holds your latent variables and implements `get_quantity()`. Second, implement the `DigitalTwin` interface: `configure()`, `step()`, `get_active_faults()`, `supported_quantities()`, `get_faults()`, and `metadata()`. Third, register an instance at startup. The new twin appears in the API and can be used in contest configurations immediately; no EPIC Core file needs to be modified, and that property is the test of a correct implementation.

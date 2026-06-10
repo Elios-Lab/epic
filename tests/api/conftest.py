@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from epic_api.dependencies import get_notification_service
 from epic_api.main import create_app
 from epic_core.config import Settings
 from epic_core.db.base import create_all_tables
@@ -11,6 +12,7 @@ from epic_core.db.models import User
 import epic_core.db.session as db_session_module
 from epic_core.db.session import get_engine
 from epic_core.db.session import get_session_factory
+from epic_core.notifications import CollectingNotificationService
 from epic_core.testing import test_registry_context
 
 
@@ -20,7 +22,13 @@ def _reset_db_state():
 
 
 @pytest.fixture
-def client():
+def collecting_notifications():
+    """A CollectingNotificationService shared across the test and the app."""
+    return CollectingNotificationService()
+
+
+@pytest.fixture
+def client(collecting_notifications):
     _reset_db_state()
     database_url = "sqlite+aiosqlite:///:memory:"
     settings = Settings(
@@ -30,6 +38,7 @@ def client():
         admin_username="admin1",
         admin_email="admin@example.com",
         admin_password="admin-password",
+        base_url="http://testserver",
     )
 
     with test_registry_context():
@@ -39,7 +48,9 @@ def client():
             await create_all_tables(get_engine())
 
         asyncio.run(_setup_tables())
-        with TestClient(create_app(settings=settings)) as test_client:
+        app = create_app(settings=settings)
+        app.dependency_overrides[get_notification_service] = lambda: collecting_notifications
+        with TestClient(app) as test_client:
             yield test_client
         if db_session_module._engine is not None:
             asyncio.run(db_session_module._engine.dispose())
@@ -136,6 +147,27 @@ def organizer_headers(client, registered_organizer):
     assert response.status_code == 200
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def registered_contest(client, organizer_headers):
+    """Create a minimal contest owned by the organizer fixture."""
+    response = client.post(
+        "/api/v1/contests",
+        json={
+            "name": "Test Contest",
+            "twin_id": "mass_spring_damper",
+            "sensor_configs": [{"sensor_id": "position"}],
+            "sampling_rate_hz": 10.0,
+            "start_date": "2030-01-01T00:00:00Z",
+            "end_date": "2030-06-01T00:00:00Z",
+            "end_of_observation": "2030-05-01T00:00:00Z",
+            "prediction_horizon_seconds": 3600.0,
+        },
+        headers=organizer_headers,
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
 
 
 @pytest.fixture

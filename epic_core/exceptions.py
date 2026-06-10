@@ -69,6 +69,14 @@ class SubmissionError(ContestError):
     pass
 
 
+class EvaluationPendingError(ContestError):
+    """
+    Raised by a TaskEvaluator when the evaluation window is not yet fully
+    populated with observations. Control-flow signal: the submission stays
+    PENDING and scoring is retried later. Never exposed through the API.
+    """
+
+
 # --- Auth errors ---
 
 

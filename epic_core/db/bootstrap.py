@@ -43,7 +43,6 @@ async def seed_admin(settings: Settings, db: AsyncSession) -> None:
                 email=email,
                 password_hash=_pwd_context.hash(settings.admin_password),
                 role="ADMINISTRATOR",
-                is_active=True,
             )
         )
         await db.commit()

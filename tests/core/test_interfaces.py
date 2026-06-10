@@ -141,3 +141,46 @@ def test_incomplete_abstract_sensor_cannot_be_instantiated():
 
     with pytest.raises(TypeError):
         IncompleteSensor()
+
+
+def test_sensor_configure_returns_independent_configured_instance():
+    """The default Sensor.configure() reconstructs the sensor with overrides."""
+    prototype = MockSensor(sensor_id="proto", constant_value=1.0)
+
+    configured = prototype.configure({"sensor_id": "proto", "constant_value": 7.0})
+
+    assert configured is not prototype
+    assert configured.observe(MockState(value=0.0)) == 7.0
+    # The prototype is untouched.
+    assert prototype.observe(MockState(value=0.0)) == 1.0
+
+
+def test_sensor_configure_injects_rng_only_when_declared():
+    """configure() passes rng to constructors that declare it and silently
+    skips it otherwise (MockSensor does not declare rng)."""
+    import random
+
+    prototype = MockSensor(sensor_id="proto", constant_value=1.0)
+    # Must not raise even though MockSensor's constructor has no rng param.
+    configured = prototype.configure(
+        {"sensor_id": "proto", "constant_value": 2.0}, rng=random.Random(1)
+    )
+    assert configured.observe(MockState(value=0.0)) == 2.0
+
+    from epic_sensors.position import PositionSensor
+
+    sensor_a = PositionSensor().configure({"noise_std": 0.5}, rng=random.Random(3))
+    sensor_b = PositionSensor().configure({"noise_std": 0.5}, rng=random.Random(3))
+    state = MockState(value=1.0)
+    assert [sensor_a.observe(state) for _ in range(5)] == [
+        sensor_b.observe(state) for _ in range(5)
+    ]
+
+
+def test_sensor_configure_strips_rng_override():
+    """'rng' coming from user configuration must be ignored, not passed through."""
+    prototype = MockSensor(sensor_id="proto", constant_value=1.0)
+    configured = prototype.configure(
+        {"sensor_id": "proto", "constant_value": 3.0, "rng": "malicious"}
+    )
+    assert configured.observe(MockState(value=0.0)) == 3.0

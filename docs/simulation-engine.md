@@ -10,26 +10,9 @@ The engine is domain-independent. It interacts with the twin exclusively through
 
 # Responsibilities
 
-The engine is responsible for:
+The engine owns the simulation loop across both contest phases. At session start it calls `twin.configure()` once; then, at every time step, it calls `twin.step()` to advance the physics and `sensor.observe()` for each configured sensor to produce the participant-visible measurements. Alongside each corrupted measurement it reads the clean latent-state value directly from the new state — before any sensor degradation — and collects ground-truth fault labels via `twin.get_active_faults()`. During the observation phase it broadcasts sensor readings to WebSocket subscribers without persisting them; during the evaluation phase it does the opposite, persisting full observations (sensors, ground truth, and labels) without broadcasting. At the boundary between the two phases it emits the `evaluation_started` event so clients can close cleanly, and throughout the session it manages the status transitions described below.
 
-- managing the simulation loop (observation phase + evaluation phase)
-- calling `twin.configure()` once at session start
-- calling `twin.step()` at each time step
-- calling `sensor.observe()` for each configured sensor
-- reading the clean latent-state value from `new_state` before any sensor corruption
-- collecting ground-truth labels via `twin.get_active_faults()`
-- persisting observations (sensors + ground_truth + labels) during the evaluation phase only
-- broadcasting sensor readings to WebSocket subscribers during the observation phase
-- emitting the `evaluation_started` event when the observation phase ends and closing the stream
-- managing session status transitions
-
-The engine is not responsible for:
-
-- fault activation or application (the twin manages this)
-- contest management
-- submission evaluation
-- authentication
-- API routing
+Equally explicit is what the engine does *not* do. It never activates or applies faults — the twin manages those internally. It does not manage contests, evaluate submissions, authenticate anyone, or route API requests. The engine is a loop around two interfaces, nothing more.
 
 ---
 
@@ -37,10 +20,7 @@ The engine is not responsible for:
 
 Each contest has exactly one simulation session. It starts when the contest transitions to ACTIVE and runs in real wall-clock time until the contest transitions to CLOSED.
 
-The engine runs the session continuously at `sampling_rate_hz`. Every observation is:
-
-1. Persisted to the database with full labels (private, for scoring only).
-2. Broadcast to all connected WebSocket clients (sensor readings only, no labels).
+The engine runs the session continuously at `sampling_rate_hz`. Each observation serves two audiences through two different channels: during the evaluation phase it is persisted to the database with full labels, privately, for scoring only; during the observation phase it is broadcast to all connected WebSocket clients, carrying sensor readings only and never labels.
 
 There is no batch mode and no accelerated simulation. Organizers and administrators can pause and resume a running session; participants cannot.
 
@@ -177,7 +157,8 @@ The engine updates session status in storage at each transition. On unclean serv
                 sensors
             } to WebSocket subscribers.
 
-        i.  Sleep dt seconds (wall-clock alignment).
+        i.  Sleep until the next absolute tick (wall-clock alignment,
+            drift-free: computation time is absorbed by the remaining slot).
 
         j.  state = new_state
 
@@ -219,14 +200,9 @@ At 10 Hz → `dt = 0.1 s`. At 20 Hz → `dt = 0.05 s`.
 
 ## Simulation time equals wall-clock time
 
-EPIC runs in **real-time lockstep**: after each simulation step the engine sleeps exactly `dt` real seconds before taking the next step. There is no time-acceleration and no batch mode. One second of simulated physics takes one second of wall-clock time.
+EPIC runs in **real-time lockstep**: each simulation step is anchored to an absolute tick `dt` seconds after the previous one, and the engine sleeps only for the remainder of the current slot after the step's computation is done. Computation time therefore never accumulates as drift; if a step overruns its slot entirely, the schedule re-anchors instead of letting the backlog grow. There is no time-acceleration and no batch mode. One second of simulated physics takes one second of wall-clock time.
 
-This is an intentional design choice. It means:
-
-- Participants receive observations at the actual sampling rate, just as they would from a physical sensor.
-- All time-based effects (fault growth, drift, integration) evolve at the correct physical rate.
-- The contest has a real `end_date` checked against the wall clock.
-- Temporal honesty is enforceable: a participant cannot observe a future reading because future readings do not exist yet.
+This is an intentional design choice with several consequences. Participants receive observations at the actual sampling rate, just as they would from a physical sensor, and all time-based effects — fault growth, drift, integration — evolve at the correct physical rate. The contest has a real `end_date` checked against the wall clock. Most importantly, temporal honesty becomes enforceable: a participant cannot observe a future reading, because future readings do not exist yet.
 
 ## How dt is used by each layer
 
@@ -253,14 +229,7 @@ self._drift += self.drift_rate * dt   # drift accumulates in units/second × dt
 
 ## Choosing sampling_rate_hz
 
-| Concern | Effect of increasing sampling_rate_hz (smaller dt) |
-|---|---|
-| **Physics accuracy** | More accurate numerical integration; finer fault and drift resolution |
-| **Observation density** | More data points per second for participants to collect |
-| **DB write rate** | More `SensorObservation` rows per second (one commit every 10 steps) |
-| **Submission anchor safety** | Smaller unsafe window between live edge and last committed batch |
-
-Typical values: 1 Hz for slow thermal or environmental systems; 10–20 Hz for mechanical systems; up to 100 Hz for vibration or electrical signals.
+Raising the sampling rate (shrinking `dt`) improves several things at once: numerical integration becomes more accurate and fault and drift effects are resolved more finely, participants get more data points per second to train on, and the unsafe window between the live edge of the stream and the last committed database batch shrinks. The price is database load — every step produces one `SensorObservation` row during the evaluation phase, committed in batches of ten — and CPU time spent in the twin's `step()`. The right value therefore follows the dynamics of the simulated system: around 1 Hz is enough for slow thermal or environmental systems like the smart building, 10–20 Hz suits mechanical systems whose oscillations need to be visible, and rates up to 100 Hz are reserved for vibration or electrical signals where the spectral content is the point.
 
 ## committed_through: the safe anchor boundary
 
@@ -318,15 +287,9 @@ Each client has its own bounded output queue. If a client is too slow to consume
 
 # Reproducibility
 
-If `session.seed` is set, the engine seeds the random number generators before starting the loop:
+If `session.seed` is set, the engine creates a dedicated `random.Random(seed)` instance for the session and injects it into every sensor whose constructor declares an `rng` parameter — all built-in sensors do, through `_BaseSensor`. Because each session owns its generator, concurrent sessions never interleave their random draws, so the same seed reproduces the same noise sequence regardless of what else the server is running.
 
-```python
-import random, numpy as np
-random.seed(session.seed)
-np.random.seed(session.seed)
-```
-
-Twins and sensors must use module-level random functions to benefit from seeding.
+As a backward-compatibility fallback the engine also seeds the global generators (`random.seed(seed)` and `np.random.seed(seed)`), so third-party sensors that use module-level random functions still benefit from seeding — but only reliably when a single session is running. Plugin authors should accept the injected `rng` instead.
 
 ---
 

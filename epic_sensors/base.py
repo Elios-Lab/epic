@@ -30,6 +30,7 @@ class _BaseSensor(Sensor):
         p_false_reading: float = 0.0,
         p_outlier: float = 0.0,
         version: str = "1.0.0",
+        rng: random.Random | None = None,
     ) -> None:
         self.noise_std = noise_std
         self.gain = gain
@@ -44,6 +45,11 @@ class _BaseSensor(Sensor):
         self._version = version
         self._drift = 0.0
         self._latency_buffer: deque[float] = deque(maxlen=max(1, latency_steps + 1))
+        # Per-session RNG injected by the engine for reproducibility across
+        # concurrent sessions. Falls back to the random module itself (which
+        # exposes the same gauss/random/uniform/choice API), so sensors built
+        # without an rng keep responding to global random.seed().
+        self._rng = rng if rng is not None else random
 
     @property
     def sensor_id(self) -> str:
@@ -70,7 +76,7 @@ class _BaseSensor(Sensor):
 
         measurement = float(raw) * self.gain + self.bias
         if self.noise_std:
-            measurement += random.gauss(0.0, self.noise_std)
+            measurement += self._rng.gauss(0.0, self.noise_std)
         if self.drift_rate:
             self._drift += self.drift_rate * dt
             measurement += self._drift
@@ -88,14 +94,14 @@ class _BaseSensor(Sensor):
             else:
                 measurement = self._latency_buffer.popleft()
 
-        if random.random() < self.p_false_reading:
+        if self._rng.random() < self.p_false_reading:
             if self.min_value is not None and self.max_value is not None:
-                measurement = random.uniform(self.min_value, self.max_value)
+                measurement = self._rng.uniform(self.min_value, self.max_value)
             else:
                 scale = 3.0 * (self.noise_std or 1.0)
-                measurement = random.uniform(-scale, scale)
-        if random.random() < self.p_outlier:
-            measurement += random.choice((-1.0, 1.0)) * 10.0 * (self.noise_std or 1.0)
+                measurement = self._rng.uniform(-scale, scale)
+        if self._rng.random() < self.p_outlier:
+            measurement += self._rng.choice((-1.0, 1.0)) * 10.0 * (self.noise_std or 1.0)
         return float(measurement)
 
     def metadata(self) -> dict:

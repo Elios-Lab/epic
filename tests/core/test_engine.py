@@ -120,6 +120,25 @@ async def test_run_session_completes_and_sets_status(engine_db_factory):
 
 
 @pytest.mark.asyncio
+async def test_run_session_with_past_end_date_completes_without_running(
+    engine_db_factory,
+):
+    """Regression: if end_date is already past when the session starts (e.g.
+    after a server restart), the loop never runs and the session must end
+    COMPLETED — not FAILED with an unbound-variable error."""
+    _, session = await _create_contest_and_session(
+        engine_db_factory, "already-ended", seconds=-1.0
+    )
+
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
+        await SimulationEngine().run_session(str(session.id), engine_db_factory)
+
+    completed = await _get_session(engine_db_factory, session.id)
+    assert completed.status == "COMPLETED"
+    assert not (completed.session_metadata or {}).get("error")
+
+
+@pytest.mark.asyncio
 async def test_run_session_creates_observations(engine_db_factory):
     _, session = await _create_contest_and_session(engine_db_factory, "observations")
 

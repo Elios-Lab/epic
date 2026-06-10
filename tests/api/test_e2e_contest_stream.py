@@ -126,6 +126,13 @@ def test_e2e_websocket_disconnects_when_contest_closed(
     contest = _create_and_activate_contest(client, admin_headers)
     contest_id = contest["contest_id"]
 
+    response = client.post(
+        "/api/v1/contest-registrations",
+        json={"contest_id": contest_id},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+
     with client.websocket_connect(
         f"/api/v1/ws/contests/{contest_id}?token={_token(auth_headers)}"
     ) as websocket:
