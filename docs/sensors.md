@@ -1,7 +1,5 @@
 # Sensor Framework
 
-> Related: [Physical Quantities](quantities.md) · [Digital Twins](digital-twins.md) · [Simulation Engine](simulation-engine.md)
-
 Sensors are the only channel through which participants can observe a digital twin. A participant never has direct access to the twin's internal state or physical quantities — they always receive a sensor measurement, which may include noise, drift, latency, and other realistic degradations.
 
 Sensor implementations live in `epic_sensors/` and are completely independent of any specific twin. A sensor can be applied to any twin that provides the physical quantity the sensor measures.
@@ -13,6 +11,23 @@ Sensor implementations live in `epic_sensors/` and are completely independent of
 A sensor in EPIC is independent of any specific twin: the only coupling between the two is the `PhysicalQuantity` it declares to measure, so a temperature sensor works equally well on a mechanical twin, an industrial pump, or a biomedical system. Every aspect of its measurement behavior — noise, drift, quantization, latency, saturation, probabilistic failures — is a constructor parameter, which makes the entire degradation pipeline configurable per contest without writing code. The pipeline is also deliberately transparent: the implementation documents exactly how the signal degrades, stage by stage, so that an organizer knows precisely what kind of challenge a given configuration produces.
 
 The EPIC Core never knows what physical quantity a sensor measures. It only receives the final `float` from `sensor.observe()`.
+
+---
+
+# Physical Quantities
+
+The decoupling between sensors and twins rests on a shared ontology of physical quantities — the *only* vocabulary the two kinds of plugin must agree on. A sensor declares the one quantity it measures through its `measured_quantity` property; a twin declares the set of quantities its latent state provides through `supported_quantities()` and answers `state.get_quantity(q)` with the current value, or `None` for quantities it does not model. The engine matches the two at contest creation and again at session start, so an incompatible sensor–twin combination can never be published, let alone run:
+
+```python
+twin_quantities = twin.supported_quantities()
+for sensor in contest_sensors:
+    if sensor.measured_quantity not in twin_quantities:
+        raise EPICValidationError(...)
+```
+
+The canonical list is the `PhysicalQuantity` enum in `epic_core/quantities.py` — the code is the source of truth, exposed at runtime through the catalog API. It currently spans translational and rotational mechanics, thermodynamics, fluid dynamics, electrical quantities, vibration and acoustics, environmental quantities (humidity, CO₂, occupancy, illuminance), network/cyber metrics, and biomedical signals — deliberately broader than the built-in twins need, so future domains can plug in without touching the ontology.
+
+Extending it is additive: a new member in the enum requires no other Core change, no modification to existing twins or sensors (a twin that does not model the new quantity simply returns `None`), and immediately allows new twin and sensor plugins to declare it.
 
 ---
 
@@ -96,7 +111,7 @@ The next stages model the physical limits of an instrument. *Saturation* clips t
 
 The final stages are probabilistic failure modes, important for anomaly-detection-style challenges. With probability `p_false_reading` per observation, the sensor discards the true measurement entirely and returns a random value drawn from its operating range — a wrong reading indistinguishable from a real one. With probability `p_outlier`, an extreme spike of about ten noise standard deviations is added on top of the measurement. A contest that sets `p_false_reading=0.02` will corrupt roughly two percent of observations, which is enough to defeat naive models without making the stream useless.
 
-These failure modes are intrinsic sensor properties, configured as parameters of the measurement pipeline. They are deliberately *not* `FaultDescriptor` objects: physical faults belong to the twin and alter the latent state itself, while sensor failures only corrupt the observation of an otherwise healthy state. See [Faults](faults.md) for the full discussion of this distinction. Additional failure modes found in real instruments — stuck-at values, dropout (missing readings), step changes in noise level — follow the same philosophy and are natural candidates for future pipeline parameters.
+These failure modes are intrinsic sensor properties, configured as parameters of the measurement pipeline. They are deliberately *not* `FaultDescriptor` objects: physical faults belong to the twin and alter the latent state itself, while sensor failures only corrupt the observation of an otherwise healthy state. The fault side of this distinction is documented in [Digital Twins](digital-twins.md). Additional failure modes found in real instruments — stuck-at values, dropout (missing readings), step changes in noise level — follow the same philosophy and are natural candidates for future pipeline parameters.
 
 ---
 
@@ -151,6 +166,6 @@ The sensor library itself grows with the twin catalog. The current fourteen sens
 
 # Design Requirement
 
-A sensor must be reusable across multiple digital twins without modification. The temperature sensor is the canonical test: it works today on the mass-spring-damper, the industrial pump, the electric motor, the rotating machinery, and the smart building, because each of those twins exposes `TEMPERATURE` among its supported quantities. If a proposed sensor design only works with one specific twin, the coupling is a design error — either the shared quantity belongs in the [Physical Quantities](quantities.md) ontology, or the logic belongs inside the twin.
+A sensor must be reusable across multiple digital twins without modification. The temperature sensor is the canonical test: it works today on the mass-spring-damper, the industrial pump, the electric motor, the rotating machinery, and the smart building, because each of those twins exposes `TEMPERATURE` among its supported quantities. If a proposed sensor design only works with one specific twin, the coupling is a design error — either the shared quantity belongs in the `PhysicalQuantity` ontology, or the logic belongs inside the twin.
 
 This requirement is a key measure of success for the Sensor Framework.

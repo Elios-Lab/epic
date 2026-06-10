@@ -28,9 +28,15 @@ def collecting_notifications():
 
 
 @pytest.fixture
-def client(collecting_notifications):
+def client(collecting_notifications, tmp_path):
     _reset_db_state()
-    database_url = "sqlite+aiosqlite:///:memory:"
+    # A per-test FILE database, not :memory:. An in-memory SQLite forces
+    # SQLAlchemy onto a single shared connection (StaticPool), where every
+    # session.close() rollback can wipe another session's flushed-but-
+    # uncommitted work — the engine's background tasks then corrupt API
+    # handlers mid-test. A file database gives each pooled connection real
+    # transaction isolation, like production.
+    database_url = f"sqlite+aiosqlite:///{tmp_path}/epic_test.db"
     settings = Settings(
         database_url=database_url,
         secret_key="test-secret-key-32-characters-xx",

@@ -1,7 +1,5 @@
 # Simulation Engine
 
-> Related: [Digital Twins](digital-twins.md) · [Sensors](sensors.md) · [API Specification](api-specification.md)
-
 The Simulation Engine is the EPIC Core component responsible for running digital twin simulations, collecting sensor observations, and delivering results to participants.
 
 The engine is domain-independent. It interacts with the twin exclusively through the `DigitalTwin` interface and with sensors through the `Sensor` interface. It has no knowledge of fault logic, physical quantities, or domain-specific behaviour.
@@ -293,11 +291,13 @@ As a backward-compatibility fallback the engine also seeds the global generators
 
 ---
 
-# Error Handling
+# Error Handling and Plugin Isolation
 
-If `twin.step()` or `sensor.observe()` raises an exception, the engine sets session status to `FAILED`, stores the error message in `session.metadata["error"]`, and cancels the asyncio task.
+Plugin failures must be isolated: a faulty sensor or digital twin must not bring down the application or affect other sessions. The exception hierarchy lives in `epic_core/exceptions.py` (the code is the authoritative listing); the rules around it are what matters here.
 
-Plugin exceptions are never propagated to the API layer. See [Error Handling](error-handling.md).
+Any exception raised inside a plugin method (`twin.step()`, `sensor.observe()`, `sensor.configure()`) is caught by the engine and re-raised as `PluginExecutionError`, wrapping the original as `__cause__`. The engine's session error handler then sets the session to `FAILED`, stores the error message in the session metadata, notifies the contest owner and administrators, and logs the full traceback at `ERROR` level — including the plugin id and the failing method. Plugin exceptions are never propagated to the API layer, and because each session runs as an independent asyncio task, all other running sessions continue unaffected.
+
+Two boundaries complete the picture. At the API edge, a global exception handler maps every `EPICError` to the structured envelope and status code documented in [API Conventions](api-specification.md); internal details and stack traces are never exposed outside `DEBUG` mode. At startup, a plugin that fails interface validation raises `PluginValidationError` immediately and the application refuses to start with a message identifying the faulty plugin — deliberately, so a mis-implemented plugin is caught at boot rather than during a live contest.
 
 ---
 

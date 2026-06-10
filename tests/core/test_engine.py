@@ -307,3 +307,219 @@ async def test_run_session_seed_reproduces_noisy_sensor_values(engine_db_factory
         first_observation.sensors["mock_sensor"]
         == second_observation.sensors["mock_sensor"]
     )
+
+
+# ── Two-phase gating ──────────────────────────────────────────────────────────
+
+class RecordingBroadcaster:
+    """Captures every broadcast payload for assertions."""
+
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    async def broadcast(self, contest_id: str, payload: dict) -> None:
+        self.payloads.append(payload)
+
+
+async def _create_two_phase_contest_and_session(
+    db_factory,
+    name: str,
+    observation_seconds: float = 0.4,
+    horizon_seconds: float = 0.3,
+    sampling_rate_hz: float = 20.0,
+):
+    now = datetime.now(timezone.utc)
+    async with db_factory() as db:
+        contest = Contest(
+            name=name,
+            status="ACTIVE",
+            twin_id="mock_twin",
+            sensor_configs=[{"sensor_id": "mock_sensor"}],
+            fault_schedule=[],
+            sampling_rate_hz=sampling_rate_hz,
+            start_date=now,
+            end_of_observation=now + timedelta(seconds=observation_seconds),
+            prediction_horizon_seconds=horizon_seconds,
+            end_date=now + timedelta(seconds=observation_seconds + horizon_seconds + 30),
+        )
+        db.add(contest)
+        await db.commit()
+        await db.refresh(contest)
+
+        session = SimulationSession(
+            contest_id=contest.id,
+            twin_id="mock_twin",
+            sampling_rate_hz=sampling_rate_hz,
+        )
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+        return contest, session
+
+
+@pytest.mark.asyncio
+async def test_two_phase_stores_only_evaluation_observations(engine_db_factory):
+    """The anti-cheat core: nothing is persisted during the observation phase;
+    every evaluation-phase observation is persisted with clean ground truth."""
+    _, session = await _create_two_phase_contest_and_session(
+        engine_db_factory, "two-phase-storage"
+    )
+    broadcaster = RecordingBroadcaster()
+
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
+        await SimulationEngine(broadcaster=broadcaster).run_session(
+            str(session.id), engine_db_factory
+        )
+
+    completed = await _get_session(engine_db_factory, session.id)
+    assert completed.status == "COMPLETED"
+
+    observations = await _get_observations(engine_db_factory, session.id)
+    assert observations, "evaluation phase must persist observations"
+
+    # Sensor messages broadcast during the observation phase carry sequence_ids;
+    # no stored observation may share one (storage starts strictly after).
+    streamed_ids = {
+        p["sequence_id"] for p in broadcaster.payloads if "sensors" in p and "event" not in p
+    }
+    stored_ids = {obs.sequence_id for obs in observations}
+    assert streamed_ids, "observation phase must broadcast sensor readings"
+    assert streamed_ids.isdisjoint(stored_ids), (
+        "broadcast (observation-phase) and stored (evaluation-phase) "
+        "sequence_ids must not overlap"
+    )
+
+    # Every stored observation carries the clean latent value for scoring.
+    for obs in observations:
+        assert obs.ground_truth is not None
+        assert "mock_sensor" in obs.ground_truth
+        assert obs.labels is not None
+
+
+@pytest.mark.asyncio
+async def test_two_phase_broadcast_stops_at_evaluation_started(engine_db_factory):
+    """Participants must never receive evaluation-phase sensor data."""
+    contest, session = await _create_two_phase_contest_and_session(
+        engine_db_factory, "two-phase-broadcast"
+    )
+    broadcaster = RecordingBroadcaster()
+
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
+        await SimulationEngine(broadcaster=broadcaster).run_session(
+            str(session.id), engine_db_factory
+        )
+
+    events = [p for p in broadcaster.payloads if p.get("event") == "evaluation_started"]
+    assert len(events) == 1, "exactly one evaluation_started event"
+
+    expected_steps = round(
+        contest.prediction_horizon_seconds * session.sampling_rate_hz
+    )
+    assert events[0]["evaluation_steps"] == expected_steps
+
+    # No sensor payload may follow the phase-change event.
+    event_index = broadcaster.payloads.index(events[0])
+    after_event = broadcaster.payloads[event_index + 1:]
+    assert all("sensors" not in p for p in after_event), (
+        "no sensor readings may be broadcast after evaluation_started"
+    )
+
+
+# ── Engine notifications ──────────────────────────────────────────────────────
+
+async def _create_user(db_factory, username: str, email: str, role: str):
+    from epic_core.db.models import User
+
+    async with db_factory() as db:
+        user = User(
+            username=username,
+            email=email,
+            password_hash="x",
+            role=role,
+            status="ACTIVE",
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+
+@pytest.mark.asyncio
+async def test_session_failure_notifies_owner_and_admins(engine_db_factory):
+    """A crashing twin must alert the contest owner and every administrator."""
+    from epic_core.notifications import CollectingNotificationService, SessionFailed
+
+    admin = await _create_user(
+        engine_db_factory, "admin", "admin@example.com", "ADMINISTRATOR"
+    )
+    owner = await _create_user(
+        engine_db_factory, "organizer", "organizer@example.com", "ORGANIZER"
+    )
+    contest, session = await _create_contest_and_session(
+        engine_db_factory, "failure-notify"
+    )
+    async with engine_db_factory() as db:
+        result = await db.execute(select(Contest).where(Contest.id == contest.id))
+        db_contest = result.scalar_one()
+        db_contest.created_by = owner.id
+        await db.commit()
+
+    collecting = CollectingNotificationService()
+    with registry_context(
+        twins=[FailingTwin(twin_id="mock_twin")], sensors=[MockSensor()]
+    ):
+        await SimulationEngine(notification_service=collecting).run_session(
+            str(session.id), engine_db_factory
+        )
+
+    failed = await _get_session(engine_db_factory, session.id)
+    assert failed.status == "FAILED"
+
+    events = collecting.of_type(SessionFailed)
+    recipients = {event.to_email for event in events}
+    assert recipients == {"organizer@example.com", "admin@example.com"}
+    assert all(event.contest_name == "failure-notify" for event in events)
+    assert all(event.error for event in events)
+
+
+@pytest.mark.asyncio
+async def test_two_phase_completion_notifies_registered_participants(
+    engine_db_factory,
+):
+    """When the evaluation window ends, registered participants must be told
+    the submission window is open. Unregistered users must not be."""
+    from epic_core.db.models import ContestRegistration
+    from epic_core.notifications import (
+        CollectingNotificationService,
+        SubmissionWindowOpen,
+    )
+
+    registered = await _create_user(
+        engine_db_factory, "student1", "student1@example.com", "PARTICIPANT"
+    )
+    await _create_user(
+        engine_db_factory, "student2", "student2@example.com", "PARTICIPANT"
+    )
+    contest, session = await _create_two_phase_contest_and_session(
+        engine_db_factory,
+        "window-open-notify",
+        observation_seconds=0.2,
+        horizon_seconds=0.2,
+    )
+    async with engine_db_factory() as db:
+        db.add(ContestRegistration(
+            contest_id=contest.id,
+            user_id=registered.id,
+            status="REGISTERED",
+        ))
+        await db.commit()
+
+    collecting = CollectingNotificationService()
+    with registry_context(twins=[MockTwin(twin_id="mock_twin")], sensors=[MockSensor()]):
+        await SimulationEngine(notification_service=collecting).run_session(
+            str(session.id), engine_db_factory
+        )
+
+    events = collecting.of_type(SubmissionWindowOpen)
+    assert {event.to_email for event in events} == {"student1@example.com"}
+    assert events[0].contest_name == "window-open-notify"

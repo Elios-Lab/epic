@@ -19,6 +19,11 @@ from epic_api.dependencies import (
     get_settings,
     require_organizer_or_admin,
 )
+from epic_api.schemas import (
+    AcceptInvitationResponse,
+    CreateInvitationsResponse,
+    InvitationDetails,
+)
 from epic_api.utils import parse_uuid
 from epic_core.auth import create_access_token, hash_password
 from epic_core.config import Settings
@@ -31,7 +36,11 @@ from epic_core.db.models import (
 )
 from epic_core.db.session import get_db
 from epic_core.exceptions import ContestNotFoundError, SessionNotFoundError
-from epic_core.notifications import NotificationService
+from epic_core.notifications import (
+    InvitationAccepted,
+    NotificationService,
+    ParticipantInvitation,
+)
 
 router = APIRouter(tags=["invitations"])
 
@@ -84,7 +93,11 @@ def _user_response(user: User) -> dict:
     }
 
 
-@router.post("/contests/{contest_id}/invitations", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/contests/{contest_id}/invitations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CreateInvitationsResponse,
+)
 async def create_invitations(
     contest_id: str,
     request: CreateInvitationsRequest,
@@ -117,11 +130,11 @@ async def create_invitations(
     base_url = settings.base_url.rstrip("/") if hasattr(settings, "base_url") and settings.base_url else ""
     for inv in created:
         invitation_link = f"{base_url}/register?token={inv.token}"
-        await notifications.send_participant_invitation(
+        await notifications.notify(ParticipantInvitation(
             to_email=inv.email,
             invitation_link=invitation_link,
             contest_name=contest.name,
-        )
+        ))
 
     return {
         "created": len(created),
@@ -129,7 +142,7 @@ async def create_invitations(
     }
 
 
-@router.get("/invitations/{token}")
+@router.get("/invitations/{token}", response_model=InvitationDetails)
 async def get_invitation(
     token: str,
     db: AsyncSession = Depends(get_db),
@@ -155,12 +168,17 @@ async def get_invitation(
     }
 
 
-@router.post("/invitations/{token}/accept", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/invitations/{token}/accept",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AcceptInvitationResponse,
+)
 async def accept_invitation(
     token: str,
     request: AcceptInvitationRequest,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    notifications: NotificationService = Depends(get_notification_service),
 ):
     """Complete participant registration via a valid, unused, non-expired token."""
     result = await db.execute(select(Invitation).where(Invitation.token == token))
@@ -205,6 +223,18 @@ async def accept_invitation(
     await db.commit()
     await db.refresh(new_user)
     await db.refresh(inv)
+
+    # Tell the inviter their invitation was accepted.
+    inviter_result = await db.execute(select(User).where(User.id == inv.invited_by))
+    inviter = inviter_result.scalar_one_or_none()
+    contest_result = await db.execute(select(Contest).where(Contest.id == inv.contest_id))
+    contest = contest_result.scalar_one_or_none()
+    if inviter is not None:
+        await notifications.notify(InvitationAccepted(
+            to_email=inviter.email,
+            contest_name=contest.name if contest else "an EPIC contest",
+            participant_email=new_user.email,
+        ))
 
     access_token = create_access_token(
         {"sub": str(new_user.id), "username": new_user.username, "role": new_user.role},

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_settings, require_admin
 from epic_api.utils import parse_uuid
+from epic_api.schemas import TokenResponse, UserListResponse, UserResponse
 from epic_core.auth import create_access_token, hash_password
 from epic_core.config import Settings
 from epic_core.db.models import User, USER_STATUS_ACTIVE, USER_STATUS_SUSPENDED, USER_STATUS_DELETED
@@ -48,7 +49,7 @@ def user_response(user: User) -> dict:
     }
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 async def create_user(
     request: CreateUserRequest,
     current_user: User = Depends(require_admin),
@@ -79,7 +80,7 @@ async def create_user(
     return user_response(user)
 
 
-@router.get("")
+@router.get("", response_model=UserListResponse)
 async def list_users(
     role: str | None = Query(None),
     user_status: str | None = Query(None, alias="status"),
@@ -105,7 +106,7 @@ async def list_users(
     }
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
     current_user: User = Depends(require_admin),
@@ -123,7 +124,7 @@ async def get_user(
     return user_response(user)
 
 
-@router.patch("/{user_id}")
+@router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: str,
     request: UpdateUserRequest,
@@ -177,7 +178,7 @@ async def delete_user(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{user_id}/impersonate")
+@router.post("/{user_id}/impersonate", response_model=TokenResponse)
 async def impersonate_user(
     user_id: str,
     current_user: User = Depends(require_admin),

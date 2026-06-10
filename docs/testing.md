@@ -1,7 +1,5 @@
 # Testing Strategy
 
-> Related: [Simulation Engine](simulation-engine.md) · [Digital Twins](digital-twins.md) · [Error Handling](error-handling.md)
-
 This document defines the testing strategy for the EPIC platform: how the suite is organized, which utilities the Core provides, and what the conventions are for writing new tests.
 
 ---
@@ -89,7 +87,7 @@ uv run pytest --cov=epic_core --cov=epic_api --cov-report=term-missing
 
 # CI Requirements
 
-The CI pipeline runs the full unit and API integration suites on every pull request, and tests must pass before merging. Coverage for `epic_core` must not drop below 80%. When the contract-test layer lands, CI will additionally run the contract suite against every registered twin and sensor, turning interface conformance into a merge gate for new plugins.
+Two GitHub Actions workflows enforce this. `test.yml` runs the full unit and API suites plus the client SDK tests on every push and pull request, reporting coverage for `epic_core` and `epic_api`. `deploy.yml` runs the same test job on pushes to `main` and only deploys to production when it passes — a red suite blocks the deploy. The Playwright UI suite stays manual (`uv run pytest tests/ui`) since it needs a browser. When the contract-test layer lands, CI will additionally run the contract suite against every registered twin and sensor, turning interface conformance into a merge gate for new plugins.
 
 ---
 

@@ -2,10 +2,9 @@
 
 > A simulation-driven machine learning competition platform built on extensible digital twins, real-time sensor streaming, and automated evaluation.
 
-**Live instance: [https://epic.elioslab.net](https://epic.elioslab.net)**
-
 | Endpoint | URL |
 |---|---|
+| Live instace | [https://epic.elioslab.net](https://epic.elioslab.net) |
 | REST API | [https://epic.elioslab.net/api/v1](https://epic.elioslab.net/api/v1) |
 | Swagger UI | [https://epic.elioslab.net/docs](https://epic.elioslab.net/docs) |
 
@@ -13,13 +12,13 @@
 
 ## What is EPIC?
 
-EPIC (ELIOS Predictive Intelligence Challenge) is a framework for running machine learning competitions based on simulated physical systems, called **digital twins**. Rather than handing participants a static dataset, EPIC runs a simulation in real time and lets participants collect their own data by streaming live sensor readings over a WebSocket connection. Participants then train predictive models and submit forecasts to be scored against hidden ground-truth trajectories.
+EPIC (ELIOS Predictive Intelligence Challenge) is a framework for running **machine learning competitions** based on **simulated physical systems**, called **digital twins**. Rather than handing participants a static dataset, EPIC runs a **real time simulation** and lets participants collect their own data by **streaming live sensor readings**. Participants then train predictive models and submit forecasts to be scored against hidden ground-truth trajectories.
 
 The platform is designed to support:
 
-- **Education** — professors set up contests for their students without writing code
-- **Research** — researchers benchmark algorithms on reproducible simulation scenarios
-- **Industrial AI experimentation** — realistic predictive maintenance and anomaly detection challenges
+- **Education** — professors set up contests for their students without writing code.
+- **Research** — researchers benchmark algorithms on reproducible simulation scenarios.
+- **Industrial AI experimentation** — realistic predictive maintenance challenges.
 
 The currently supported ML task is **time-series forecasting**, scored with MAE. Anomaly detection, fault diagnosis, predictive maintenance, prognostics, and remaining useful life estimation are planned for future releases.
 
@@ -31,15 +30,15 @@ Every EPIC contest follows a **two-phase structure**:
 
 ### Phase 1 — Observation window
 
-From `start_date` to `end_of_observation`, the digital twin simulation runs in real time and broadcasts sensor readings to all registered participants via WebSocket. This is the data-collection window. Participants receive timestamped sensor observations and use them to train a predictive model.
+From `start_date` to `end_of_observation`, the digital twin simulation runs in real time and broadcasts sensor readings to all registered participants. This is the **data-collection window**. Participants receive timestamped sensor observations and use them to train a predictive model.
 
 ### Phase 2 — Evaluation window
 
-From `end_of_observation` and for `prediction_horizon_seconds`, the simulation keeps running but the sensor stream is closed. The ground-truth values for this window are recorded by the platform but hidden from participants. This prevents any post-hoc prediction.
+From `end_of_observation` and for `prediction_horizon_seconds`, the simulation keeps running but the sensor stream is closed. The **ground-truth values** for this window are recorded by the platform but hidden from participants. This prevents any post-hoc prediction.
 
 ### Submission window
 
-Once the evaluation window ends, participants submit a forecast covering every time step of the evaluation window. Submissions are scored automatically against the ground truth and the leaderboard is updated immediately.
+Once the evaluation window ends, **participants submit a forecast** covering every time step of the evaluation window. Submissions are scored automatically against the ground truth and the leaderboard is updated immediately.
 
 The number of values to predict per sensor is:
 
@@ -177,7 +176,7 @@ EPIC ships with five digital twins covering a range of industrial domains:
 
 Each twin is fully self-contained: it manages its own physical state, fault injection, and sensor compatibility. Adding a new twin requires only implementing the `DigitalTwin` interface — no changes to EPIC Core.
 
-A detailed description of each twin — the physics it simulates, the faults it supports, and the initial conditions it accepts — is available in the [Digital Twin Catalog](docs/twin-catalog.md).
+A detailed description of each twin — the physics it simulates, the faults it supports, and the initial conditions it accepts — is available in the catalog section of [Digital Twins](docs/digital-twins.md).
 
 ---
 
@@ -244,7 +243,7 @@ Contests are created through the web interface (Organizer or Administrator role)
 
 Templates are listed at `GET /api/v1/templates` and can be loaded directly from the web UI's contest creation form.
 
-For a full guide on configuring sensors, faults, and scoring from scratch, see [Contest Authoring](docs/contest-authoring.md).
+For a full guide on configuring sensors, faults, and scoring from scratch, see the authoring section of [Contests](docs/contest.md).
 
 ---
 
@@ -269,7 +268,7 @@ Implement the `Sensor` interface, declare the physical quantity it measures, and
 
 ### Adding a fault model
 
-Fault models are defined inside the twin that owns them, keeping physical realism self-contained. See [Faults](docs/faults.md).
+Fault models are defined inside the twin that owns them, keeping physical realism self-contained. See the fault sections of [Digital Twins](docs/digital-twins.md).
 
 ### Adding a scoring metric
 
@@ -283,25 +282,15 @@ Implement the `TaskEvaluator` interface — payload validation, metric applicati
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [Architecture](docs/architecture.md) | High-level system architecture and component responsibilities |
-| [Domain Model](docs/domain-model.md) | Canonical entity definitions and database schema |
-| [Physical Quantities](docs/quantities.md) | Ontology shared between sensors and digital twins |
-| [Simulation Engine](docs/simulation-engine.md) | Simulation loop, two-phase model, WebSocket streaming |
-| [API Specification](docs/api-specification.md) | Complete REST and WebSocket API reference |
-| [Authentication](docs/authentication.md) | JWT, role-based access control, user management |
-| [Configuration](docs/configuration.md) | All environment variables and their defaults |
-| [Error Handling](docs/error-handling.md) | Exception hierarchy and API error envelope |
-| [Testing](docs/testing.md) | Testing strategy, fixtures, and end-to-end tests |
-| [Digital Twins](docs/digital-twins.md) | Guide for implementing a new digital twin |
-| [Digital Twin Catalog](docs/twin-catalog.md) | Detailed description of the five built-in twins |
-| [Sensors](docs/sensors.md) | Guide for implementing a new sensor |
-| [Faults](docs/faults.md) | Guide for implementing fault models |
-| [Scoring](docs/scoring.md) | Metrics, scoring policies, and leaderboard computation |
-| [Contest Management](docs/contest-management.md) | Contest lifecycle, state machine, and submission rules |
-| [Contest Authoring](docs/contest-authoring.md) | Configuration-driven contest creation guide |
-| [Datasets](docs/datasets.md) | Client-side data collection and export |
+The documentation is organized so that each reader has one obvious starting point.
+
+**For participants** — [API Conventions & WebSocket Protocol](docs/api-specification.md) covers everything a competitor's client touches: the conventions all endpoints share, the full streaming protocol, and how to collect data client-side. The endpoint-by-endpoint reference is the live [Swagger UI](https://epic.elioslab.net/docs), and the [SDK README](epic_client/README.md) plus [quickstart notebook](notebooks/quickstart.ipynb) get a model submitted fastest.
+
+**For contest organizers** — [Contests](docs/contest.md) explains how contests work and how to author one through configuration alone, and the catalog in [Digital Twins](docs/digital-twins.md) describes the five built-in twins to choose from.
+
+**For plugin authors** — the development guide in [Digital Twins](docs/digital-twins.md) covers implementing a twin and its faults, [Sensors](docs/sensors.md) covers the physical-quantity ontology and the measurement pipeline, and [Scoring](docs/scoring.md) covers metrics and task evaluators.
+
+**For platform developers and operators** — [Architecture](docs/architecture.md) is the map, with [Simulation Engine](docs/simulation-engine.md) for the loop and error isolation, [Domain Model](docs/domain-model.md) for the schema rationale, [Authentication](docs/authentication.md) for roles and registration workflows, [Configuration](docs/configuration.md) for environment variables, and [Testing](docs/testing.md) for the test strategy and CI.
 
 ---
 

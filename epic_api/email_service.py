@@ -16,9 +16,25 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from epic_core.config import Settings
 from epic_core.db.models import INVITATION_TOKEN_TTL_DAYS
-from epic_core.notifications import NotificationService
+from epic_core.notifications import NotificationEvent, NotificationService
 
 logger = logging.getLogger(__name__)
+
+# event_type → template file. Adding a notification = one event class in
+# epic_core/notifications.py plus one template file here.
+_TEMPLATES = {
+    "organizer_request_received": "organizer_request_received.txt",
+    "organizer_approved": "organizer_approved.txt",
+    "organizer_rejected": "organizer_rejected.txt",
+    "participant_invitation": "participant_invitation.txt",
+    "contest_created": "contest_created.txt",
+    "submission_received": "submission_received.txt",
+    "participant_registered": "participant_registered.txt",
+    "invitation_accepted": "invitation_accepted.txt",
+    "session_failed": "session_failed.txt",
+    "session_auto_paused": "session_auto_paused.txt",
+    "submission_window_open": "submission_window_open.txt",
+}
 
 _TEMPLATES_DIR = Path(__file__).parent / "email_templates"
 
@@ -80,36 +96,16 @@ class EmailNotificationService(NotificationService):
         except Exception:
             logger.exception("Failed to send email to %s (subject: %s)", to, subject)
 
-    async def notify_organizer_request_received(
-        self, *, admin_email: str, request_id: str, requester_email: str
-    ) -> None:
-        subject, body = _render(
-            "organizer_request_received.txt",
-            request_id=request_id,
-            requester_email=requester_email,
-            base_url=self._base_url,
-        )
-        await self._send(to=admin_email, subject=subject, body=body)
-
-    async def notify_organizer_approved(self, *, organizer_email: str) -> None:
-        subject, body = _render(
-            "organizer_approved.txt",
-            organizer_email=organizer_email,
-            base_url=self._base_url,
-        )
-        await self._send(to=organizer_email, subject=subject, body=body)
-
-    async def notify_organizer_rejected(self, *, organizer_email: str) -> None:
-        subject, body = _render("organizer_rejected.txt")
-        await self._send(to=organizer_email, subject=subject, body=body)
-
-    async def send_participant_invitation(
-        self, *, to_email: str, invitation_link: str, contest_name: str
-    ) -> None:
-        subject, body = _render(
-            "participant_invitation.txt",
-            contest_name=contest_name,
-            invitation_link=invitation_link,
-            expiry_days=INVITATION_TOKEN_TTL_DAYS,
-        )
-        await self._send(to=to_email, subject=subject, body=body)
+    async def notify(self, event: NotificationEvent) -> None:
+        template = _TEMPLATES.get(event.event_type)
+        if template is None:
+            logger.warning("No email template for event type '%s'", event.event_type)
+            return
+        context = {
+            **event.context(),
+            "base_url": self._base_url,
+            "expiry_days": INVITATION_TOKEN_TTL_DAYS,
+            "organizer_email": event.to_email,  # legacy template variable
+        }
+        subject, body = _render(template, **context)
+        await self._send(to=event.to_email, subject=subject, body=body)

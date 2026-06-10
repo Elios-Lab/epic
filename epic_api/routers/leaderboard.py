@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user
 from epic_api.utils import get_contest_or_raise, parse_uuid
+from epic_api.schemas import LeaderboardEntryResponse, LeaderboardResponse
 from epic_core.db.models import ContestRegistration, LeaderboardEntry, User
 from epic_core.db.session import get_db
 from epic_core.exceptions import (
@@ -50,7 +51,7 @@ async def _assert_leaderboard_access(
         raise InsufficientPermissionsError("Leaderboard access denied")
 
 
-@router.get("/{contest_id}/leaderboard")
+@router.get("/{contest_id}/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(
     contest_id: str,
     current_user: User = Depends(get_current_user),
@@ -72,7 +73,7 @@ async def get_leaderboard(
     }
 
 
-@router.get("/{contest_id}/leaderboard/{user_id}")
+@router.get("/{contest_id}/leaderboard/{user_id}", response_model=LeaderboardEntryResponse)
 async def get_user_leaderboard_entry(
     contest_id: str,
     user_id: str,

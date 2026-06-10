@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from epic_api import dependencies
+from epic_api.dependencies import build_notification_service
 from epic_api.errors import register_exception_handlers
 from epic_api.routers import (
     auth,
@@ -30,7 +31,8 @@ from epic_api.routers import (
 from epic_core.broadcaster import ContestBroadcaster
 from epic_core.config import Settings, get_settings
 from epic_core.db.bootstrap import seed_admin
-from epic_core.db.models import Contest, SimulationSession, Submission
+from epic_core.db.models import Contest, SimulationSession, Submission, User
+from epic_core.notifications import NotificationService, SessionAutoPaused
 from epic_core.db.session import get_session_factory
 from epic_core.db.session import init_db
 from epic_core.engine import SimulationEngine
@@ -47,7 +49,7 @@ from epic_twins.smart_building.plugin import register as register_smart_building
 GUI_DIR = Path(__file__).resolve().parent.parent / "epic_gui"
 
 
-async def _recover_after_restart() -> None:
+async def _recover_after_restart(notifications: NotificationService) -> None:
     """Repair state left inconsistent by an unclean shutdown.
 
     Two things can be wrong after a crash:
@@ -64,6 +66,7 @@ async def _recover_after_restart() -> None:
                 SimulationSession.status.in_(["RUNNING", "CREATED"])
             )
         )
+        paused_notices: list[SessionAutoPaused] = []
         for session in orphaned_result.scalars():
             contest_result = await db.execute(
                 select(Contest).where(Contest.id == session.contest_id)
@@ -78,7 +81,27 @@ async def _recover_after_restart() -> None:
                 **(session.session_metadata or {}),
                 "recovery": "Paused automatically after unclean server shutdown. Use Resume to restart.",
             }
+            # Alert the owner and all administrators so someone resumes it.
+            recipients: dict[str, None] = {}
+            if contest.created_by is not None:
+                owner_result = await db.execute(
+                    select(User).where(User.id == contest.created_by)
+                )
+                owner = owner_result.scalar_one_or_none()
+                if owner is not None:
+                    recipients[owner.email] = None
+            admins_result = await db.execute(
+                select(User).where(User.role == "ADMINISTRATOR", User.status == "ACTIVE")
+            )
+            for admin in admins_result.scalars():
+                recipients[admin.email] = None
+            paused_notices.extend(
+                SessionAutoPaused(to_email=email, contest_name=contest.name)
+                for email in recipients
+            )
         await db.commit()
+        for notice in paused_notices:
+            await notifications.notify(notice)
 
         # ── 2. Orphaned PENDING submissions ───────────────────────────────────
         pending_result = await db.execute(
@@ -98,7 +121,11 @@ async def lifespan(app: FastAPI):
     app.state.broadcaster = ContestBroadcaster(
         queue_capacity=settings.session_queue_capacity
     )
-    app.state.engine = SimulationEngine(broadcaster=app.state.broadcaster)
+    notification_service = build_notification_service(settings)
+    app.state.engine = SimulationEngine(
+        broadcaster=app.state.broadcaster,
+        notification_service=notification_service,
+    )
     init_db(settings.database_url)
     async with get_session_factory()() as db:
         await seed_admin(settings, db)
@@ -114,7 +141,7 @@ async def lifespan(app: FastAPI):
         registry_module.metric_registry.register(F1Score())
     if not registry_module.task_evaluator_registry.contains("FORECASTING"):
         registry_module.task_evaluator_registry.register(ForecastingEvaluator())
-    await _recover_after_restart()
+    await _recover_after_restart(notification_service)
     yield
 
 

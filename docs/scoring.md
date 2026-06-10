@@ -1,7 +1,5 @@
 # Scoring Framework
 
-> Related: [Architecture](architecture.md) — canonical `ScoringMetric` interface · [Domain Model](domain-model.md) — `Score` and `LeaderboardEntry` entities · [Contest Management](contest-management.md)
-
 The Scoring Framework is responsible for evaluating participant submissions and generating contest rankings. It must be generic, extensible, reproducible, and independent from any specific digital twin: the EPIC Core does not contain task-specific scoring logic, and evaluation is performed through reusable metrics combined by configurable scoring policies. A metric operates only on predictions and ground truth — it never sees a twin, a sensor, or a physical domain — which is what guarantees that new domains can be introduced without modifying the scoring system.
 
 The framework is designed to eventually cover forecasting, anomaly detection, fault classification, and remaining-useful-life tasks, including multi-task contests with multiple metrics per task and composite scores. Forecasting is the task type implemented today; the others are roadmap items whose requirements shaped the design, and each will arrive as a `TaskEvaluator` plugin rather than as a platform change.

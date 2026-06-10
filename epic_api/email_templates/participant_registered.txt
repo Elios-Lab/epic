@@ -1,0 +1,12 @@
+Subject: [EPIC] New registration in {{ contest_name }}
+
+Hello,
+
+A participant has registered for your contest:
+
+  Contest:     {{ contest_name }}
+  Participant: {{ participant_username }}
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

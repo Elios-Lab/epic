@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user, get_settings
+from epic_api.schemas import MeResponse, TokenResponse
 from epic_core.auth import create_access_token, verify_password
 from epic_core.config import Settings
 from epic_core.db.models import User
@@ -20,7 +21,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
     db: AsyncSession = Depends(get_db),
@@ -46,7 +47,7 @@ async def login(
     }
 
 
-@router.get("/me")
+@router.get("/me", response_model=MeResponse)
 async def me(current_user: User = Depends(get_current_user)):
     return {
         "user_id": str(current_user.id),

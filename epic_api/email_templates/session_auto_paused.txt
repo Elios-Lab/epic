@@ -1,0 +1,16 @@
+Subject: [EPIC] Contest paused after server restart: {{ contest_name }}
+
+Hello,
+
+The EPIC server restarted while the following contest was running.
+Its simulation session has been paused automatically:
+
+  Contest: {{ contest_name }}
+
+Use the Resume button on the dashboard to restart the simulation:
+
+  {{ base_url }}
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

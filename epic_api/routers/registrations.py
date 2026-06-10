@@ -7,10 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from epic_api.dependencies import get_current_user
+from epic_api.dependencies import get_current_user, get_notification_service
 from epic_api.utils import get_contest_or_raise, parse_uuid
+from epic_api.schemas import RegistrationListResponse, RegistrationResponse
 from epic_core.db.models import ContestRegistration, User
 from epic_core.db.session import get_db
+from epic_core.notifications import NotificationService, ParticipantRegistered
 from epic_core.exceptions import (
     InsufficientPermissionsError,
     RegistrationError,
@@ -55,11 +57,12 @@ def require_registration_access(user: User, registration: ContestRegistration) -
         raise InsufficientPermissionsError("Registration access denied")
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=RegistrationResponse)
 async def create_registration(
     request: CreateRegistrationRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    notifications: NotificationService = Depends(get_notification_service),
 ):
     contest = await get_contest_or_raise(db, request.contest_id)
     if contest.status not in {"SCHEDULED", "ACTIVE"}:
@@ -82,10 +85,22 @@ async def create_registration(
     db.add(registration)
     await db.commit()
     await db.refresh(registration)
+
+    # Notify the contest owner (self-registrations by the owner are not notified).
+    if contest.created_by is not None and contest.created_by != current_user.id:
+        owner_result = await db.execute(select(User).where(User.id == contest.created_by))
+        owner = owner_result.scalar_one_or_none()
+        if owner is not None:
+            await notifications.notify(ParticipantRegistered(
+                to_email=owner.email,
+                contest_name=contest.name,
+                participant_username=current_user.username,
+            ))
+
     return registration_response(registration)
 
 
-@router.get("")
+@router.get("", response_model=RegistrationListResponse)
 async def list_registrations(
     user_id: str | None = Query(None),
     contest_id: str | None = Query(None),
@@ -118,7 +133,7 @@ async def list_registrations(
     }
 
 
-@router.get("/{registration_id}")
+@router.get("/{registration_id}", response_model=RegistrationResponse)
 async def get_registration(
     registration_id: str,
     current_user: User = Depends(get_current_user),

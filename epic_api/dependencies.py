@@ -82,20 +82,26 @@ async def require_admin(
     return current_user
 
 
-def get_notification_service(
-    settings: Settings = Depends(get_settings),
-) -> NotificationService:
+def build_notification_service(settings: Settings) -> NotificationService:
     """Auto-select the NotificationService based on configuration.
 
     - smtp_host set  → EmailNotificationService (production)
     - smtp_host unset → NullNotificationService (no-op)
-
-    Override this dependency in tests with a CollectingNotificationService.
     """
     if settings.smtp_host:
         from epic_api.email_service import EmailNotificationService
         return EmailNotificationService(settings)
     return NullNotificationService()
+
+
+def get_notification_service(
+    settings: Settings = Depends(get_settings),
+) -> NotificationService:
+    """FastAPI dependency wrapper around build_notification_service().
+
+    Override this dependency in tests with a CollectingNotificationService.
+    """
+    return build_notification_service(settings)
 
 
 async def require_organizer_or_admin(

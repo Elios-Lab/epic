@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_notification_service, get_settings, require_admin
 from epic_api.utils import parse_uuid
+from epic_api.schemas import OrganizerRequestListResponse, OrganizerRequestResponse
 from epic_core.auth import hash_password
 from epic_core.config import Settings
 from epic_core.db.models import (
@@ -23,7 +24,12 @@ from epic_core.db.models import (
 )
 from epic_core.db.session import get_db
 from epic_core.exceptions import RegistrationError, SessionNotFoundError
-from epic_core.notifications import NotificationService
+from epic_core.notifications import (
+    NotificationService,
+    OrganizerApproved,
+    OrganizerRejected,
+    OrganizerRequestReceived,
+)
 
 router = APIRouter(prefix="/organizer-requests", tags=["organizer-requests"])
 
@@ -50,7 +56,7 @@ def _request_response(req: OrganizerRequest) -> dict:
     }
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=OrganizerRequestResponse)
 async def register_organizer(
     request: OrganizerRegistrationRequest,
     db: AsyncSession = Depends(get_db),
@@ -85,16 +91,16 @@ async def register_organizer(
     await db.refresh(org_request)
 
     admin_email = settings.admin_email or f"{settings.admin_username}@epic.local"
-    await notifications.notify_organizer_request_received(
-        admin_email=admin_email,
+    await notifications.notify(OrganizerRequestReceived(
+        to_email=admin_email,
         request_id=str(org_request.id),
         requester_email=org_request.email,
-    )
+    ))
 
     return _request_response(org_request)
 
 
-@router.get("")
+@router.get("", response_model=OrganizerRequestListResponse)
 async def list_organizer_requests(
     request_status: str | None = Query(None, alias="status"),
     limit: int = Query(100, ge=1, le=1000),
@@ -116,7 +122,7 @@ async def list_organizer_requests(
     }
 
 
-@router.post("/{request_id}/approve")
+@router.post("/{request_id}/approve", response_model=OrganizerRequestResponse)
 async def approve_organizer_request(
     request_id: str,
     current_user: User = Depends(require_admin),
@@ -155,12 +161,12 @@ async def approve_organizer_request(
     await db.commit()
     await db.refresh(org_request)
 
-    await notifications.notify_organizer_approved(organizer_email=org_request.email)
+    await notifications.notify(OrganizerApproved(to_email=org_request.email))
 
     return _request_response(org_request)
 
 
-@router.post("/{request_id}/reject")
+@router.post("/{request_id}/reject", response_model=OrganizerRequestResponse)
 async def reject_organizer_request(
     request_id: str,
     current_user: User = Depends(require_admin),
@@ -184,6 +190,6 @@ async def reject_organizer_request(
     await db.commit()
     await db.refresh(org_request)
 
-    await notifications.notify_organizer_rejected(organizer_email=org_request.email)
+    await notifications.notify(OrganizerRejected(to_email=org_request.email))
 
     return _request_response(org_request)

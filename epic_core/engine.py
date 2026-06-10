@@ -13,13 +13,29 @@ from sqlalchemy import func, select
 
 import epic_core.registry as registry_module
 from epic_core.broadcaster import ContestBroadcaster
-from epic_core.db.models import Contest, SensorObservation, SimulationSession
+from epic_core.db.models import (
+    Contest,
+    ContestRegistration,
+    SensorObservation,
+    SimulationSession,
+    User,
+)
 from epic_core.exceptions import PluginExecutionError, PluginNotFoundError
+from epic_core.notifications import (
+    NotificationService,
+    SessionFailed,
+    SubmissionWindowOpen,
+)
 
 
 class SimulationEngine:
-    def __init__(self, broadcaster: ContestBroadcaster | None = None) -> None:
+    def __init__(
+        self,
+        broadcaster: ContestBroadcaster | None = None,
+        notification_service: NotificationService | None = None,
+    ) -> None:
         self._broadcaster = broadcaster
+        self._notifications = notification_service
 
     async def run_session(self, session_id: str, db_factory) -> None:
         async with db_factory() as db:
@@ -40,6 +56,7 @@ class SimulationEngine:
                     }
                     session2.ended_at = datetime.now(timezone.utc)
                     await db2.commit()
+                await self._notify_session_failed(db_factory, session2, str(exc))
                 return
 
     async def _load_session(self, db, session_id: str) -> SimulationSession:
@@ -264,6 +281,9 @@ class SimulationEngine:
             session.ended_at = datetime.now(timezone.utc)
             await db.commit()
 
+        if not paused and two_phase:
+            await self._notify_submission_window_open(db_factory, session)
+
     def _call_plugin(self, plugin_id: str, method_name: str, method, *args):
         try:
             return method(*args)
@@ -321,6 +341,77 @@ class SimulationEngine:
     async def _broadcast(self, contest_id: str, payload: dict) -> None:
         if self._broadcaster:
             await self._broadcaster.broadcast(contest_id, payload)
+
+    async def _notify_session_failed(
+        self, db_factory, session: SimulationSession, error: str
+    ) -> None:
+        """Alert the contest owner and all administrators. Best-effort."""
+        if self._notifications is None:
+            return
+        try:
+            async with db_factory() as db:
+                contest_result = await db.execute(
+                    select(Contest).where(Contest.id == session.contest_id)
+                )
+                contest = contest_result.scalar_one_or_none()
+                contest_name = contest.name if contest else str(session.contest_id)
+                recipients: dict[str, None] = {}
+                if contest is not None and contest.created_by is not None:
+                    owner_result = await db.execute(
+                        select(User).where(User.id == contest.created_by)
+                    )
+                    owner = owner_result.scalar_one_or_none()
+                    if owner is not None:
+                        recipients[owner.email] = None
+                admins_result = await db.execute(
+                    select(User).where(
+                        User.role == "ADMINISTRATOR", User.status == "ACTIVE"
+                    )
+                )
+                for admin in admins_result.scalars():
+                    recipients[admin.email] = None
+            for email in recipients:
+                await self._notifications.notify(SessionFailed(
+                    to_email=email,
+                    contest_name=contest_name,
+                    error=error,
+                ))
+        except Exception:
+            # Notifications are best-effort; never mask the original failure.
+            pass
+
+    async def _notify_submission_window_open(
+        self, db_factory, session: SimulationSession
+    ) -> None:
+        """Tell every registered participant that submissions are open."""
+        if self._notifications is None:
+            return
+        try:
+            async with db_factory() as db:
+                contest_result = await db.execute(
+                    select(Contest).where(Contest.id == session.contest_id)
+                )
+                contest = contest_result.scalar_one_or_none()
+                if contest is None:
+                    return
+                participants_result = await db.execute(
+                    select(User)
+                    .join(ContestRegistration, ContestRegistration.user_id == User.id)
+                    .where(
+                        ContestRegistration.contest_id == contest.id,
+                        ContestRegistration.status == "REGISTERED",
+                        User.status == "ACTIVE",
+                    )
+                )
+                emails = [user.email for user in participants_result.scalars()]
+                contest_name = contest.name
+            for email in emails:
+                await self._notifications.notify(SubmissionWindowOpen(
+                    to_email=email,
+                    contest_name=contest_name,
+                ))
+        except Exception:
+            pass
 
     def _as_utc(self, value):
         if value is None:

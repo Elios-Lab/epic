@@ -48,3 +48,37 @@ def test_get_me_with_malformed_token_returns_401(client):
 
     assert response.status_code == 401
 
+
+
+def test_expired_token_is_rejected():
+    """A token past its exp claim must be rejected by decode and by the API."""
+    import pytest as _pytest
+
+    from epic_core.auth import create_access_token, decode_access_token
+    from epic_core.config import Settings
+    from epic_core.exceptions import InvalidCredentialsError
+
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key-32-characters-xx",
+        access_token_expire_minutes=-1,  # already expired at creation
+    )
+    token = create_access_token({"sub": "x", "username": "u", "role": "PARTICIPANT"}, settings)
+
+    with _pytest.raises(InvalidCredentialsError):
+        decode_access_token(token, settings)
+
+
+def test_expired_token_returns_401_from_api(client):
+    from epic_core.auth import create_access_token
+    from epic_core.config import Settings
+
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key-32-characters-xx",  # same secret as the test app
+        access_token_expire_minutes=-1,
+    )
+    token = create_access_token({"sub": "x", "username": "u", "role": "PARTICIPANT"}, settings)
+
+    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401

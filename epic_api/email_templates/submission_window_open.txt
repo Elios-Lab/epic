@@ -1,0 +1,15 @@
+Subject: [EPIC] Submissions are open for {{ contest_name }}
+
+Hello,
+
+The evaluation window for the following contest has ended:
+
+  Contest: {{ contest_name }}
+
+Submissions are now open. Log in to submit your forecast:
+
+  {{ base_url }}
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

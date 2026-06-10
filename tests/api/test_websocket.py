@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
 from epic_core.db.models import Contest
@@ -128,3 +129,89 @@ def test_websocket_delivers_broadcast_message(client, auth_headers, db_factory):
         asyncio.run(broadcaster.broadcast(str(contest.id), payload))
 
         assert websocket.receive_json() == payload
+
+
+def _make_organizer(client, admin_headers, db_factory, username: str):
+    """Create a user, promote to ORGANIZER, and return (user_id, headers)."""
+    from epic_core.db.models import User
+    from sqlalchemy import select as sa_select
+
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": "org-password-123",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    user_id = response.json()["id"]
+
+    async def _promote():
+        async with db_factory() as db:
+            result = await db.execute(sa_select(User).where(User.username == username))
+            user = result.scalar_one()
+            user.role = "ORGANIZER"
+            await db.commit()
+
+    asyncio.run(_promote())
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": username, "password": "org-password-123"},
+    )
+    assert login.status_code == 200
+    return user_id, {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+def test_websocket_allows_organizer_for_own_contest(client, admin_headers, db_factory):
+    """The contest owner may monitor their own stream without a registration."""
+    from uuid import UUID
+
+    owner_id, owner_headers = _make_organizer(client, admin_headers, db_factory, "ws_owner")
+    contest = asyncio.run(_create_contest(db_factory, "organizer-own-stream"))
+
+    async def _set_owner():
+        async with db_factory() as db:
+            result = await db.execute(select(Contest).where(Contest.id == contest.id))
+            db_contest = result.scalar_one()
+            db_contest.created_by = UUID(owner_id)
+            await db.commit()
+
+    asyncio.run(_set_owner())
+
+    payload = {"sequence_id": 1, "sensors": {"position": 0.1}}
+    with client.websocket_connect(
+        f"/api/v1/ws/contests/{contest.id}?token={_token(owner_headers)}"
+    ) as websocket:
+        broadcaster = client.app.state.broadcaster
+        asyncio.run(broadcaster.broadcast(str(contest.id), payload))
+
+        assert websocket.receive_json() == payload
+
+
+def test_websocket_rejects_organizer_for_other_contest(client, admin_headers, db_factory):
+    """An organizer must not monitor a contest they do not own."""
+    from uuid import UUID
+
+    owner_id, _ = _make_organizer(client, admin_headers, db_factory, "ws_owner2")
+    _, other_headers = _make_organizer(client, admin_headers, db_factory, "ws_other")
+    contest = asyncio.run(_create_contest(db_factory, "organizer-foreign-stream"))
+
+    async def _set_owner():
+        async with db_factory() as db:
+            result = await db.execute(select(Contest).where(Contest.id == contest.id))
+            db_contest = result.scalar_one()
+            db_contest.created_by = UUID(owner_id)
+            await db.commit()
+
+    asyncio.run(_set_owner())
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(
+            f"/api/v1/ws/contests/{contest.id}?token={_token(other_headers)}"
+        ):
+            pass
+
+    assert exc_info.value.code == 1008

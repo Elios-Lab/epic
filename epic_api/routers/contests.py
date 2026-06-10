@@ -11,7 +11,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import epic_core.registry as registry_module
-from epic_api.dependencies import get_engine, require_admin, require_organizer_or_admin
+from epic_api.dependencies import (
+    get_engine,
+    get_notification_service,
+    require_admin,
+    require_organizer_or_admin,
+)
+from epic_api.schemas import ContestListResponse, ContestResponse
 from epic_api.utils import get_contest_or_raise
 from epic_core.db.models import (
     Contest,
@@ -26,6 +32,7 @@ from epic_core.db.models import (
 )
 from epic_core.db.session import get_db, get_session_factory
 from epic_core.engine import SimulationEngine
+from epic_core.notifications import ContestCreated, NotificationService
 from epic_core.exceptions import (
     ContestStateError,
     EPICValidationError,
@@ -166,11 +173,12 @@ def as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=ContestResponse)
 async def create_contest(
     request: CreateContestRequest,
     current_user: User = Depends(require_organizer_or_admin),
     db: AsyncSession = Depends(get_db),
+    notifications: NotificationService = Depends(get_notification_service),
 ):
     existing = await db.execute(select(Contest).where(Contest.name == request.name))
     if existing.scalar_one_or_none() is not None:
@@ -254,10 +262,24 @@ async def create_contest(
     await db.commit()
     await db.refresh(contest)
     await db.refresh(task)
+
+    # Notify administrators (except the creator, if they are one).
+    admins_result = await db.execute(
+        select(User).where(User.role == "ADMINISTRATOR", User.status == "ACTIVE")
+    )
+    for admin in admins_result.scalars():
+        if admin.id == current_user.id:
+            continue
+        await notifications.notify(ContestCreated(
+            to_email=admin.email,
+            contest_name=contest.name,
+            organizer_username=current_user.username,
+        ))
+
     return contest_response(contest, [task])
 
 
-@router.get("")
+@router.get("", response_model=ContestListResponse)
 async def list_contests(
     status: str | None = Query(None),
     visibility: str | None = Query(None),
@@ -287,7 +309,7 @@ async def list_contests(
     }
 
 
-@router.get("/{contest_id}")
+@router.get("/{contest_id}", response_model=ContestResponse)
 async def get_contest(
     contest_id: str,
     db: AsyncSession = Depends(get_db),
@@ -296,7 +318,7 @@ async def get_contest(
     return contest_response(contest, await load_contest_tasks(db, contest))
 
 
-@router.patch("/{contest_id}")
+@router.patch("/{contest_id}", response_model=ContestResponse)
 async def update_contest(
     contest_id: str,
     request: UpdateContestRequest,
@@ -357,7 +379,8 @@ async def update_contest(
         asyncio.create_task(
             engine.run_session(str(session.id), get_session_factory())
         )
-    await db.refresh(contest)
+    # Respond with the state this handler just committed: re-reading here
+    # would race with the engine task scheduled above.
     return contest_response(contest, await load_contest_tasks(db, contest))
 
 
@@ -445,7 +468,7 @@ async def delete_contest(
     await db.commit()
 
 
-@router.put("/{contest_id}/pause", status_code=status.HTTP_200_OK)
+@router.put("/{contest_id}/pause", status_code=status.HTTP_200_OK, response_model=ContestResponse)
 async def pause_contest(
     contest_id: str,
     current_user: User = Depends(require_organizer_or_admin),
@@ -478,7 +501,7 @@ async def pause_contest(
     return contest_response(contest, await load_contest_tasks(db, contest))
 
 
-@router.put("/{contest_id}/resume", status_code=status.HTTP_200_OK)
+@router.put("/{contest_id}/resume", status_code=status.HTTP_200_OK, response_model=ContestResponse)
 async def resume_contest(
     contest_id: str,
     current_user: User = Depends(require_organizer_or_admin),
@@ -535,5 +558,7 @@ async def resume_contest(
         engine.run_session(str(session.id), get_session_factory())
     )
 
-    await db.refresh(contest)
+    # Respond with the state this handler just committed. Re-reading here
+    # (db.refresh) would race with the engine tasks scheduled above on the
+    # shared test connection and can return a stale status.
     return contest_response(contest, await load_contest_tasks(db, contest))

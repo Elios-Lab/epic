@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from epic_api.main import _recover_after_restart
+from epic_core.notifications import NullNotificationService
 from epic_core.db.models import Contest, SimulationSession, Submission, Task
 from epic_core.db.session import get_session_factory
 
@@ -91,7 +92,7 @@ def test_orphaned_running_session_is_paused(client, db_factory):
         _create_active_contest_with_running_session(db_factory, "Zombie Contest")
     )
 
-    asyncio.run(_recover_after_restart())
+    asyncio.run(_recover_after_restart(NullNotificationService()))
 
     async def load():
         async with db_factory() as db:
@@ -140,7 +141,7 @@ def test_orphaned_created_session_is_paused(client, db_factory):
             return contest, session
 
     contest, session = asyncio.run(create_created_session())
-    asyncio.run(_recover_after_restart())
+    asyncio.run(_recover_after_restart(NullNotificationService()))
 
     async def load():
         async with db_factory() as db:
@@ -185,7 +186,7 @@ def test_non_active_contest_session_left_unchanged(client, db_factory):
             return contest, session
 
     contest, session = asyncio.run(create())
-    asyncio.run(_recover_after_restart())
+    asyncio.run(_recover_after_restart(NullNotificationService()))
 
     async def load():
         async with db_factory() as db:
@@ -216,7 +217,7 @@ def test_pending_submission_requeued(client, db_factory):
         return f
 
     with patch("epic_api.main.asyncio.create_task", side_effect=capture_create_task):
-        asyncio.run(_recover_after_restart())
+        asyncio.run(_recover_after_restart(NullNotificationService()))
 
     assert len(created_coros) >= 1, "Expected at least one create_task call for the PENDING submission"
 
@@ -253,7 +254,7 @@ def test_already_paused_contest_left_unchanged(client, db_factory):
             return session
 
     session = asyncio.run(create())
-    asyncio.run(_recover_after_restart())
+    asyncio.run(_recover_after_restart(NullNotificationService()))
 
     async def load():
         async with db_factory() as db:

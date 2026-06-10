@@ -136,3 +136,60 @@ def test_admin_can_impersonate_organizer(
     row.get_by_role("button", name="Impersonate").click()
     expect(admin_page.get_by_text("Organizer Dashboard")).to_be_visible(timeout=5000)
     expect(admin_page.get_by_text("Impersonating")).to_be_visible(timeout=3000)
+
+
+def test_admin_toggle_deactivates_user_for_real(admin_page: Page, live_server: str):
+    """Regression: the Deactivate button must actually change the account
+    status server-side (it previously sent a field the API ignored), and the
+    suspended user must no longer be able to log in."""
+    import requests
+
+    # Create a target user via the API.
+    login = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+    admin_token = login.json()["access_token"]
+    username = f"toggle_{uuid.uuid4().hex[:6]}"
+    password = "Toggle1234!"
+    created = requests.post(
+        f"{live_server}/api/v1/users",
+        json={"username": username, "email": f"{username}@test.com", "password": password},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+
+    # Deactivate through the UI.
+    admin_page.get_by_role("button", name="Users").click()
+    search = admin_page.get_by_placeholder("Search username or email")
+    search.fill(username)
+    row = admin_page.get_by_role("row").filter(has_text=username)
+    expect(row.get_by_text("Active", exact=True)).to_be_visible(timeout=5000)
+    row.get_by_role("button", name="Deactivate").click()
+
+    # The badge must flip in the UI…
+    expect(row.get_by_text("Inactive", exact=True)).to_be_visible(timeout=5000)
+
+    # …the server-side status must really be SUSPENDED…
+    fetched = requests.get(
+        f"{live_server}/api/v1/users/{user_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    ).json()
+    assert fetched["status"] == "SUSPENDED"
+
+    # …and the suspended user must no longer be able to log in.
+    relogin = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert relogin.status_code == 401
+
+    # Reactivate through the UI and verify the round trip.
+    row.get_by_role("button", name="Activate").click()
+    expect(row.get_by_text("Active", exact=True)).to_be_visible(timeout=5000)
+    relogin = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert relogin.status_code == 200

@@ -12,8 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import epic_core.registry as registry_module
-from epic_api.dependencies import get_current_user
+from epic_api.dependencies import get_current_user, get_notification_service
 from epic_api.utils import get_contest_or_raise, parse_uuid
+from epic_api.schemas import (
+    SubmissionListResponse,
+    SubmissionResponse,
+    SubmissionScoresResponse,
+)
 from epic_core.db.models import (
     Contest,
     ContestRegistration,
@@ -26,6 +31,7 @@ from epic_core.db.models import (
     User,
 )
 from epic_core.db.session import get_db, get_session_factory
+from epic_core.notifications import NotificationService, SubmissionReceived
 from epic_core.exceptions import (
     ContestStateError,
     EvaluationPendingError,
@@ -247,12 +253,17 @@ async def ensure_registered(
     return registration
 
 
-@router.post("/contests/{contest_id}/submissions", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/contests/{contest_id}/submissions",
+    status_code=status.HTTP_201_CREATED,
+    response_model=SubmissionResponse,
+)
 async def create_submission(
     contest_id: str,
     request: CreateSubmissionRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    notifications: NotificationService = Depends(get_notification_service),
 ):
     contest = await get_contest_or_raise(db, contest_id)
     if contest.status != "ACTIVE":
@@ -300,11 +311,24 @@ async def create_submission(
     db.add(submission)
     await db.commit()
     await db.refresh(submission)
+
+    # Notify the contest owner.
+    if contest.created_by is not None:
+        owner_result = await db.execute(select(User).where(User.id == contest.created_by))
+        owner = owner_result.scalar_one_or_none()
+        if owner is not None:
+            await notifications.notify(SubmissionReceived(
+                to_email=owner.email,
+                contest_name=contest.name,
+                participant_username=current_user.username,
+                submission_id=str(submission.id),
+            ))
+
     asyncio.create_task(_score_submission(submission.id, get_session_factory()))
     return submission_response(submission)
 
 
-@router.get("/contests/{contest_id}/submissions")
+@router.get("/contests/{contest_id}/submissions", response_model=SubmissionListResponse)
 async def list_submissions(
     contest_id: str,
     current_user: User = Depends(get_current_user),
@@ -325,7 +349,7 @@ async def list_submissions(
     }
 
 
-@router.get("/submissions/{submission_id}")
+@router.get("/submissions/{submission_id}", response_model=SubmissionResponse)
 async def get_submission(
     submission_id: str,
     current_user: User = Depends(get_current_user),
@@ -352,7 +376,7 @@ async def get_submission(
     return submission_response(submission)
 
 
-@router.get("/submissions/{submission_id}/scores")
+@router.get("/submissions/{submission_id}/scores", response_model=SubmissionScoresResponse)
 async def get_submission_scores(
     submission_id: str,
     current_user: User = Depends(get_current_user),

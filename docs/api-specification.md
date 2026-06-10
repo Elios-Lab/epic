@@ -1,1021 +1,80 @@
-# API Specification
+# API Conventions and WebSocket Protocol
 
-This document defines the REST and WebSocket APIs exposed by EPIC. The API provides access to every resource of the platform — authentication, users, contests, tasks, digital twins, sensors, simulation sessions, submissions, scores, and leaderboards — following REST principles with JSON payloads throughout.
-
----
-
-# API Versioning
-
-All endpoints must be versioned.
-
-Current version:
-
-```text
-/api/v1
-```
-
-Example:
-
-```http
-GET /api/v1/contests
-```
-
-Future versions should coexist whenever possible.
+The complete, always-current REST endpoint reference is the **interactive OpenAPI documentation** served by the platform itself at [`/docs`](https://epic.elioslab.net/docs). Every route declares Pydantic request and response models, so the generated schema is the contract (request bodies, response shapes, and status codes included). This document deliberately does not duplicate it. What lives here instead is everything OpenAPI cannot express: the cross-cutting conventions all endpoints share, and the full WebSocket streaming protocol.
 
 ---
 
-# Authentication
+## Conventions
 
-## Login
+**Versioning.** All REST endpoints are mounted under `/api/v1`. Breaking changes will be introduced under a new version prefix; `v1` responses may gain fields over time but existing fields will not change meaning or disappear.
 
-```http
-POST /api/v1/auth/login
-```
+**Authentication.** Protected endpoints expect a JWT bearer token in the `Authorization: Bearer <token>` header, obtained from `POST /api/v1/auth/login`. Tokens carry the user id (`sub`), username, and role, and expire after a configurable lifetime (one hour by default). The only unauthenticated endpoints are login, the organizer request form, and invitation validation/acceptance. See [Authentication](authentication.md) for roles and the permission model.
 
-Request:
+**Error envelope.** Every business-rule failure returns a consistent JSON envelope with an HTTP status mapped from the exception type:
 
 ```json
 {
-  "username": "student1",
-  "password": "********"
-}
-```
-
-Response:
-
-```json
-{
-  "access_token": "...",
-  "token_type": "bearer",
-  "expires_in": 3600
-}
-```
-
----
-
-## Refresh Token
-
-```http
-POST /api/v1/auth/refresh
-```
-
----
-
-## Current User
-
-```http
-GET /api/v1/auth/me
-```
-
----
-
-# Users
-
-## List Users
-
-```http
-GET /api/v1/users
-```
-
-Administrator only.
-
----
-
-## Create User
-
-```http
-POST /api/v1/users
-```
-
-Administrator only. Direct account creation bypasses the self-registration flows. New accounts receive `PARTICIPANT` role by default; a different role may be specified at creation time.
-
-Request:
-
-```json
-{
-  "username": "student1",
-  "email": "student@example.com",
-  "password": "..."
-}
-```
-
-Response `201 Created`:
-
-```json
-{
-  "user_id": "u_abc123",
-  "username": "student1",
-  "email": "student@example.com",
-  "role": "PARTICIPANT",
-  "status": "ACTIVE",
-  "is_active": true,
-  "created_at": "2027-01-01T10:00:00Z"
-}
-```
-
----
-
-## Get User
-
-```http
-GET /api/v1/users/{user_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "user_id": "u_abc123",
-  "username": "student1",
-  "email": "student@example.com",
-  "role": "PARTICIPANT",
-  "status": "ACTIVE",
-  "is_active": true,
-  "created_at": "2027-01-01T10:00:00Z"
-}
-```
-
----
-
-## Update User
-
-```http
-PATCH /api/v1/users/{user_id}
-```
-
-Example request:
-
-```json
-{
-  "email": "new_email@example.com"
-}
-```
-
----
-
-## Delete User
-
-```http
-DELETE /api/v1/users/{user_id}
-```
-
-Response `204 No Content`. This is a soft delete — the account status is set to `DELETED` and the user can no longer log in.
-
----
-
-# Registration
-
-EPIC provides two self-service registration flows: one for prospective organizers and one for participants invited to a specific contest. Administrators may also create accounts directly via `POST /api/v1/users`.
-
----
-
-## Submit Organizer Request
-
-```http
-POST /api/v1/organizer-requests
-```
-
-No authentication required.
-
-Request:
-
-```json
-{
-  "first_name": "Alice",
-  "last_name": "Rossi",
-  "email": "alice@example.com",
-  "phone_number": "+39 010 000 0000",
-  "password": "..."
-}
-```
-
-Response `201 Created`:
-
-```json
-{
-  "request_id": "req_abc123",
-  "email": "alice@example.com",
-  "status": "PENDING",
-  "created_at": "2027-01-01T10:00:00Z"
-}
-```
-
-The platform notifies the administrator by email. The request stays PENDING until reviewed.
-
----
-
-## List Organizer Requests
-
-```http
-GET /api/v1/organizer-requests
-```
-
-Administrator only. Optional query parameter: `status` (`PENDING` | `APPROVED` | `REJECTED`).
-
----
-
-## Approve Organizer Request
-
-```http
-POST /api/v1/organizer-requests/{request_id}/approve
-```
-
-Administrator only. Creates an ORGANIZER account (username = email), sets the request to APPROVED, and sends an approval email to the applicant.
-
-Response `200 OK`:
-
-```json
-{
-  "request_id": "req_abc123",
-  "status": "APPROVED"
-}
-```
-
----
-
-## Reject Organizer Request
-
-```http
-POST /api/v1/organizer-requests/{request_id}/reject
-```
-
-Administrator only. Sets the request to REJECTED and sends a rejection notification.
-
-Response `200 OK`:
-
-```json
-{
-  "request_id": "req_abc123",
-  "status": "REJECTED"
-}
-```
-
----
-
-## Send Participant Invitations
-
-```http
-POST /api/v1/contests/{contest_id}/invitations
-```
-
-ORGANIZER (own contest) or ADMINISTRATOR. Accepts a list of email addresses. For each address that has not already been invited, the platform creates a one-time invitation token (valid for 7 days) and sends an email containing the acceptance link.
-
-Request:
-
-```json
-{
-  "emails": ["alice@example.com", "bob@example.com"]
-}
-```
-
-Response `201 Created`:
-
-```json
-{
-  "created": 2,
-  "skipped": 0
-}
-```
-
-The invitation token is not exposed in the API response — it is delivered only via email.
-
----
-
-## Validate Invitation Token
-
-```http
-GET /api/v1/invitations/{token}
-```
-
-No authentication required. Returns whether the token is still valid (not used, not expired).
-
-Response `200 OK`:
-
-```json
-{
-  "valid": true,
-  "contest_name": "EPIC Forecasting Challenge 2027"
-}
-```
-
----
-
-## Accept Invitation
-
-```http
-POST /api/v1/invitations/{token}/accept
-```
-
-No authentication required. Completes participant registration: creates a PARTICIPANT account, links it to the contest, marks the token as used, and returns a JWT.
-
-Request:
-
-```json
-{
-  "first_name": "Alice",
-  "last_name": "Rossi",
-  "phone_number": "+39 010 000 0000",
-  "password": "..."
-}
-```
-
-Response `201 Created`:
-
-```json
-{
-  "access_token": "...",
-  "token_type": "bearer"
-}
-```
-
----
-
-# Contests
-
-A contest is a first-class resource.
-
-Contest lifecycle transitions are managed through updates.
-
----
-
-## List Contests
-
-```http
-GET /api/v1/contests
-```
-
-Query parameters:
-
-```text
-status
-visibility
-limit
-offset
-```
-
----
-
-## Create Contest
-
-```http
-POST /api/v1/contests
-```
-
-ORGANIZER or ADMINISTRATOR.
-
-Request:
-
-```json
-{
-  "name": "EPIC Forecasting Challenge 2027",
-  "description": "Introductory forecasting competition",
-  "twin_id": "mechanical_system",
-  "initial_conditions": {"position": 0.1, "velocity": 0.0},
-  "sensor_configs": [
-    {"sensor_id": "position",    "noise_std": 0.005},
-    {"sensor_id": "velocity",    "noise_std": 0.01},
-    {"sensor_id": "temperature", "noise_std": 0.2, "drift_rate": 0.001}
-  ],
-  "fault_schedule": [
-    {"fault_id": "increased_damping", "start_time": 3600.0, "end_time": null, "severity": 0.3}
-  ],
-  "sampling_rate_hz": 10.0,
-  "task_type": "FORECASTING",
-  "metric_ids": ["mae"],
-  "start_date": "2027-01-10T00:00:00Z",
-  "end_of_observation": "2027-01-10T01:00:00Z",
-  "prediction_horizon_seconds": 60.0,
-  "end_date": "2027-03-01T23:59:59Z",
-  "visibility": "PUBLIC"
-}
-```
-
-`sensor_configs` entries reference sensor_ids registered in `sensor_registry`. The platform validates compatibility (each sensor's `measured_quantity` must be in `twin.supported_quantities()`). `fault_schedule` entries reference fault_ids from `twin.get_faults()`.
-
-Response `201 Created`:
-
-```json
-{
-  "contest_id": "forecast_2027",
-  "name": "EPIC Forecasting Challenge 2027",
-  "status": "DRAFT",
-  "visibility": "PUBLIC",
-  "start_date": "2027-01-10T00:00:00Z",
-  "end_date": "2027-03-01T23:59:59Z",
-  "created_by": "u_admin",
-  "created_at": "2027-01-01T12:00:00Z",
-  "tasks": [
-    {
-      "task_id": "...",
-      "task_type": "FORECASTING",
-      "name": "FORECASTING",
-      "weight": 1.0,
-      "configuration": {
-        "prediction_horizon_seconds": 60.0,
-        "eval_steps": 600
-      }
-    }
-  ]
-}
-```
-
----
-
-## Get Contest
-
-```http
-GET /api/v1/contests/{contest_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "contest_id": "forecast_2027",
-  "name": "EPIC Forecasting Challenge 2027",
-  "status": "ACTIVE",
-  "visibility": "PUBLIC",
-  "start_date": "2027-01-10T00:00:00Z",
-  "end_of_observation": "2027-01-10T01:00:00Z",
-  "prediction_horizon_seconds": 60.0,
-  "end_date": "2027-03-01T23:59:59Z",
-  "tasks": [
-    {
-      "task_id": "...",
-      "task_type": "FORECASTING",
-      "name": "FORECASTING",
-      "weight": 1.0,
-      "configuration": {
-        "prediction_horizon_seconds": 60.0,
-        "eval_steps": 600
-      }
-    }
-  ]
-}
-```
-
----
-
-## Update Contest
-
-```http
-PATCH /api/v1/contests/{contest_id}
-```
-
-ORGANIZER (own contest) or ADMINISTRATOR.
-
-Typical updates:
-
-```json
-{
-  "end_date": "2027-03-15T23:59:59Z"
-}
-```
-
-or
-
-```json
-{
-  "status": "ACTIVE"
-}
-```
-
-or
-
-```json
-{
-  "status": "CLOSED"
-}
-```
-
----
-
-## Delete Contest
-
-```http
-DELETE /api/v1/contests/{contest_id}
-```
-
-Administrator only.
-
----
-
-# Contest Lifecycle
-
-Supported values:
-
-```text
-DRAFT
-SCHEDULED
-ACTIVE
-CLOSED
-ARCHIVED
-```
-
-State transitions are performed using:
-
-```http
-PATCH /api/v1/contests/{contest_id}
-```
-
-Example:
-
-```json
-{
-  "status": "SCHEDULED"
-}
-```
-
-The server validates allowed transitions.
-
----
-
-# Contest Tasks
-
-Tasks are embedded in contest responses under the `tasks` key.
-Each contest currently has exactly one task, created automatically
-when the contest is created.
-
-Dedicated task management endpoints
-(`GET /api/v1/contests/{contest_id}/tasks`, etc.)
-are planned for a future phase.
-
----
-
-# Contest Registrations
-
-Contest registrations are resources.
-
-Participants register by creating a registration.
-
----
-
-## List Registrations
-
-```http
-GET /api/v1/contest-registrations
-```
-
-Without filters: returns the authenticated user's own registrations.
-With `contest_id` filter: ORGANIZER (own contest) or ADMINISTRATOR can see all registrations for a contest.
-
-Filters:
-
-```text
-contest_id
-user_id
-```
-
----
-
-## Create Registration
-
-```http
-POST /api/v1/contest-registrations
-```
-
-Request:
-
-```json
-{
-  "contest_id": "forecast_2027"
-}
-```
-
-The user is inferred from the JWT token.
-
----
-
-## Get Registration
-
-```http
-GET /api/v1/contest-registrations/{registration_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "registration_id": "reg_xyz",
-  "contest_id": "forecast_2027",
-  "user_id": "u_abc123",
-  "registered_at": "2027-01-05T08:00:00Z",
-  "status": "REGISTERED"
-}
-```
-
----
-
-## Delete Registration
-
-```http
-DELETE /api/v1/contest-registrations/{registration_id}
-```
-
-Represents withdrawal from a contest. Response `204 No Content`.
-
----
-
-# Leaderboards
-
-Leaderboards are derived resources.
-
----
-
-## Get Contest Leaderboard
-
-```http
-GET /api/v1/contests/{contest_id}/leaderboard
-```
-
-Response `200 OK`:
-
-```json
-{
-  "contest_id": "forecast_2027",
-  "entries": [
-    {
-      "rank": 1,
-      "user_id": "u_abc123",
-      "username": "student1",
-      "submission_id": "sub_001",
-      "score": 0.142,
-      "updated_at": "2027-02-10T14:30:00Z"
-    }
-  ]
-}
-```
-
----
-
-## Get User Ranking
-
-```http
-GET /api/v1/contests/{contest_id}/leaderboard/{user_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "rank": 1,
-  "user_id": "u_abc123",
-  "submission_id": "sub_001",
-  "score": 0.142,
-  "updated_at": "2027-02-10T14:30:00Z"
-}
-```
-
----
-
-# Digital Twins
-
-Digital twins are exposed as metadata resources.
-
----
-
-## List Twins
-
-```http
-GET /api/v1/twins
-```
-
-Response `200 OK`:
-
-```json
-{
-  "twins": [
-    {
-      "twin_id": "mechanical_system",
-      "name": "Mechanical System",
-      "version": "1.0.0",
-      "description": "Simple mass-spring-damper example",
-      "is_active": true
-    }
-  ]
-}
-```
-
----
-
-## Get Twin
-
-```http
-GET /api/v1/twins/{twin_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "twin_id": "mechanical_system",
-  "name": "Mechanical System",
-  "version": "1.0.0",
-  "description": "Simple mass-spring-damper example",
-  "is_active": true,
-  "metadata": {}
-}
-```
-
----
-
-# Sensors
-
-Sensors live in `epic_sensors/` and are registered globally in `sensor_registry`, independent of any twin. The API exposes them in two ways: globally and filtered by twin compatibility.
-
----
-
-## List All Sensors
-
-```http
-GET /api/v1/sensors
-```
-
-Returns all sensors registered in `sensor_registry`.
-
-Response `200 OK`:
-
-```json
-{
-  "sensors": [
-    {
-      "sensor_id": "position",
-      "name": "Position Sensor",
-      "measured_quantity": "linear_position",
-      "unit": "m",
-      "version": "1.0.0",
-      "description": "Measures linear position"
-    }
-  ]
-}
-```
-
----
-
-## Get Sensor
-
-```http
-GET /api/v1/sensors/{sensor_id}
-```
-
----
-
-## List Sensors Compatible with a Twin
-
-```http
-GET /api/v1/twins/{twin_id}/sensors
-```
-
-Returns sensors from `sensor_registry` whose `measured_quantity` is in `twin.supported_quantities()`. These are the sensors that can be selected when creating a contest with this twin.
-
----
-
-## Get Sensor Compatible with a Twin
-
-```http
-GET /api/v1/twins/{twin_id}/sensors/{sensor_id}
-```
-
----
-
-# Faults
-
-Faults belong to digital twins and are exposed as read-only metadata resources.
-
----
-
-## List Twin Faults
-
-```http
-GET /api/v1/twins/{twin_id}/faults
-```
-
-Response `200 OK`:
-
-```json
-{
-  "twin_id": "mechanical_system",
-  "faults": [
-    {
-      "fault_id": "increased_damping",
-      "name": "Increased Damping",
-      "version": "1.0.0",
-      "description": "Gradual increase in damping coefficient"
-    },
-    {
-      "fault_id": "reduced_stiffness",
-      "name": "Reduced Stiffness",
-      "version": "1.0.0",
-      "description": "Gradual reduction in spring stiffness coefficient"
-    }
-  ]
-}
-```
-
----
-
-## Get Fault
-
-```http
-GET /api/v1/twins/{twin_id}/faults/{fault_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "fault_id": "increased_damping",
-  "twin_id": "mechanical_system",
-  "name": "Increased Damping",
-  "version": "1.0.0",
-  "description": "Gradual increase in damping coefficient",
-  "metadata": {}
-}
-```
-
----
-
-# Simulation Sessions
-
-Each contest has one simulation session, created automatically when the contest becomes ACTIVE. Participants cannot create, modify, or delete sessions.
-
----
-
-## Get Contest Session
-
-```http
-GET /api/v1/contests/{contest_id}/session
-```
-
-Returns the current simulation session for a contest.
-
-Response `200 OK`:
-
-```json
-{
-  "session_id": "sess_abc",
-  "contest_id": "forecast_2027",
-  "twin_id": "mechanical_system",
-  "sampling_rate_hz": 10.0,
-  "status": "RUNNING",
-  "started_at": "2027-01-10T00:00:00Z",
-  "ended_at": null
-}
-```
-
----
-
-# Submissions
-
-Submissions are contest resources.
-
----
-
-## List Submissions
-
-```http
-GET /api/v1/contests/{contest_id}/submissions
-```
-
----
-
-## Create Submission
-
-```http
-POST /api/v1/contests/{contest_id}/submissions
-```
-
-Submissions are only accepted after the evaluation phase ends (`end_of_observation + prediction_horizon_seconds`). The payload must contain exactly `eval_steps` predicted values per sensor. See [Scoring](scoring.md) for a full explanation of the two-phase integrity guarantee.
-
-Request:
-
-```json
-{
-  "task_id": "forecasting",
-  "payload": {
-    "forecast": {
-      "position": [0.12, 0.13, 0.14],
-      "velocity": [0.01, 0.02, 0.01]
-    }
+  "error": {
+    "code": "CONTEST_STATE_ERROR",
+    "message": "Contest is not active"
   }
 }
 ```
 
-Each sensor list must have exactly `eval_steps` values (from the contest's task configuration).
+Validation failures of the request *shape* (missing fields, wrong types) are FastAPI's standard `422` response with a `detail` array. Error codes are uppercase snake-case strings and are stable across versions — clients may depend on them for programmatic error handling. The full mapping from the exception hierarchy in `epic_core/exceptions.py`:
 
-Response `201 Created`:
+| Exception | HTTP Status | Error Code |
+|---|---|---|
+| `PluginNotFoundError` | 404 | `PLUGIN_NOT_FOUND` |
+| `SessionNotFoundError` | 404 | `SESSION_NOT_FOUND` |
+| `ContestNotFoundError` | 404 | `CONTEST_NOT_FOUND` |
+| `ContestStateError` | 409 | `CONTEST_STATE_ERROR` |
+| `SessionStateError` | 409 | `SESSION_STATE_ERROR` |
+| `RegistrationError` | 409 | `REGISTRATION_ERROR` |
+| `SubmissionError` | 422 | `SUBMISSION_ERROR` |
+| `EPICValidationError` | 422 | `VALIDATION_ERROR` |
+| `InvalidCredentialsError` | 401 | `INVALID_CREDENTIALS` |
+| `InsufficientPermissionsError` | 403 | `FORBIDDEN` |
+| `PluginValidationError` | 500 | `PLUGIN_VALIDATION_ERROR` |
+| `PluginExecutionError` | 500 | `PLUGIN_EXECUTION_ERROR` |
+| Any other `EPICError` | 500 | `INTERNAL_ERROR` |
 
-```json
-{
-  "submission_id": "sub_001",
-  "contest_id": "forecast_2027",
-  "user_id": "u_abc123",
-  "task_id": "forecasting",
-  "submitted_at": "2027-02-10T14:00:00Z",
-  "status": "PENDING"
-}
-```
+Unhandled Python exceptions (bugs in the platform itself) return `500` with a generic message; stack traces are never included in API responses outside `DEBUG` mode.
 
----
+**Pagination.** List endpoints that can grow unboundedly (users, contests, organizer requests) accept `limit` (default 100, max 1000) and `offset` query parameters and return a `total` count alongside the page, so clients can paginate without a second query.
 
-## Get Submission
+**Identifiers and timestamps.** All entity identifiers are UUIDs serialized as strings. All timestamps are ISO-8601 strings in UTC; datetimes submitted to the API may carry an explicit offset or be naive (naive values are interpreted as UTC).
 
-```http
-GET /api/v1/submissions/{submission_id}
-```
-
-Response `200 OK`:
-
-```json
-{
-  "submission_id": "sub_001",
-  "contest_id": "forecast_2027",
-  "user_id": "u_abc123",
-  "task_id": "forecasting",
-  "submitted_at": "2027-02-10T14:00:00Z",
-  "status": "EVALUATED"
-}
-```
+**Plugin metadata is open.** Endpoints that return twin, sensor, fault, or template metadata guarantee the documented minimum fields (`*_id`, `name`, `version`, `description`, plus type-specific fields like a sensor's `unit` and `measured_quantity`) but may carry additional keys contributed by the plugin. Clients must ignore unknown fields.
 
 ---
 
-## Delete Submission
+## WebSocket Streaming Protocol
 
-```http
-DELETE /api/v1/submissions/{submission_id}
-```
+OpenAPI does not describe WebSocket endpoints, so this section is the authoritative specification of the contest stream.
 
-If contest rules allow it. Response `204 No Content`.
-
----
-
-# Scores
-
-Scores are derived resources generated from submissions.
-
----
-
-## Get Submission Scores
-
-```http
-GET /api/v1/submissions/{submission_id}/scores
-```
-
-Response `200 OK`:
-
-```json
-{
-  "submission_id": "sub_001",
-  "scores": [
-    {
-      "score_id": "sc_001",
-      "metric_id": "mae",
-      "value": 0.142,
-      "computed_at": "2027-02-10T14:05:00Z"
-    },
-    {
-      "score_id": "sc_002",
-      "metric_id": "rmse",
-      "value": 0.201,
-      "computed_at": "2027-02-10T14:05:00Z"
-    }
-  ]
-}
-```
-
----
-
-## Get Contest Scores
-
-```http
-GET /api/v1/contests/{contest_id}/scores
-```
-
-ORGANIZER (own contest) or ADMINISTRATOR.
-
----
-
-# WebSocket API
-
-The WebSocket stream is the primary way participants interact with a contest simulation. Participants connect to receive live sensor readings in real time.
-
----
-
-## Contest Stream
+### Endpoint and authentication
 
 ```text
-WS /api/v1/ws/contests/{contest_id}
+ws(s)://<host>/api/v1/ws/contests/{contest_id}?token=<JWT>
 ```
 
-Authentication: JWT token passed as a query parameter or `Authorization` header.
+The JWT is passed as a query parameter (browser WebSocket clients cannot set headers). The server validates it during the handshake and closes with code **1008** if the token is missing, invalid, or expired.
 
-The server streams one JSON message per simulation tick:
+### Authorization
+
+A valid token is necessary but not sufficient. The contest must be ACTIVE and still in its observation phase, and the connecting user must be entitled to the stream: administrators may connect to any contest, organizers only to contests they created, and participants only when they hold an active registration for this contest. Any other combination closes with **1008** during the handshake. In two-phase contests, connections attempted after `end_of_observation` are rejected the same way, evaluation-phase data is never streamed.
+
+### Observation messages
+
+During the observation phase the server pushes one JSON message per simulation step:
 
 ```json
 {
   "timestamp": "2027-01-15T10:00:00.500Z",
-  "session_id": "sess_abc",
-  "sequence_id": 500,
+  "session_id": "8d44f402-…",
+  "sequence_id": 116,
+  "committed_through": 110,
   "sensors": {
     "position": 0.15,
     "velocity": 1.82,
@@ -1024,61 +83,64 @@ The server streams one JSON message per simulation tick:
 }
 ```
 
-The sensor keys are determined by the digital twin configured for the contest. The API never assumes fixed sensor names.
+`sequence_id` increments by one per step with no gaps at the source; a client that observes a gap missed messages (slow consumer or reconnect) and cannot recover them, the server never replays. `committed_through` is the highest sequence number guaranteed to be flushed to the database; clients that anchor anything to observation history should use it rather than the live `sequence_id`. The `sensors` object carries one numeric reading per configured sensor, keyed by sensor id, clients must not assume a fixed set of keys. Ground-truth values, fault labels, and the twin's internal state are never present in any message.
 
-Labels and fault metadata are never included in WebSocket messages. Participants are responsible for collecting and storing the received sensor readings client-side.
+### Control events
 
-If the contest is not ACTIVE, the server closes the connection immediately with an appropriate error code.
-
----
-
-# Error Format
-
-All errors should use a consistent structure.
+Two event messages interrupt the observation stream, each followed by a server-side close:
 
 ```json
-{
-  "error": {
-    "code": "CONTEST_NOT_FOUND",
-    "message": "Contest does not exist"
-  }
-}
+{ "event": "evaluation_started", "observation_end_sequence_id": 400, "evaluation_steps": 20 }
 ```
+
+sent exactly once when the observation phase ends. `evaluation_steps` is the number of values per sensor a forecast must contain; the submission window opens `prediction_horizon_seconds` later. And:
+
+```json
+{ "event": "contest_closed" }
+```
+
+sent when an organizer or administrator closes the contest while clients are connected. After either event the connection closes and reconnection attempts are rejected (1008), since the contest is no longer streaming.
+
+### Back-pressure
+
+Each client has a bounded server-side queue (1000 messages by default). A consumer too slow to keep up silently loses its **oldest** queued messages, detectable through `sequence_id` gaps. The simulation loop is never blocked by slow clients.
+
+### Reconnection guidance
+
+Clients should reconnect with backoff after unexpected disconnections during the observation phase, treat a 1008 close as permanent (authorization or phase change, not a transient fault), and treat `evaluation_started` and `contest_closed` as terminal for the stream. The published SDK (`epic-elios-client`) implements this behavior in `EPICClient.stream()` / `collect()`.
 
 ---
 
-# HTTP Status Codes
+## Collecting Data Client-Side
 
-```text
-200 OK
-201 Created
-204 No Content
+EPIC does not generate or export datasets on the server — dataset collection is the participant's responsibility, by design. A core educational principle of the platform is that collecting data from a live system is itself a skill: participants connect to the stream, decide what to record and at what granularity, handle interruptions gracefully, and curate their own training dataset, exactly as an engineer instrumenting a real system would.
 
-400 Bad Request
-401 Unauthorized
-403 Forbidden
-404 Not Found
-409 Conflict
-422 Validation Error
+Two consequences of the protocol above shape that work. The server never replays missed observations — a dropped connection or a slow consumer means a permanent `sequence_id` gap — and a participant who connects after the contest started receives data only from that point forward. Earlier joiners who collected more data have a natural advantage, just as in real monitoring.
 
-500 Internal Server Error
+Storage is entirely a client-side choice: append each message to a CSV file, stream into a local database such as SQLite or DuckDB, or buffer in memory and write periodically. A minimal collector:
+
+```python
+import asyncio
+import csv
+import json
+
+import websockets
+
+
+async def collect(contest_id: str, token: str, output_path: str):
+    url = f"wss://epic.elioslab.net/api/v1/ws/contests/{contest_id}?token={token}"
+    with open(output_path, "w", newline="") as f:
+        writer = None
+        async with websockets.connect(url) as ws:
+            async for message in ws:
+                data = json.loads(message)
+                row = {"timestamp": data["timestamp"],
+                       "sequence_id": data["sequence_id"],
+                       **data["sensors"]}
+                if writer is None:
+                    writer = csv.DictWriter(f, fieldnames=row.keys())
+                    writer.writeheader()
+                writer.writerow(row)
 ```
 
----
-
-# OpenAPI Support
-
-The API must automatically expose:
-
-```text
-/ docs
-/ redoc
-```
-
-through FastAPI.
-
----
-
-# Design Requirement
-
-The API layer must remain completely independent from digital twin implementations, sensors, fault models, and physical domains. It interacts only with the abstractions exposed by the EPIC Core — registries, interfaces, and entities — never with a concrete plugin. This is what guarantees that new digital twins, sensors, and contest types can be introduced without changing the API structure.
+The published SDK wraps this pattern (with reconnection and CSV export) in `EPICClient.collect()`. The platform never needs to know how a participant stores or processes their data — the WebSocket stream is the only delivery mechanism, and everything downstream of it is a client-side concern.

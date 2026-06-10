@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 import epic_core.registry as registry_module
+from epic_api.schemas import CatalogListResponse, CatalogProfileResponse
 from epic_api.templates import TEMPLATES, template_summary
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -18,7 +19,7 @@ def catalog_summary(twin) -> dict:
     }
 
 
-@router.get("")
+@router.get("", response_model=CatalogListResponse)
 def list_catalog():
     return {
         "twins": [
@@ -28,7 +29,7 @@ def list_catalog():
     }
 
 
-@router.get("/{twin_id}")
+@router.get("/{twin_id}", response_model=CatalogProfileResponse)
 def get_catalog_profile(twin_id: str):
     twin = registry_module.twin_registry.get(twin_id)
     supported_quantities = twin.supported_quantities()

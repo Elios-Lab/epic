@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from epic_api.dependencies import get_current_user
+from epic_api.schemas import SessionResponse
 from epic_core.db.models import Contest, SimulationSession, User
 from epic_core.db.session import get_db
 from epic_core.exceptions import ContestNotFoundError, SessionNotFoundError
@@ -28,7 +29,7 @@ def session_response(session: SimulationSession) -> dict:
     }
 
 
-@router.get("/{contest_id}/session")
+@router.get("/{contest_id}/session", response_model=SessionResponse)
 async def get_contest_session(
     contest_id: str,
     current_user: User = Depends(get_current_user),

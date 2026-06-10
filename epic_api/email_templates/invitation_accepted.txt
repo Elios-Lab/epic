@@ -1,0 +1,15 @@
+Subject: [EPIC] Invitation accepted for {{ contest_name }}
+
+Hello,
+
+An invitation you sent has been accepted:
+
+  Contest:     {{ contest_name }}
+  Participant: {{ participant_email }}
+
+The participant account has been created and is already registered
+for the contest.
+
+---
+This message was sent automatically by EPIC.
+Do not reply to this email.

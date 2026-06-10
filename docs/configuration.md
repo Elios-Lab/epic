@@ -1,14 +1,12 @@
 # Configuration
 
-> Related: [Architecture](architecture.md) · [Authentication](authentication.md)
-
 EPIC is configured through environment variables.
 
 The configuration system is implemented using [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/), which reads values from environment variables and an optional `.env` file, validates them at startup, and exposes a single typed `Settings` object to the rest of the application.
 
 ---
 
-# Settings Location
+## Settings Location
 
 ```text
 epic_core/
@@ -17,67 +15,7 @@ epic_core/
 
 ---
 
-# Settings Class
-
-```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-class Settings(BaseSettings):
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-    # Application
-    app_name: str = "EPIC"
-    app_version: str = "0.1.0"
-    debug: bool = False
-
-    # Server
-    host: str = "0.0.0.0"
-    port: int = 8000
-
-    # Database
-    database_url: str  # required — no default
-
-    # Authentication
-    secret_key: str    # required — no default
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
-
-    # Simulation
-    max_concurrent_sessions: int = 50
-    default_sampling_rate_hz: float = 10.0
-    session_queue_capacity: int = 1000
-
-    # Plugin Discovery
-    plugin_discovery: str = "explicit"
-    # "explicit" = plugins registered in startup code
-    # "entrypoints" = auto-discovery via Python entry points
-
-
-def get_settings() -> Settings:
-    return Settings()
-```
-
-The `Settings` object is instantiated once and cached using FastAPI's dependency injection:
-
-```python
-from functools import lru_cache
-from epic_core.config import Settings
-
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
-```
-
-All components that need configuration receive it via dependency injection rather than importing `get_settings()` directly.
-
----
-
-# Required Variables
+## Required Variables
 
 The following variables have no defaults and must be set before the application will start:
 
@@ -88,9 +26,11 @@ The following variables have no defaults and must be set before the application 
 
 If either is missing, Pydantic raises a `ValidationError` at startup with a clear message.
 
+PostgreSQL with `asyncpg` is the recommended production database. SQLite with `aiosqlite` is acceptable for local development and testing.
+
 ---
 
-# All Configuration Variables
+## All Configuration Variables
 
 | Variable | Default | Description |
 |---|---|---|
@@ -108,6 +48,8 @@ If either is missing, Pydantic raises a `ValidationError` at startup with a clea
 | `SESSION_QUEUE_CAPACITY` | `1000` | Max buffered observations per WebSocket client |
 | `PLUGIN_DISCOVERY` | `explicit` | Plugin discovery mode (`explicit` or `entrypoints`) |
 
+Plugin packages must not define their own `Settings` subclasses. If a plugin needs configuration, it should read from the main `Settings` object using a namespaced prefix (e.g. `MECHANICAL_TWIN_MASS=1.5`), declared as an optional field with a default.
+
 ---
 
 ## Admin Bootstrap
@@ -115,11 +57,11 @@ If either is missing, Pydantic raises a `ValidationError` at startup with a clea
 To create the first administrator account automatically on startup,
 set the following environment variables:
 
-| Variable         | Required | Description                                      |
-|------------------|----------|--------------------------------------------------|
-| `ADMIN_USERNAME` | No       | Username of the bootstrap administrator account  |
-| `ADMIN_EMAIL`    | No       | Email address (defaults to `username@epic.local`)|
-| `ADMIN_PASSWORD` | No       | Password for the bootstrap account               |
+| Variable         |  Description                                      |
+|------------------|--------------------------------------------------|
+| `ADMIN_USERNAME` | Username of the bootstrap administrator account  |
+| `ADMIN_EMAIL`    | Email address (defaults to `username@epic.local`)|
+| `ADMIN_PASSWORD` | Password for the bootstrap account               |
 
 If `ADMIN_USERNAME` is set but the account already exists and is already
 an administrator, startup continues without making any changes.
@@ -141,7 +83,7 @@ The bootstrap step is idempotent: if the account already exists with the ADMINIS
 
 ---
 
-# Environment File
+## Environment File
 
 Create a `.env` file in the project root for local development:
 
@@ -157,22 +99,11 @@ For production, set variables directly in the environment or via a secrets manag
 
 ---
 
-# Database URL Examples
-
-| Database | URL format |
-|---|---|
-| PostgreSQL (async) | `postgresql+asyncpg://user:pass@host:5432/dbname` |
-| SQLite (development) | `sqlite+aiosqlite:///./epic.db` |
-
-PostgreSQL with `asyncpg` is the recommended production database. SQLite with `aiosqlite` is acceptable for local development and testing.
-
----
-
-# Validation
+## Validation
 
 Pydantic validates all values at startup.
 
-If a required variable is missing or a value fails type validation, the application raises a `ValidationError` and refuses to start. This is intentional — a misconfigured application should not start silently.
+If a required variable is missing or a value fails type validation, the application raises a `ValidationError` and refuses to start. This is intentional: a misconfigured application should not start silently.
 
 Example error:
 
@@ -181,11 +112,3 @@ pydantic_core.ValidationError: 1 validation error for Settings
 database_url
   Field required [type=missing, input_url=<URL>, input_type=dict]
 ```
-
----
-
-# Adding New Configuration Keys
-
-To add a new configuration key, add the field to the `Settings` class in `epic_core/config.py`, document it in the table above, and give it a default value unless the key is genuinely required — required keys without defaults make local development needlessly painful.
-
-Plugin packages must not define their own `Settings` subclasses. If a plugin needs configuration, it should read from the main `Settings` object using a namespaced prefix (e.g. `MECHANICAL_TWIN_MASS=1.5`), declared as an optional field with a default.
