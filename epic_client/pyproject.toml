@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "epic-elios-client"
-version = "1.0.4"
+version = "1.0.5"
 description = "Participant SDK for the EPIC — ELIOS Predictive Intelligence Challenge platform."
 readme = "README.md"
 requires-python = ">=3.11"
