@@ -1,5 +1,7 @@
 """Global API error handling."""
 
+import traceback
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -20,12 +22,23 @@ from epic_core.exceptions import (
 )
 
 
+def error_content(exc: EPICError, debug: bool = False) -> dict:
+    """Build the standard error envelope; include the traceback on server
+    errors when debug mode is enabled (never in production)."""
+    content = {"error": {"code": error_to_code(exc), "message": str(exc)}}
+    if debug and error_to_status_code(exc) >= 500:
+        content["error"]["traceback"] = traceback.format_exception(exc)
+    return content
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(EPICError)
     async def epic_error_handler(request: Request, exc: EPICError):
+        settings = getattr(request.app.state, "settings", None)
+        debug = bool(settings.debug) if settings is not None else False
         return JSONResponse(
             status_code=error_to_status_code(exc),
-            content={"error": {"code": error_to_code(exc), "message": str(exc)}},
+            content=error_content(exc, debug),
         )
 
 

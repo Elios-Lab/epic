@@ -324,7 +324,10 @@ async def create_submission(
                 submission_id=str(submission.id),
             ))
 
-    asyncio.create_task(_score_submission(submission.id, get_session_factory()))
+    asyncio.create_task(
+        _score_submission(submission.id, get_session_factory()),
+        name=f"epic-score-{submission.id}",
+    )
     return submission_response(submission)
 
 

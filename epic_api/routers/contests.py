@@ -377,7 +377,8 @@ async def update_contest(
 
     if target_status == "ACTIVE":
         asyncio.create_task(
-            engine.run_session(str(session.id), get_session_factory())
+            engine.run_session(str(session.id), get_session_factory()),
+            name=f"epic-session-{session.id}",
         )
     # Respond with the state this handler just committed: re-reading here
     # would race with the engine task scheduled above.
@@ -555,7 +556,8 @@ async def resume_contest(
     await db.commit()
 
     asyncio.create_task(
-        engine.run_session(str(session.id), get_session_factory())
+        engine.run_session(str(session.id), get_session_factory()),
+        name=f"epic-session-{session.id}",
     )
 
     # Respond with the state this handler just committed. Re-reading here

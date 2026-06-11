@@ -48,9 +48,6 @@ class Settings(BaseSettings):
     smtp_sender: str | None = None   # falls back to admin_email if unset
     smtp_tls: bool = True            # STARTTLS (port 587); set False for plain/SSL port 465
 
-    # Plugin Discovery
-    plugin_discovery: str = "explicit"
-
 
 @lru_cache
 def get_settings() -> Settings:

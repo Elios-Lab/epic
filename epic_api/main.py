@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,13 +112,18 @@ async def _recover_after_restart(notifications: NotificationService) -> None:
 
     for submission_id in pending_ids:
         asyncio.create_task(
-            submissions._score_submission(submission_id, db_factory)
+            submissions._score_submission(submission_id, db_factory),
+            name=f"epic-score-{submission_id}",
         )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = app.state.settings if hasattr(app.state, "settings") else get_settings()
+    app.state.settings = settings
+    if settings.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger("epic").setLevel(logging.DEBUG)
     app.state.broadcaster = ContestBroadcaster(
         queue_capacity=settings.session_queue_capacity
     )
@@ -143,6 +149,19 @@ async def lifespan(app: FastAPI):
         registry_module.task_evaluator_registry.register(ForecastingEvaluator())
     await _recover_after_restart(notification_service)
     yield
+    # Graceful shutdown: cancel background simulation and scoring tasks so
+    # their database sessions close cleanly instead of being killed with
+    # checked-out connections (which leaks and warns at garbage collection).
+    background = [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task()
+        and task.get_name().startswith("epic-")
+    ]
+    for task in background:
+        task.cancel()
+    if background:
+        await asyncio.gather(*background, return_exceptions=True)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

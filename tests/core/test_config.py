@@ -33,3 +33,25 @@ def test_get_settings_constructs_settings(monkeypatch):
     monkeypatch.delenv("DEBUG", raising=False)
 
     assert get_settings().database_url == "sqlite+aiosqlite:///:memory:"
+
+
+def test_debug_error_content_includes_traceback_only_for_server_errors():
+    """DEBUG=true adds a traceback to 5xx envelopes; 4xx and production stay clean."""
+    from epic_api.errors import error_content
+    from epic_core.exceptions import ContestNotFoundError, PluginExecutionError
+
+    try:
+        raise PluginExecutionError("twin exploded")
+    except PluginExecutionError as exc:
+        server_error = exc
+
+    debug_payload = error_content(server_error, debug=True)
+    assert "traceback" in debug_payload["error"]
+    assert any("twin exploded" in line for line in debug_payload["error"]["traceback"])
+
+    prod_payload = error_content(server_error, debug=False)
+    assert "traceback" not in prod_payload["error"]
+
+    client_error = ContestNotFoundError("nope")
+    debug_4xx = error_content(client_error, debug=True)
+    assert "traceback" not in debug_4xx["error"]

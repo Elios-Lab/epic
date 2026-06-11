@@ -36,7 +36,7 @@ PostgreSQL with `asyncpg` is the recommended production database. SQLite with `a
 |---|---|---|
 | `APP_NAME` | `EPIC` | Application name used in API responses |
 | `APP_VERSION` | `0.1.0` | Application version |
-| `DEBUG` | `false` | Enable debug mode (verbose logging, reload) |
+| `DEBUG` | `false` | Debug mode: verbose logging, and tracebacks included in `500` error responses. Never enable in production |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8000` | Server port |
 | `DATABASE_URL` | — | Database connection string |
@@ -46,7 +46,13 @@ PostgreSQL with `asyncpg` is the recommended production database. SQLite with `a
 | `MAX_CONCURRENT_SESSIONS` | `50` | Maximum concurrent simulation sessions (one per active contest) |
 | `DEFAULT_SAMPLING_RATE_HZ` | `10.0` | Default sensor sampling rate for new contests |
 | `SESSION_QUEUE_CAPACITY` | `1000` | Max buffered observations per WebSocket client |
-| `PLUGIN_DISCOVERY` | `explicit` | Plugin discovery mode (`explicit` or `entrypoints`) |
+| `BASE_URL` | `http://localhost:8000` | Public base URL used to build links in notification emails |
+| `SMTP_HOST` | — | SMTP server for email notifications; if unset, notifications are no-ops |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USERNAME` | — | SMTP username |
+| `SMTP_PASSWORD` | — | SMTP password |
+| `SMTP_SENDER` | — | Sender address (falls back to `ADMIN_EMAIL`) |
+| `SMTP_TLS` | `true` | Use STARTTLS (port 587); set `false` for plain/SSL on port 465 |
 
 Plugin packages must not define their own `Settings` subclasses. If a plugin needs configuration, it should read from the main `Settings` object using a namespaced prefix (e.g. `MECHANICAL_TWIN_MASS=1.5`), declared as an optional field with a default.
 
