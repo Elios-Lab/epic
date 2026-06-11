@@ -208,7 +208,7 @@ def test_pending_submission_requeued(client, db_factory):
 
     created_coros = []
 
-    def capture_create_task(coro):
+    def capture_create_task(coro, **kwargs):
         created_coros.append(coro)
         # Return a dummy future so the caller doesn't break.
         coro.close()  # discard cleanly to avoid ResourceWarning

@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import close_all_sessions
 
 from epic_api.dependencies import get_notification_service
 from epic_api.main import create_app
@@ -59,6 +60,7 @@ def client(collecting_notifications, tmp_path):
         with TestClient(app) as test_client:
             yield test_client
         if db_session_module._engine is not None:
+            asyncio.run(close_all_sessions())
             asyncio.run(db_session_module._engine.dispose())
         _reset_db_state()
 
