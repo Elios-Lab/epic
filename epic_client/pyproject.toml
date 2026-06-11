@@ -34,3 +34,4 @@ packages = ["epic_client"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]

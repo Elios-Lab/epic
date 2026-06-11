@@ -523,7 +523,7 @@
                         <form class="rounded-md border border-slate-200 bg-slate-50 p-5" @submit.prevent="submitPrediction()">
                           <h3 class="text-lg font-semibold text-slate-900">Submit Prediction</h3>
                           <p class="mt-1 text-sm text-slate-500">
-                            Provide one list of predicted values per sensor, covering every step in the evaluation window
+                            Provide one list of predicted values per required target variable, covering every step in the evaluation window
                             (<code class="bg-white rounded px-1 border border-slate-200">eval_steps</code> values each).
                           </p>
                           <label class="mt-4 block">
@@ -857,6 +857,10 @@
                               <h3 x-text="template.name" class="text-lg font-semibold text-epic-deep"></h3>
                               <p class="mt-2 text-sm font-medium text-epic-cyan" x-text="template.twin_id"></p>
                               <p class="mt-3 text-sm leading-6 text-slate-600" x-text="template.description"></p>
+                              <p class="mt-3 text-xs font-medium text-slate-500">
+                                Targets:
+                                <span x-text="(template.target_variables || []).join(', ') || 'all selected sensors'"></span>
+                              </p>
                             </button>
                           </template>
                         </div>
@@ -954,6 +958,14 @@
                                   class="h-4 w-4 rounded border-slate-300 text-epic-cyan focus:ring-cyan-200" />
                                 <span class="font-medium text-slate-800" x-text="sensor.name"></span>
                                 <span class="text-xs text-slate-400" x-text="sensor.unit"></span>
+                                <label x-show="sensor.enabled" class="ml-auto inline-flex items-center gap-2 text-xs font-medium text-epic-navy">
+                                  <input
+                                    type="checkbox"
+                                    x-model="sensor.target_selected"
+                                    class="h-4 w-4 rounded border-slate-300 text-epic-cyan focus:ring-cyan-200"
+                                  />
+                                  Forecast target
+                                </label>
                               </div>
                               <!-- Parameters (visible only when enabled) -->
                               <div x-show="sensor.enabled" class="mt-3 space-y-3">
@@ -1583,6 +1595,7 @@
               task_type: "FORECASTING",
               metric_ids: ["mae"],
               score_against: "ground_truth",
+              target_variables: [],
               observation_horizon_days: 2,
               prediction_horizon_seconds: 3600,
             },
@@ -2475,6 +2488,7 @@
                 task_type: fullTemplate.task_type || "FORECASTING",
                 metric_ids: fullTemplate.metric_ids || ["mae"],
                 score_against: "ground_truth",
+                target_variables: fullTemplate.target_variables || [],
                 observation_horizon_days: 2,
                 prediction_horizon_seconds: 3600,
               };
@@ -2494,13 +2508,18 @@
               for (const sc of (template.sensor_configs || [])) {
                 templateSensorMap[sc.sensor_id] = sc;
               }
+              const templateTargets = new Set(
+                template.target_variables || (template.sensor_configs || []).map(sc => sc.sensor_id)
+              );
               this.organizer.form.sensor_selections = profile.sensors.map(sensor => {
                 const tc = templateSensorMap[sensor.sensor_id] || {};
+                const enabled = sensor.sensor_id in templateSensorMap;
                 return {
                   sensor_id: sensor.sensor_id,
                   name: sensor.name,
                   unit: sensor.unit,
-                  enabled: sensor.sensor_id in templateSensorMap,
+                  enabled: enabled,
+                  target_selected: enabled && templateTargets.has(sensor.sensor_id),
                   noise_std: tc.noise_std ?? 0.0,
                   gain: tc.gain ?? 1.0,
                   bias: tc.bias ?? 0.0,
@@ -2560,6 +2579,13 @@
               this.organizer.error = "Please enable at least one sensor.";
               return;
             }
+            const target_variables = this.organizer.form.sensor_selections
+              .filter(s => s.enabled && s.target_selected)
+              .map(s => s.sensor_id);
+            if (target_variables.length === 0) {
+              this.organizer.error = "Please select at least one forecast target.";
+              return;
+            }
             // Build fault_schedule from fault_entries
             const fault_schedule = this.organizer.form.fault_entries.map(fe => ({
               fault_id: fe.fault_id,
@@ -2582,6 +2608,7 @@
                 fault_schedule: fault_schedule,
                 initial_conditions: this.organizer.form.initial_conditions,
                 sampling_rate_hz: Number(this.organizer.form.sampling_rate_hz),
+                target_variables: target_variables,
                 start_date: this.toApiDateTime(this.organizer.form.start_date),
                 end_date: this.toApiDateTime(this.organizer.form.end_date),
                 end_of_observation: new Date(

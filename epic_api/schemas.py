@@ -298,6 +298,7 @@ class TemplateSummary(BaseModel):
     twin_id: str
     sampling_rate_hz: float
     task_type: str
+    target_variables: list[str] = []
 
 
 class TemplateDetail(TemplateSummary):

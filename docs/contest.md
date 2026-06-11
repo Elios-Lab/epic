@@ -28,7 +28,7 @@ A contest declares one of three visibility modes: `PUBLIC`, `PRIVATE`, or `INVIT
 
 ### Tasks
 
-A contest may contain one or more tasks, evaluated independently. A task is defined by its type, the metrics used to score it, a weight for composite scoring, and a free-form `configuration` dictionary whose content depends on the task type (for forecasting it carries `eval_steps` and `score_against`).
+A contest may contain one or more tasks, evaluated independently. A task is defined by its type, the metrics used to score it, a weight for composite scoring, and a free-form `configuration` dictionary whose content depends on the task type (for forecasting it carries `eval_steps`, `target_variables`, and `score_against`).
 
 Task types are plugins: any type with a registered `TaskEvaluator` is accepted at contest creation and scored automatically — see [Scoring](scoring.md). The built-in task type is `FORECASTING`; anomaly detection, fault classification, and remaining-useful-life estimation are planned, each arriving as an evaluator plugin rather than a platform change.
 
@@ -44,11 +44,11 @@ A registration links a user to a contest, with statuses `REGISTERED`, `WITHDRAWN
 
 ### Submissions
 
-Submissions are the primary evaluation mechanism. A submission records who submitted what for which task and when: it carries the contest, the user, the task identifier, a server-assigned timestamp, the prediction payload (for forecasting, one list of values per sensor under the `forecast` key), a status that progresses from `PENDING` to `EVALUATED` or `FAILED`, and an optional metadata dictionary where the platform records error details when validation or scoring fails.
+Submissions are the primary evaluation mechanism. A submission records who submitted what for which task and when: it carries the contest, the user, the task identifier, a server-assigned timestamp, the prediction payload (for forecasting, one list of values per required target variable under the `forecast` key), a status that progresses from `PENDING` to `EVALUATED` or `FAILED`, and an optional metadata dictionary where the platform records error details when validation or scoring fails.
 
-Temporal integrity is enforced by the two-phase structure rather than by trust: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`, when the full ground truth for the evaluation window already exists, and forecasts must cover exactly `eval_steps` values per sensor. This makes retroactive "predictions" structurally impossible. See [Scoring](scoring.md) for the full explanation.
+Temporal integrity is enforced by the two-phase structure rather than by trust: the server only accepts submissions after `end_of_observation + prediction_horizon_seconds`, when the full ground truth for the evaluation window already exists, and forecasts must cover exactly `eval_steps` values per selected target variable. This makes retroactive "predictions" structurally impossible. See [Scoring](scoring.md) for the full explanation.
 
-Every submission then follows the same pipeline: validation of the contest state, the registration, the payload format, and the task compatibility; scoring against the recorded ground truth; storage of one `Score` row per metric per sensor; and finally a leaderboard update. Invalid submissions are rejected with an explanatory error in their metadata.
+Every submission then follows the same pipeline: validation of the contest state, the registration, the payload format, and the task compatibility; scoring against the recorded ground truth; storage of one `Score` row per metric per target variable; and finally a leaderboard update. Invalid submissions are rejected with an explanatory error in their metadata.
 
 Submission *policies* — how many submissions a participant may make and which one counts — are a configuration axis of the framework. The current implementation accepts unlimited submissions and ranks each participant by their best score; daily limits and latest-submission ranking are planned policy options.
 
@@ -157,13 +157,15 @@ end_of_observation: 2027-01-15T12:00:00Z   # observation phase ends, stream clos
 prediction_horizon_seconds: 60.0            # length of the hidden evaluation window
 ```
 
-The platform computes `eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)`, the number of values participants must predict per sensor. `end_date` must fall after `end_of_observation + prediction_horizon_seconds`, leaving participants time to submit.
+The platform computes `eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)`, the number of values participants must predict per selected target variable. `end_date` must fall after `end_of_observation + prediction_horizon_seconds`, leaving participants time to submit.
 
 One optional field selects the scoring reference. With the recommended default, `score_against: ground_truth`, scores are computed against the noiseless latent-state values recorded by the engine, so a perfect physics model achieves a score of zero and measurement noise does not penalise it. With `score_against: sensors`, scores are computed against the noisy sensor readings instead; choose this only when forecasting the corrupted measurement is itself the point, as in a sensor-drift challenge.
 
 ### Task and Metrics
 
-The `task_type` field (default `FORECASTING`) selects the contest's task; any type with a registered `TaskEvaluator` plugin is valid. `metric_ids` lists the scoring metrics (default `[mae]`), each of which must be registered in the metric registry. For forecasting, participants submit one list of `eval_steps` values per sensor:
+The `target_variables` field selects the configured sensor ids that participants are required to forecast and that the platform will score. It must contain at least one id, and every id must appear in `sensor_configs`. Sensors not listed as targets are still streamed to participants as input features, but they do not affect the score. If omitted for backward compatibility, all configured sensors become targets.
+
+The `task_type` field (default `FORECASTING`) selects the contest's task; any type with a registered `TaskEvaluator` plugin is valid. `metric_ids` lists the scoring metrics (default `[mae]`), each of which must be registered in the metric registry. For forecasting, participants submit one list of `eval_steps` values per selected target variable:
 
 ```json
 {
@@ -193,6 +195,7 @@ sampling_rate_hz: 10.0
 task_type: FORECASTING
 metric_ids: [mae]
 score_against: ground_truth
+target_variables: [position]
 start_date: 2027-01-10T09:00:00Z
 end_of_observation: 2027-01-10T09:30:00Z   # 30-min observation window
 prediction_horizon_seconds: 60.0           # predict the next 60 s (600 steps at 10 Hz)
@@ -223,6 +226,7 @@ sampling_rate_hz: 10.0
 task_type: FORECASTING
 metric_ids: [mae, rmse]
 score_against: ground_truth
+target_variables: [position, velocity]
 start_date: 2027-03-01T08:00:00Z
 end_of_observation: 2027-03-01T09:00:00Z   # 1-hour observation window
 prediction_horizon_seconds: 300.0          # predict the next 5 min (3000 steps at 10 Hz)

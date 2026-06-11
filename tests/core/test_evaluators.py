@@ -11,8 +11,14 @@ def make_observations(values: list[float], with_ground_truth: bool = True):
     return [
         {
             "sequence_id": index + 1,
-            "sensors": {"position": value + 0.01},  # corrupted reading
-            "ground_truth": {"position": value} if with_ground_truth else None,
+            "sensors": {
+                "position": value + 0.01,
+                "velocity": value + 1.0,
+            },  # corrupted reading
+            "ground_truth": {
+                "position": value,
+                "velocity": value + 1.0,
+            } if with_ground_truth else None,
             "labels": None,
         }
         for index, value in enumerate(values)
@@ -112,19 +118,51 @@ def test_ranking_direction_follows_primary_metric():
     assert result.ranking_direction == "maximize"
 
 
-def test_unknown_sensor_is_skipped():
+def test_unknown_target_raises_submission_error():
+    evaluator = ForecastingEvaluator()
+    observations = make_observations([0.1, 0.2])
+
+    with pytest.raises(SubmissionError, match="not available"):
+        evaluator.evaluate(
+            {"forecast": {"nonexistent": [0.1, 0.2]}},
+            {"eval_steps": 2, "target_variables": ["nonexistent"]},
+            observations,
+            [MAE()],
+        )
+
+
+def test_scores_only_configured_target_variables():
     evaluator = ForecastingEvaluator()
     observations = make_observations([0.1, 0.2])
 
     result = evaluator.evaluate(
-        {"forecast": {"nonexistent": [0.1, 0.2]}},
-        {"eval_steps": 2},
+        {
+            "forecast": {
+                "position": [0.1, 0.2],
+                "velocity": [100.0],
+            }
+        },
+        {"eval_steps": 2, "target_variables": ["position"]},
         observations,
         [MAE()],
     )
 
-    assert result.scores == []
-    assert result.ranking_value is None
+    assert len(result.scores) == 1
+    assert result.scores[0].details["sensor_id"] == "position"
+    assert result.ranking_value == pytest.approx(0.0)
+
+
+def test_missing_required_target_variable_raises_submission_error():
+    evaluator = ForecastingEvaluator()
+    observations = make_observations([0.1, 0.2])
+
+    with pytest.raises(SubmissionError, match="missing required target"):
+        evaluator.evaluate(
+            {"forecast": {"velocity": [1.1, 1.2]}},
+            {"eval_steps": 2, "target_variables": ["position"]},
+            observations,
+            [MAE()],
+        )
 
 
 def test_observation_limit_follows_eval_steps():

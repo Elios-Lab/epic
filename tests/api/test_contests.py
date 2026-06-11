@@ -896,6 +896,48 @@ def test_create_two_phase_contest_returns_correct_fields(client, admin_headers):
     assert tasks[0]["configuration"]["eval_steps"] == 20  # 2.0s * 10Hz
     assert tasks[0]["configuration"]["prediction_horizon_seconds"] == 2.0
     assert tasks[0]["configuration"]["score_against"] == "ground_truth"
+    assert tasks[0]["configuration"]["target_variables"] == ["position"]
+
+
+def test_create_contest_with_explicit_target_variables(client, admin_headers):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(
+            sensor_configs=[
+                {"sensor_id": "position"},
+                {"sensor_id": "velocity"},
+            ],
+            target_variables=["velocity"],
+        ),
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    cfg = response.json()["tasks"][0]["configuration"]
+    assert cfg["target_variables"] == ["velocity"]
+
+
+def test_create_contest_with_empty_target_variables_returns_422(
+    client, admin_headers
+):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(target_variables=[]),
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_contest_with_unconfigured_target_variable_returns_422(
+    client, admin_headers
+):
+    response = client.post(
+        "/api/v1/contests",
+        json=two_phase_payload(target_variables=["velocity"]),
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_create_contest_with_explicit_score_against_sensors(client, admin_headers):

@@ -71,6 +71,7 @@ class CreateContestRequest(BaseModel):
     end_of_observation: datetime | None = None
     prediction_horizon_seconds: float | None = None
     score_against: str = "ground_truth"  # "ground_truth" | "sensors"
+    target_variables: list[str] | None = None
 
 
 class UpdateContestRequest(BaseModel):
@@ -157,6 +158,27 @@ def validate_twin_config(
             )
 
 
+def validate_target_variables(
+    target_variables: list[str] | None,
+    sensor_configs: list[dict],
+) -> list[str]:
+    configured_sensor_ids = [config["sensor_id"] for config in sensor_configs]
+    if target_variables is None:
+        return configured_sensor_ids
+    if not target_variables:
+        raise EPICValidationError("target_variables must contain at least one variable")
+    unknown = [
+        variable
+        for variable in target_variables
+        if variable not in configured_sensor_ids
+    ]
+    if unknown:
+        raise EPICValidationError(
+            "target_variables must be selected from configured sensor_ids"
+        )
+    return target_variables
+
+
 def validate_visibility(visibility: str) -> None:
     if visibility not in ALLOWED_VISIBILITIES:
         raise EPICValidationError(f"visibility '{visibility}' is not supported")
@@ -187,6 +209,10 @@ async def create_contest(
     validate_twin_config(request.twin_id, request.sensor_configs, request.fault_schedule)
     validate_visibility(request.visibility)
     validate_task_type(request.task_type)
+    target_variables = validate_target_variables(
+        request.target_variables,
+        request.sensor_configs,
+    )
     if request.end_date <= request.start_date:
         raise EPICValidationError("end_date must be after start_date")
 
@@ -249,6 +275,7 @@ async def create_contest(
         "prediction_horizon_seconds": request.prediction_horizon_seconds,
         "eval_steps": round(request.prediction_horizon_seconds * request.sampling_rate_hz),
         "score_against": request.score_against,
+        "target_variables": target_variables,
     }
     task = Task(
         contest_id=contest.id,

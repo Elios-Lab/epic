@@ -38,7 +38,7 @@ From `end_of_observation` to `end_of_observation + prediction_horizon_seconds`, 
 
 ### Submission window
 
-Once the evaluation window ends (and until `end_date`), you can submit your forecast. A forecast must cover **every time step** of the evaluation window for every sensor you want to be scored on.
+Once the evaluation window ends (and until `end_date`), you can submit your forecast. A forecast must cover **every time step** of the evaluation window for every target variable selected by the organizer.
 
 The exact number of steps you must predict is:
 
@@ -46,11 +46,13 @@ The exact number of steps you must predict is:
 eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
 ```
 
-You can read `eval_steps` directly from the contest's task configuration:
+You can read `eval_steps` and the required `target_variables` directly from the contest's task configuration:
 
 ```python
 contests = client.list_contests(status="ACTIVE")
-eval_steps = contests[0]["tasks"][0]["configuration"]["eval_steps"]
+task_config = contests[0]["tasks"][0]["configuration"]
+eval_steps = task_config["eval_steps"]
+target_variables = task_config["target_variables"]
 ```
 
 ---
@@ -121,12 +123,16 @@ Use whatever modelling approach you like. The simplest possible baseline just re
 
 ```python
 last = observations[-1]["sensors"]
-sensors = list(last.keys())
 
-eval_steps = contests[0]["tasks"][0]["configuration"]["eval_steps"]
+task_config = contests[0]["tasks"][0]["configuration"]
+eval_steps = task_config["eval_steps"]
+target_variables = task_config["target_variables"]
 
 # Naive forecast: repeat the last observation for every step
-forecast = {sensor: [last[sensor]] * eval_steps for sensor in sensors}
+forecast = {
+    target: [last[target]] * eval_steps
+    for target in target_variables
+}
 ```
 
 ### 5. Submit your forecast
@@ -142,7 +148,7 @@ submission = client.submit(
 print(submission)
 ```
 
-`payload["forecast"]` must be a dict mapping each sensor ID to a list of exactly `eval_steps` float values. You may submit multiple times — the platform keeps all submissions and scores each one.
+`payload["forecast"]` must be a dict mapping each required target variable to a list of exactly `eval_steps` float values. You may submit multiple times — the platform keeps all submissions and scores each one.
 
 ### 6. Check your scores and the leaderboard
 
@@ -172,7 +178,9 @@ async def main():
     contests = client.list_contests(status="ACTIVE")
     contest = contests[0]
     contest_id = contest["contest_id"]
-    eval_steps = contest["tasks"][0]["configuration"]["eval_steps"]
+    task_config = contest["tasks"][0]["configuration"]
+    eval_steps = task_config["eval_steps"]
+    target_variables = task_config["target_variables"]
 
     # Register (safe to call even if already registered)
     client.register(contest_id)
@@ -186,6 +194,7 @@ async def main():
     forecast = {
         sensor: [value] * eval_steps
         for sensor, value in last_sensors.items()
+        if sensor in target_variables
     }
 
     # Submit
@@ -218,7 +227,7 @@ Instantiate the client by passing the server URL. Defaults to `"https://epic.eli
 | `register` | `register(contest_id) → dict` | Register for a contest. Idempotent — calling it again on an already-registered contest is safe. |
 | `collect` | `collect(contest_id, duration_seconds, csv_path=None) → list[dict]` | Stream observations for up to `duration_seconds` and return them as a list. Stops early if the observation phase ends. Optionally writes each observation to a CSV file as it arrives. |
 | `stream` | `stream(contest_id) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. |
-| `submit` | `submit(contest_id, task_id, payload) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"sensor_id": [v1, v2, …], …}}` with exactly `eval_steps` values per sensor. |
+| `submit` | `submit(contest_id, task_id, payload) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"target_variable": [v1, v2, …], …}}` with exactly `eval_steps` values per configured target variable. |
 | `get_scores` | `get_scores(contest_id) → dict` | Return all your submissions for this contest together with their computed scores. |
 | `get_leaderboard` | `get_leaderboard(contest_id) → dict` | Return the current public leaderboard for this contest. |
 

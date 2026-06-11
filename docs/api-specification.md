@@ -93,7 +93,7 @@ Two event messages interrupt the observation stream, each followed by a server-s
 { "event": "evaluation_started", "observation_end_sequence_id": 400, "evaluation_steps": 20 }
 ```
 
-sent exactly once when the observation phase ends. `evaluation_steps` is the number of values per sensor a forecast must contain; the submission window opens `prediction_horizon_seconds` later. And:
+sent exactly once when the observation phase ends. `evaluation_steps` is the number of values each required target variable must contain in a forecast; the submission window opens `prediction_horizon_seconds` later.
 
 ```json
 { "event": "contest_closed" }

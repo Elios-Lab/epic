@@ -22,6 +22,7 @@ TEMPLATES = [
         "initial_conditions": {"position": 0.15, "velocity": 0.0},
         "sampling_rate_hz": 20.0,
         "task_type": "FORECASTING",
+        "target_variables": ["position"],
     },
     {
         "template_id": "pump_bearing_fault",
@@ -45,6 +46,7 @@ TEMPLATES = [
         "initial_conditions": {"flow_rate": 120.0, "pressure": 4.0, "wear": 0.05},
         "sampling_rate_hz": 10.0,
         "task_type": "FORECASTING",
+        "target_variables": ["flow_rate", "vibration"],
     },
     {
         "template_id": "motor_voltage_imbalance",
@@ -68,6 +70,7 @@ TEMPLATES = [
         "initial_conditions": {"current": 12.0, "voltage": 400.0, "speed": 1450.0},
         "sampling_rate_hz": 50.0,
         "task_type": "FORECASTING",
+        "target_variables": ["current", "rotational_speed"],
     },
     {
         "template_id": "gearbox_tooth_wear",
@@ -91,6 +94,7 @@ TEMPLATES = [
         "initial_conditions": {"speed": 1800.0, "power": 75000.0},
         "sampling_rate_hz": 25.0,
         "task_type": "FORECASTING",
+        "target_variables": ["vibration", "power"],
     },
     {
         "template_id": "building_hvac_failure",
@@ -119,6 +123,7 @@ TEMPLATES = [
         },
         "sampling_rate_hz": 2.0,
         "task_type": "FORECASTING",
+        "target_variables": ["temperature", "co2_concentration"],
     },
 ]
 
@@ -131,4 +136,5 @@ def template_summary(template: dict) -> dict:
         "twin_id": template["twin_id"],
         "sampling_rate_hz": template["sampling_rate_hz"],
         "task_type": template["task_type"],
+        "target_variables": template.get("target_variables", []),
     }

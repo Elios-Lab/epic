@@ -403,6 +403,99 @@ def test_score_details_contain_per_sensor_breakdown(
     assert score["details"]["scored_against"] in ("sensors", "ground_truth")
 
 
+def test_scoring_uses_only_target_variables(client, db_factory, auth_headers):
+    async def create_targeted_contest():
+        now = datetime.now(timezone.utc)
+        async with db_factory() as db:
+            contest = Contest(
+                name="Target variable scoring contest",
+                status="ACTIVE",
+                visibility="PUBLIC",
+                twin_id="mass_spring_damper",
+                sensor_configs=[
+                    {"sensor_id": "position"},
+                    {"sensor_id": "velocity"},
+                ],
+                sampling_rate_hz=_SAMPLING_RATE,
+                start_date=now - timedelta(seconds=10),
+                end_date=now + timedelta(seconds=30),
+                end_of_observation=now - timedelta(seconds=2),
+                prediction_horizon_seconds=_PREDICTION_HORIZON,
+                created_by=None,
+            )
+            db.add(contest)
+            await db.flush()
+            db.add(Task(
+                contest_id=contest.id,
+                task_type="FORECASTING",
+                name="FORECASTING",
+                metric_ids=["mae"],
+                weight=1.0,
+                configuration={
+                    "eval_steps": _EVAL_STEPS,
+                    "prediction_horizon_seconds": _PREDICTION_HORIZON,
+                    "target_variables": ["position"],
+                },
+            ))
+            await db.commit()
+            await db.refresh(contest)
+
+            session = SimulationSession(
+                contest_id=contest.id,
+                twin_id=contest.twin_id,
+                sampling_rate_hz=contest.sampling_rate_hz,
+                status="RUNNING",
+            )
+            db.add(session)
+            await db.commit()
+            await db.refresh(session)
+
+            db.add(SensorObservation(
+                session_id=session.id,
+                sequence_id=1,
+                timestamp=now - timedelta(seconds=1),
+                sensors={"position": 0.1, "velocity": 100.0},
+                ground_truth={"position": 0.1, "velocity": 100.0},
+                labels=None,
+            ))
+            await db.commit()
+            return contest
+
+    contest = asyncio.run(create_targeted_contest())
+    register_participant(client, auth_headers, str(contest.id))
+
+    response = client.post(
+        f"/api/v1/contests/{contest.id}/submissions",
+        json={
+            "task_id": "forecasting",
+            "payload": {
+                "forecast": {
+                    "position": [0.1],
+                    "velocity": [-999.0],
+                }
+            },
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    submission = response.json()
+
+    body = wait_for_evaluated_submission(
+        client, auth_headers, submission["submission_id"]
+    )
+    assert body["status"] == "EVALUATED"
+
+    scores_resp = client.get(
+        f"/api/v1/submissions/{submission['submission_id']}/scores",
+        headers=auth_headers,
+    )
+    assert scores_resp.status_code == 200
+    scores = scores_resp.json()["scores"]
+    assert len(scores) == 1
+    assert scores[0]["details"]["sensor_id"] == "position"
+    assert scores[0]["value"] == pytest.approx(0.0)
+
+
 def test_task_id_not_belonging_to_contest_returns_422(
     client, db_factory, auth_headers
 ):

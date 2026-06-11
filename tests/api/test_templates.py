@@ -15,6 +15,7 @@ def test_list_templates_returns_all_templates(client):
         "smart_building",
     }
     assert all("template_id" in template for template in templates)
+    assert all(template["target_variables"] for template in templates)
 
 
 def test_get_known_template_returns_full_configuration(client):
@@ -29,6 +30,7 @@ def test_get_known_template_returns_full_configuration(client):
     assert template["initial_conditions"]
     assert template["sampling_rate_hz"] > 0
     assert template["task_type"]
+    assert template["target_variables"]
 
 
 def test_get_unknown_template_returns_404(client):

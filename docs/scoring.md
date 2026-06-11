@@ -36,7 +36,7 @@ The size of the forecast is fixed by the contest configuration:
 eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
 ```
 
-A forecasting payload must contain exactly one list of `eval_steps` predicted values per sensor:
+A forecasting task also declares `target_variables`, the one or more configured sensor ids the organizer requires participants to predict. Scoring is computed only for those targets. A forecasting payload must contain exactly one list of `eval_steps` predicted values per required target variable:
 
 ```json
 {
@@ -47,7 +47,7 @@ A forecasting payload must contain exactly one list of `eval_steps` predicted va
 }
 ```
 
-Payloads with missing sensors, wrong list lengths, or non-numeric values fail validation and the submission is marked `FAILED` with the reason recorded in its metadata. If scoring runs before the evaluation window is fully populated with ground-truth observations, the submission is left in `PENDING` and scoring is retried once enough observations exist.
+Payloads with missing target variables, wrong list lengths, or non-numeric values fail validation and the submission is marked `FAILED` with the reason recorded in its metadata. Extra forecast keys are ignored for scoring. If scoring runs before the evaluation window is fully populated with ground-truth observations, the submission is left in `PENDING` and scoring is retried once enough observations exist.
 
 ---
 
@@ -61,11 +61,11 @@ The organizer chooses the scoring reference through the `score_against` task con
 
 # Forecasting Metrics
 
-The implemented forecasting metric is the mean absolute error, `MAE = mean(|y_true − y_pred|)`, computed per sensor over the full evaluation window. It is easy to interpret (it is expressed in the sensor's own unit) and robust to occasional large errors.
+The implemented forecasting metric is the mean absolute error, `MAE = mean(|y_true − y_pred|)`, computed per configured target variable over the full evaluation window. It is easy to interpret (it is expressed in the target sensor's own unit) and robust to occasional large errors.
 
 The metric library is expected to grow along well-known lines. RMSE, `sqrt(mean((y_true − y_pred)²))`, penalizes large errors more heavily than MAE. MAPE expresses errors as percentages but misbehaves when true values approach zero, so it should only be configured when denominators are well behaved; SMAPE, which normalizes by the sum of the absolute true and predicted values, is the more robust variant. Further out, multi-horizon scoring (separate scores at one, five, and ten steps combined with configured weights) and probabilistic forecasting metrics such as CRPS, negative log likelihood, and calibration error are anticipated — the latter requiring participants to submit uncertainty estimates alongside point forecasts.
 
-When a contest configures multiple sensors, metrics are computed per sensor and the per-sensor values are then aggregated by the scoring policy. This keeps the individual scores interpretable (a position MAE in meters, a temperature MAE in degrees) while still producing a single ranking value.
+When a contest configures multiple target variables, metrics are computed per target and the per-target values are then aggregated by the scoring policy. Non-target sensors can still be streamed to participants as explanatory inputs, but they do not affect the score unless the organizer includes them in `target_variables`. This keeps the individual scores interpretable (a position MAE in meters, a temperature MAE in degrees) while still producing a single ranking value.
 
 ---
 
@@ -77,7 +77,7 @@ For anomaly detection and fault classification tasks, the framework already incl
 
 # Composite Scores and Leaderboards
 
-A contest that evaluates several metrics — or several tasks — needs a rule for combining them into one ranking value. That rule belongs to the task evaluator, which returns alongside its scores a single `ranking_value` and the `ranking_direction` to interpret it. The built-in forecasting evaluator ranks by the primary metric (the first configured one) averaged across sensors, in that metric's declared direction; richer policies — weighted combinations such as seventy percent forecasting and thirty percent anomaly score, with normalization across directions — are the natural evolution of the same hook and require no platform change.
+A contest that evaluates several metrics — or several tasks — needs a rule for combining them into one ranking value. That rule belongs to the task evaluator, which returns alongside its scores a single `ranking_value` and the `ranking_direction` to interpret it. The built-in forecasting evaluator ranks by the primary metric (the first configured one) averaged across the configured target variables, in that metric's declared direction; richer policies — weighted combinations such as seventy percent forecasting and thirty percent anomaly score, with normalization across directions — are the natural evolution of the same hook and require no platform change.
 
 Leaderboards are generated from scores automatically and honour the ranking direction: with a minimized metric like MAE the lowest value ranks first and a participant's lowest submission is kept as their best, while with a maximized metric like F1 the ordering and the best-score rule invert. Latest-submission ranking and public/private leaderboard splits, where the public standing is computed on part of the evaluation window and the final standing on the rest, are planned extensions that enable Kaggle-style competition formats.
 
