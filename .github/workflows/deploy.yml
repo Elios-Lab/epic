@@ -48,6 +48,24 @@ jobs:
             pip install -e . --quiet
             export $(grep -v '^#' .env | xargs)
             alembic upgrade head
+            sudo tee /etc/systemd/system/epic.service > /dev/null <<'EOF'
+            [Unit]
+            Description=EPIC FastAPI
+            After=network.target
+
+            [Service]
+            User=ubuntu
+            Group=ubuntu
+            WorkingDirectory=/opt/epic
+            EnvironmentFile=/opt/epic/.env
+            ExecStart=/opt/epic/.venv/bin/uvicorn epic.api.main:create_app --factory --host 127.0.0.1 --port 8000
+            Restart=always
+            RestartSec=5
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
             sudo systemctl daemon-reload
+            sudo systemctl enable epic
             sudo systemctl restart epic
             echo "Deploy complete"
