@@ -1,14 +1,14 @@
 import pytest
 
-import epic_core.registry as registry_module
-from epic_core.exceptions import (
+import epic.core.registry as registry_module
+from epic.core.exceptions import (
     DuplicatePluginError,
     PluginNotFoundError,
     PluginValidationError,
 )
-from epic_core.interfaces import ScoringMetric, Sensor
-from epic_core.registry import PluginRegistry
-from epic_core.testing import (
+from epic.core.interfaces import ScoringMetric, Sensor
+from epic.core.registry import PluginRegistry
+from epic.core.testing import (
     MockSensor,
     MockTwin,
     test_registry_context as registry_context,

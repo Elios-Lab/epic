@@ -1,4 +1,4 @@
-from epic_api.templates import TEMPLATES
+from epic.api.templates import TEMPLATES
 
 
 def test_list_templates_returns_all_templates(client):

@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["epic_api*", "epic_client*", "epic_core*", "epic_sensors*", "epic_twins*"]
+include = ["epic", "epic.*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

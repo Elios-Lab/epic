@@ -1,21 +1,21 @@
 import pytest
 
-from epic_core.quantities import PhysicalQuantity
-from epic_core.testing import MockState
-from epic_sensors.acceleration import AccelerationSensor
-from epic_sensors.co2_concentration import CO2ConcentrationSensor
-from epic_sensors.current import CurrentSensor
-from epic_sensors.flow_rate import FlowRateSensor
-from epic_sensors.humidity import HumiditySensor
-from epic_sensors.occupancy import OccupancySensor
-from epic_sensors.power import PowerSensor
-from epic_sensors.position import PositionSensor
-from epic_sensors.pressure import PressureSensor
-from epic_sensors.rotational_speed import RotationalSpeedSensor
-from epic_sensors.temperature import TemperatureSensor
-from epic_sensors.velocity import VelocitySensor
-from epic_sensors.vibration import VibrationSensor
-from epic_sensors.voltage import VoltageSensor
+from epic.core.quantities import PhysicalQuantity
+from epic.core.testing import MockState
+from epic.sensors.acceleration import AccelerationSensor
+from epic.sensors.co2_concentration import CO2ConcentrationSensor
+from epic.sensors.current import CurrentSensor
+from epic.sensors.flow_rate import FlowRateSensor
+from epic.sensors.humidity import HumiditySensor
+from epic.sensors.occupancy import OccupancySensor
+from epic.sensors.power import PowerSensor
+from epic.sensors.position import PositionSensor
+from epic.sensors.pressure import PressureSensor
+from epic.sensors.rotational_speed import RotationalSpeedSensor
+from epic.sensors.temperature import TemperatureSensor
+from epic.sensors.velocity import VelocitySensor
+from epic.sensors.vibration import VibrationSensor
+from epic.sensors.voltage import VoltageSensor
 
 
 def test_sensor_properties_and_metadata():

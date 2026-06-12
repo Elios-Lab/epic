@@ -276,3 +276,173 @@ def test_participant_contest_filter_returns_only_own_registrations(
     }
     assert own_registration.json()["registration_id"] in registration_ids
     assert other_registration.json()["registration_id"] not in registration_ids
+
+
+# ── Visibility enforcement ────────────────────────────────────────────────────
+
+def _create_restricted_contest(client, admin_headers, name: str, visibility: str) -> dict:
+    payload = contest_payload(name)
+    payload["visibility"] = visibility
+    response = client.post("/api/v1/contests", json=payload, headers=admin_headers)
+    assert response.status_code == 201
+    contest = response.json()
+    patch = client.patch(
+        f"/api/v1/contests/{contest['contest_id']}",
+        json={"status": "SCHEDULED"},
+        headers=admin_headers,
+    )
+    assert patch.status_code == 200
+    return patch.json()
+
+
+def test_post_on_invitation_only_contest_without_invitation_returns_409(
+    client, admin_headers, auth_headers
+):
+    """An uninvited participant must not be able to join a restricted contest."""
+    contest = _create_restricted_contest(
+        client, admin_headers, "Private no invitation", "PRIVATE"
+    )
+
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
+
+    assert response.status_code == 409
+    assert "invitation" in response.json()["error"]["message"].lower()
+
+
+def test_post_on_private_contest_without_invitation_returns_409(
+    client, admin_headers, auth_headers
+):
+    contest = _create_restricted_contest(
+        client, admin_headers, "Private no invite", "PRIVATE"
+    )
+
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
+
+    assert response.status_code == 409
+
+
+def test_post_on_invitation_only_contest_with_invitation_returns_201(
+    client, admin_headers, auth_headers, registered_user
+):
+    """An existing account whose email was invited may self-register."""
+    contest = _create_restricted_contest(
+        client, admin_headers, "Private with invitation", "PRIVATE"
+    )
+    invite = client.post(
+        f"/api/v1/contests/{contest['contest_id']}/invitations",
+        json={"emails": [registered_user["email"]]},
+        headers=admin_headers,
+    )
+    assert invite.status_code == 201
+
+    response = register_for_contest(client, auth_headers, contest["contest_id"])
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "REGISTERED"
+
+
+def test_admin_can_register_for_restricted_contest_without_invitation(
+    client, admin_headers
+):
+    """Administrators bypass the invitation requirement."""
+    contest = _create_restricted_contest(
+        client, admin_headers, "Private admin join", "PRIVATE"
+    )
+
+    response = client.post(
+        "/api/v1/contest-registrations",
+        json={"contest_id": contest["contest_id"]},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+
+
+# ── Organizer participant management ──────────────────────────────────────────
+
+def test_withdrawn_participant_can_rejoin(client, admin_headers, auth_headers):
+    contest = create_contest(client, admin_headers, "Rejoin after withdraw", "SCHEDULED")
+    first = register_for_contest(client, auth_headers, contest["contest_id"])
+    assert first.status_code == 201
+    registration_id = first.json()["registration_id"]
+
+    withdraw = client.delete(
+        f"/api/v1/contest-registrations/{registration_id}", headers=auth_headers
+    )
+    assert withdraw.status_code == 204
+
+    rejoin = register_for_contest(client, auth_headers, contest["contest_id"])
+    assert rejoin.status_code == 201
+    assert rejoin.json()["status"] == "REGISTERED"
+    # Same registration row, reactivated — not a duplicate.
+    assert rejoin.json()["registration_id"] == registration_id
+
+
+def test_organizer_removal_bans_participant(
+    client, admin_headers, organizer_headers, auth_headers, registered_user
+):
+    """A removal by the contest owner is an exclusion: the participant cannot rejoin."""
+    payload = contest_payload("Removal contest")
+    response = client.post("/api/v1/contests", json=payload, headers=organizer_headers)
+    assert response.status_code == 201
+    contest = response.json()
+    client.patch(
+        f"/api/v1/contests/{contest['contest_id']}",
+        json={"status": "SCHEDULED"},
+        headers=organizer_headers,
+    )
+    registration = register_for_contest(client, auth_headers, contest["contest_id"])
+    assert registration.status_code == 201
+    registration_id = registration.json()["registration_id"]
+
+    # The organizer removes the participant.
+    removal = client.delete(
+        f"/api/v1/contest-registrations/{registration_id}", headers=organizer_headers
+    )
+    assert removal.status_code == 204
+
+    # The participant cannot rejoin.
+    rejoin = register_for_contest(client, auth_headers, contest["contest_id"])
+    assert rejoin.status_code == 409
+    assert "removed" in rejoin.json()["error"]["message"].lower()
+
+
+def test_other_organizer_cannot_remove_participant(
+    client, admin_headers, organizer_headers, auth_headers, db_factory
+):
+    contest = create_contest(client, admin_headers, "Foreign removal", "SCHEDULED")
+    registration = register_for_contest(client, auth_headers, contest["contest_id"])
+    assert registration.status_code == 201
+
+    # organizer_headers does not own this admin-created contest.
+    removal = client.delete(
+        f"/api/v1/contest-registrations/{registration.json()['registration_id']}",
+        headers=organizer_headers,
+    )
+    assert removal.status_code == 403
+
+
+def test_organizer_registration_listing_includes_user_identity(
+    client, admin_headers, organizer_headers, auth_headers, registered_user
+):
+    """The organizer's participant view needs usernames and emails, not just ids."""
+    payload = contest_payload("Identity listing contest")
+    contest = client.post(
+        "/api/v1/contests", json=payload, headers=organizer_headers
+    ).json()
+    client.patch(
+        f"/api/v1/contests/{contest['contest_id']}",
+        json={"status": "SCHEDULED"},
+        headers=organizer_headers,
+    )
+    assert register_for_contest(client, auth_headers, contest["contest_id"]).status_code == 201
+
+    listing = client.get(
+        f"/api/v1/contest-registrations?contest_id={contest['contest_id']}",
+        headers=organizer_headers,
+    )
+    assert listing.status_code == 200
+    entries = listing.json()["registrations"]
+    assert len(entries) == 1
+    assert entries[0]["username"] == registered_user["username"]
+    assert entries[0]["email"] == registered_user["email"]

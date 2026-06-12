@@ -1,0 +1,3044 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EPIC</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/assets/favicon.svg"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              epic: {
+                navy: "#0d3b6e",
+                deep: "#061a33",
+                cyan: "#0096c7",
+                pale: "#e7f7fc",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="min-h-screen bg-epic-deep text-white antialiased">
+    <div
+      x-data="epicApp()"
+      x-init="init()"
+      class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,150,199,0.28),transparent_32rem),linear-gradient(135deg,#061a33_0%,#0d3b6e_52%,#04101f_100%)]"
+    >
+      <template x-if="state === 'landing'">
+        <main class="flex flex-col min-h-screen">
+          <section class="flex-1 flex items-center mx-auto grid w-full max-w-6xl gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+            <div class="space-y-8">
+              <div class="inline-flex rounded-md bg-white p-4 shadow-2xl shadow-cyan-950/30">
+                <div class="w-72 max-w-[72vw] sm:w-96">
+                  <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                    <rect width="580" height="180" fill="#ffffff" />
+                    <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                    <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                    <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                    <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                    <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                    <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                    <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                    <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                    <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+                  </svg>
+                </div>
+              </div>
+              <div class="max-w-2xl space-y-5">
+                <h1 class="text-5xl font-semibold tracking-normal text-white sm:text-6xl">EPIC</h1>
+                <p class="text-xl leading-8 text-cyan-50">
+                  A simulation-driven machine learning competition platform based on digital twins.
+                </p>
+              </div>
+              <button
+                type="button"
+                @click="showLogin()"
+                class="inline-flex items-center rounded-md bg-cyan-400 px-6 py-3 text-base font-semibold text-epic-deep shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-200/50"
+              >
+                Log in
+              </button>
+            </div>
+            <div class="rounded-lg border border-cyan-300/20 bg-white/8 p-6 shadow-2xl shadow-cyan-950/20 backdrop-blur">
+              <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Sensor Streams</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">Observe live sensor data from running simulations and build your predictions in real time.</div>
+                </div>
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Open Competitions</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">Organizers publish contests with configurable tasks, schedules, and fault injection scenarios.</div>
+                </div>
+                <div class="rounded-md border border-white/10 bg-white/10 p-5">
+                  <div class="text-sm font-medium uppercase tracking-wide text-cyan-200">Automatic Scoring</div>
+                  <div class="mt-2 text-base leading-6 text-white/90">After the evaluation window closes, submit your full forecast and the platform scores it automatically against the hidden ground truth.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <footer class="pb-6 text-center text-sm text-cyan-200/60">
+            Powered by
+            <a href="https://www.elios.unige.it/" target="_blank" rel="noopener"
+               class="underline underline-offset-2 hover:text-cyan-200 transition">
+              Elios Lab
+            </a>
+            <span class="mx-2">·</span>
+            <a href="https://github.com/Elios-Lab/epic" target="_blank" rel="noopener"
+               class="underline underline-offset-2 hover:text-cyan-200 transition">
+              GitHub
+            </a>
+          </footer>
+        </main>
+      </template>
+
+      <template x-if="state === 'login'">
+        <main class="flex min-h-screen items-center justify-center px-6 py-12">
+          <section class="w-full max-w-md rounded-lg border border-cyan-300/20 bg-white p-8 text-slate-900 shadow-2xl shadow-cyan-950/30">
+            <button
+              type="button"
+              @click="state = 'landing'; error = ''"
+              class="mb-6 text-sm font-medium text-epic-navy hover:text-epic-cyan"
+            >
+              Back
+            </button>
+            <div class="mb-8 w-48">
+              <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                <rect width="580" height="180" fill="#ffffff" />
+                <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+              </svg>
+            </div>
+            <h2 class="text-2xl font-semibold text-epic-deep">Log in to EPIC</h2>
+            <form class="mt-6 space-y-5" @submit.prevent="login()">
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Username</span>
+                <input
+                  x-model="credentials.username"
+                  type="text"
+                  autocomplete="username"
+                  required
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Password</span>
+                <input
+                  x-model="credentials.password"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <p x-show="error" x-text="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+              <button
+                type="submit"
+                :disabled="loading"
+                class="w-full rounded-md bg-epic-navy px-5 py-3 font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span x-show="!loading">Log in</span>
+                <span x-show="loading">Logging in...</span>
+              </button>
+            </form>
+          </section>
+        </main>
+      </template>
+
+      <template x-if="state === 'register'">
+        <main class="flex min-h-screen items-center justify-center px-6 py-12">
+          <section class="w-full max-w-md rounded-lg border border-cyan-300/20 bg-white p-8 text-slate-900 shadow-2xl shadow-cyan-950/30">
+            <h2 class="text-2xl font-semibold text-epic-deep">Join EPIC</h2>
+
+            <template x-if="registration.checking">
+              <p class="mt-6 text-sm text-slate-600">Checking your invitation…</p>
+            </template>
+
+            <template x-if="!registration.checking && !registration.valid">
+              <div class="mt-6 space-y-4">
+                <p
+                  x-text="registration.error || 'This invitation link is invalid, expired, or already used.'"
+                  class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+                ></p>
+                <p class="text-sm text-slate-600">
+                  Please contact the contest organizer to request a new invitation.
+                </p>
+              </div>
+            </template>
+
+            <template x-if="!registration.checking && registration.valid">
+              <div>
+                <p class="mt-4 text-sm text-slate-600">
+                  You have been invited to
+                  <span class="font-semibold text-epic-navy" x-text="registration.contestName"></span>.
+                  Complete your details to create your participant account for
+                  <span class="font-medium" x-text="registration.email"></span>.
+                </p>
+                <form class="mt-6 space-y-4" @submit.prevent="acceptInvitation()">
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">First name</span>
+                    <input
+                      x-model="registration.form.first_name"
+                      type="text"
+                      required
+                      autocomplete="given-name"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Last name</span>
+                    <input
+                      x-model="registration.form.last_name"
+                      type="text"
+                      required
+                      autocomplete="family-name"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Phone number (optional)</span>
+                    <input
+                      x-model="registration.form.phone_number"
+                      type="tel"
+                      autocomplete="tel"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Password</span>
+                    <input
+                      x-model="registration.form.password"
+                      type="password"
+                      required
+                      minlength="8"
+                      autocomplete="new-password"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Confirm password</span>
+                    <input
+                      x-model="registration.form.password_confirm"
+                      type="password"
+                      required
+                      autocomplete="new-password"
+                      class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <p
+                    x-show="registration.error"
+                    x-text="registration.error"
+                    class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+                  ></p>
+                  <button
+                    type="submit"
+                    :disabled="registration.submitting"
+                    class="w-full rounded-md bg-epic-navy px-5 py-3 font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span x-show="!registration.submitting">Create account</span>
+                    <span x-show="registration.submitting">Creating account...</span>
+                  </button>
+                </form>
+              </div>
+            </template>
+          </section>
+        </main>
+      </template>
+
+      <template x-if="state === 'dashboard'">
+        <main class="min-h-screen bg-slate-50 text-slate-900">
+          <div
+            x-show="impersonating"
+            class="flex items-center justify-between gap-4 bg-amber-400 px-6 py-2 text-sm font-semibold text-amber-900"
+          >
+            <span>Impersonating <span x-text="impersonating"></span></span>
+            <button
+              type="button"
+              @click="stopImpersonating()"
+              class="rounded-md bg-amber-900 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-800"
+            >
+              Return to admin
+            </button>
+          </div>
+          <nav class="border-b border-slate-200 bg-white">
+            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+              <div class="flex items-center gap-3">
+                <div class="w-28">
+                  <svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg" aria-label="EPIC logo">
+                    <rect width="580" height="180" fill="#ffffff" />
+                    <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round" />
+                    <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="96" cy="88" r="4.5" fill="#0096c7" />
+                    <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45" />
+                    <text x="188" y="126" font-family="'Segoe UI',system-ui,sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+                    <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5" />
+                    <text x="374" y="78" font-family="'Segoe UI',system-ui,sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+                    <text x="374" y="100" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+                    <text x="374" y="119" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+                    <text x="374" y="138" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+                  </svg>
+                </div>
+                <span class="hidden text-sm font-semibold uppercase tracking-wide text-epic-navy sm:inline">Dashboard</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="max-w-[12rem] truncate text-sm font-medium text-slate-700" x-text="user.username"></span>
+                <button
+                  type="button"
+                  @click="logout()"
+                  class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </nav>
+          <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+            <div class="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <template x-if="user.role === 'PARTICIPANT'">
+                <div x-init="loadParticipantDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Participant Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Join active contests, watch live sensor streams, and submit predictions.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setParticipantTab('contests')"
+                        :class="participant.tab === 'contests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Contests
+                      </button>
+                      <button
+                        type="button"
+                        @click="setParticipantTab('activity')"
+                        :class="participant.tab === 'activity' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        My Activity
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="participant.error" x-text="participant.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="participant.success" x-text="participant.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="participant.tab === 'contests'" class="space-y-6">
+                    <details class="rounded-md border border-cyan-200 bg-cyan-50">
+                      <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-epic-navy select-none">
+                        Getting started — how to prepare a solution
+                      </summary>
+                      <div class="px-5 pb-5 pt-2 space-y-3 text-sm text-slate-700 leading-6">
+                        <p>
+                          Every contest runs in <strong>two phases</strong>. During the
+                          <strong>observation phase</strong> you watch live sensor data and build your model.
+                          After the <strong>evaluation window</strong> closes, you submit a single forecast
+                          covering every step in that window — all from a Jupyter notebook using the
+                          <strong>epic-elios-client</strong> SDK.
+                        </p>
+                        <ol class="list-decimal list-inside space-y-1">
+                          <li>Install the SDK: <code class="bg-white rounded px-1 py-0.5 border border-slate-200">pip install "epic-elios-client[notebook]"</code></li>
+                          <li>Register for a contest and stream the observation phase with <code class="bg-white rounded px-1 py-0.5 border border-slate-200">client.collect()</code>.</li>
+                          <li>Train your model on the collected data (the evaluation window is hidden).</li>
+                          <li>Once the submission window opens, submit your forecast via <code class="bg-white rounded px-1 py-0.5 border border-slate-200">client.submit()</code>.</li>
+                        </ol>
+                        <p class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                          <strong>Tip:</strong> The contest card shows the current phase — <em>Observation</em>, <em>Evaluation</em>, or <em>Submission open</em>. You can only submit once the submission window is open.
+                        </p>
+                        <div class="flex flex-wrap gap-3 pt-1">
+                          <a href="https://pypi.org/project/epic-elios-client/" target="_blank" rel="noopener"
+                             class="inline-flex items-center gap-1.5 rounded-md border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-epic-navy hover:border-epic-cyan transition">
+                            SDK on PyPI
+                          </a>
+                          <a href="https://github.com/Elios-Lab/epic/blob/main/notebooks/quickstart.ipynb" target="_blank" rel="noopener"
+                             class="inline-flex items-center gap-1.5 rounded-md border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-epic-navy hover:border-epic-cyan transition">
+                            Quickstart Notebook
+                          </a>
+                          <a href="https://github.com/Elios-Lab/epic/blob/main/notebooks/mass_spring_damper_forecasting.ipynb" target="_blank" rel="noopener"
+                             class="inline-flex items-center gap-1.5 rounded-md border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-epic-navy hover:border-epic-cyan transition">
+                            Example Solution
+                          </a>
+                          <a href="https://epic.elioslab.net/docs" target="_blank" rel="noopener"
+                             class="inline-flex items-center gap-1.5 rounded-md border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-epic-navy hover:border-epic-cyan transition">
+                            API Docs
+                          </a>
+                        </div>
+                      </div>
+                    </details>
+                    <template x-if="!participant.connectedContest">
+                      <div class="space-y-5">
+                        <div class="flex items-center justify-between gap-4">
+                          <h2 class="text-xl font-semibold text-slate-900">Active Contests</h2>
+                          <button
+                            type="button"
+                            @click="loadActiveContests()"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        <p x-show="participant.loadingContests" class="text-sm text-slate-500">Loading active contests...</p>
+                        <div x-show="!participant.loadingContests && participant.activeContests.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                          No active contests are available right now.
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <template x-for="contest in participant.activeContests" :key="contest.id || contest.contest_id">
+                            <article class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                              <div class="flex min-h-28 flex-col justify-between gap-4">
+                                <div>
+                                  <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                                  <dl class="mt-3 space-y-2 text-sm text-slate-600">
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Twin</dt>
+                                      <dd x-text="contest.twin_id" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Sampling</dt>
+                                      <dd><span x-text="contest.sampling_rate_hz"></span> Hz</dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Start</dt>
+                                      <dd x-text="formatDate(contest.start_date)" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Observation horizon</dt>
+                                      <dd x-text="formatDate(contest.end_of_observation)" class="text-right"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">Prediction horizon</dt>
+                                      <dd class="text-right"><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                      <dt class="font-medium text-slate-500">End</dt>
+                                      <dd x-text="formatDate(contest.end_date)" class="text-right"></dd>
+                                    </div>
+                                  </dl>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    @click="isRegistered(contest) ? connectContest(contest) : registerContest(contest)"
+                                    class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100"
+                                  >
+                                    <span x-text="isRegistered(contest) ? 'Connect' : 'Register'"></span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    @click="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                    class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy focus:outline-none focus:ring-4 focus:ring-cyan-100"
+                                  >
+                                    <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop' : 'Monitor'"></span>
+                                  </button>
+                                </div>
+                              </div>
+                            </article>
+                          </template>
+                        </div>
+                        <div x-show="monitor.monitoredContest" class="space-y-3">
+                          <div class="flex items-center justify-between gap-4">
+                            <div>
+                              <h3 class="text-base font-semibold text-slate-900"
+                                  x-text="monitor.monitoredContest?.name"></h3>
+                              <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
+                            </div>
+                            <button
+                              type="button"
+                              @click="stopMonitor()"
+                              class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                            >
+                              Stop
+                            </button>
+                          </div>
+                          <p x-show="monitor.monitorError" x-text="monitor.monitorError"
+                             class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
+                          <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <div class="h-72">
+                              <canvas id="monitorChartParticipant" class="h-full w-full"></canvas>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="participant.connectedContest">
+                      <div class="space-y-6">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h2 class="text-xl font-semibold text-slate-900" x-text="participant.connectedContest.name"></h2>
+                            <p class="mt-1 text-sm text-slate-500">
+                              Live stream from <span x-text="participant.connectedContest.twin_id"></span>
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            @click="disconnectContest()"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                          <div class="h-80">
+                            <canvas x-ref="sensorChart" class="h-full w-full"></canvas>
+                          </div>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-3">
+                          <div class="rounded-md bg-slate-50 p-4">
+                            <div class="text-sm font-medium text-slate-500">Latest sequence</div>
+                            <div class="mt-1 text-2xl font-semibold text-epic-deep" x-text="participant.latestObservation.sequence_id ?? '-'"></div>
+                          </div>
+                          <div class="rounded-md bg-slate-50 p-4">
+                            <div class="text-sm font-medium text-slate-500">Latest timestamp</div>
+                            <div class="mt-1 text-lg font-semibold text-epic-deep" x-text="participant.latestObservation.timestamp || '-'"></div>
+                          </div>
+                          <div class="rounded-md p-4" :class="contestPhaseClass(participant.connectedContest)">
+                            <div class="text-sm font-medium opacity-70">Phase</div>
+                            <div class="mt-1 text-lg font-semibold" x-text="contestPhaseLabel(participant.connectedContest) || 'Observation'"></div>
+                          </div>
+                        </div>
+                        <div x-show="contestPhaseLabel(participant.connectedContest) !== 'Submission open'"
+                             class="rounded-md border border-cyan-200 bg-cyan-50 px-5 py-4 text-sm text-epic-navy">
+                          The stream is live during the <strong>observation phase</strong>. Collect data and build your model now.
+                          Submissions will be accepted once the evaluation window closes.
+                        </div>
+                        <form class="rounded-md border border-slate-200 bg-slate-50 p-5" @submit.prevent="submitPrediction()">
+                          <h3 class="text-lg font-semibold text-slate-900">Submit Prediction</h3>
+                          <p class="mt-1 text-sm text-slate-500">
+                            Provide one list of predicted values per required target variable, covering every step in the evaluation window
+                            (<code class="bg-white rounded px-1 border border-slate-200">eval_steps</code> values each).
+                          </p>
+                          <label class="mt-4 block">
+                            <span class="text-sm font-medium text-slate-700">Forecast payload JSON</span>
+                            <textarea
+                              x-model="participant.submissionPayload"
+                              rows="8"
+                              class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                            ></textarea>
+                          </label>
+                          <button
+                            type="submit"
+                            :disabled="participant.submitting"
+                            class="mt-5 rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <span x-show="!participant.submitting">Submit</span>
+                            <span x-show="participant.submitting">Submitting...</span>
+                          </button>
+                        </form>
+                      </div>
+                    </template>
+                  </div>
+
+                  <div x-show="participant.tab === 'activity'" class="space-y-5">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">My Activity</h2>
+                      <button
+                        type="button"
+                        @click="loadMyActivity()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="participant.loadingActivity" class="text-sm text-slate-500">Loading activity...</p>
+                    <div x-show="!participant.loadingActivity && participant.activity.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No registered contest activity yet.
+                    </div>
+                    <template x-for="contestActivity in participant.activity" :key="contestActivity.contest.id || contestActivity.contest.contest_id">
+                      <section class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <h3 x-text="contestActivity.contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                          <span x-text="contestActivity.contest.status" class="text-sm font-semibold text-epic-cyan"></span>
+                        </div>
+                        <div class="mt-4 overflow-x-auto">
+                          <table class="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead>
+                              <tr class="text-left text-slate-500">
+                                <th class="py-2 pr-4 font-semibold">Submitted</th>
+                                <th class="py-2 pr-4 font-semibold">Status</th>
+                                <th class="py-2 pr-4 font-semibold">Score</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200 bg-white">
+                              <template x-for="submission in contestActivity.submissions" :key="submission.submission_id">
+                                <tr>
+                                  <td class="py-3 pr-4" x-text="formatDate(submission.submitted_at)"></td>
+                                  <td class="py-3 pr-4" x-text="submission.status"></td>
+                                  <td class="py-3 pr-4" x-text="formatScore(submission.score)"></td>
+                                </tr>
+                              </template>
+                              <tr x-show="contestActivity.submissions.length === 0">
+                                <td colspan="3" class="py-4 text-slate-500">No submissions yet.</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <template x-if="user.role === 'ORGANIZER'">
+                <div x-init="loadOrganizerDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Organizer Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Create contests from templates and manage contest lifecycle.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setOrganizerTab('contests')"
+                        :class="organizer.tab === 'contests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        My Contests
+                      </button>
+                      <button
+                        type="button"
+                        @click="setOrganizerTab('new')"
+                        :class="organizer.tab === 'new' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        New Contest
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="organizer.error" x-text="organizer.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="organizer.success" x-text="organizer.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="organizer.tab === 'contests'" class="space-y-5">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">My Contests</h2>
+                      <button
+                        type="button"
+                        @click="loadOrganizerContests()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="organizer.loadingContests" class="text-sm text-slate-500">Loading contests...</p>
+                    <div x-show="!organizer.loadingContests && organizer.contests.length === 0" class="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                      No contests have been created yet.
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                      <template x-for="contest in organizer.contests" :key="contest.contest_id || contest.id">
+                        <article
+                          class="rounded-md border border-slate-200 bg-slate-50 p-5 transition hover:border-cyan-200"
+                          @click="toggleLeaderboard(contest)"
+                        >
+                          <!-- Title and badges -->
+                          <div class="flex flex-wrap items-center gap-2">
+                            <h3 x-text="contest.name" class="text-lg font-semibold text-epic-deep"></h3>
+                            <span
+                              x-text="contest.status"
+                              :class="statusBadgeClass(contest.status)"
+                              class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                            ></span>
+                            <template x-if="contest.end_of_observation && contest.status === 'ACTIVE'">
+                              <span
+                                :class="contestPhaseClass(contest)"
+                                class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                x-text="contestPhaseLabel(contest)"
+                              ></span>
+                            </template>
+                          </div>
+
+                          <!-- Action buttons -->
+                          <div class="mt-3 flex flex-wrap gap-2" @click.stop>
+                              <button
+                                x-show="contest.status === 'DRAFT'"
+                                type="button"
+                                @click="updateContestStatus(contest, 'ACTIVE')"
+                                class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                              >
+                                Activate
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                :disabled="organizer.pausingContestId === contestId(contest)"
+                                @click="pauseContest(contest)"
+                                class="rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.pausingContestId !== contestId(contest)">Pause</span>
+                                <span x-show="organizer.pausingContestId === contestId(contest)">Pausing…</span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'PAUSED'"
+                                type="button"
+                                :disabled="organizer.pausingContestId === contestId(contest)"
+                                @click="resumeContest(contest)"
+                                class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.pausingContestId !== contestId(contest)">Resume</span>
+                                <span x-show="organizer.pausingContestId === contestId(contest)">Resuming…</span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click.stop="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                              >
+                                <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop Monitor' : 'Monitor'"></span>
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click="updateContestStatus(contest, 'CLOSED')"
+                                class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                              >
+                                Close
+                              </button>
+                              <button
+                                x-show="contest.status === 'ACTIVE'"
+                                type="button"
+                                @click="startDeadlineExtension(contest)"
+                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                              >
+                                Extend Deadline
+                              </button>
+                              <button
+                                x-show="contest.status !== 'ACTIVE'"
+                                type="button"
+                                :disabled="organizer.deletingContestId === contestId(contest)"
+                                @click="deleteContest(contest)"
+                                class="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span x-show="organizer.deletingContestId !== contestId(contest)">Delete</span>
+                                <span x-show="organizer.deletingContestId === contestId(contest)">Deleting…</span>
+                              </button>
+                            </div>
+
+                          <!-- Contest details -->
+                          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600 sm:grid-cols-3">
+                            <div>
+                              <dt class="font-medium text-slate-500">Twin</dt>
+                              <dd x-text="contest.twin_id"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Participants</dt>
+                              <dd x-text="contest.participant_count ?? '-'"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Start</dt>
+                              <dd x-text="formatDate(contest.start_date)"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Observation horizon</dt>
+                              <dd x-text="formatDate(contest.end_of_observation)"></dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">Prediction horizon</dt>
+                              <dd><span x-text="contest.prediction_horizon_seconds"></span> s</dd>
+                            </div>
+                            <div>
+                              <dt class="font-medium text-slate-500">End</dt>
+                              <dd x-text="formatDate(contest.end_date)"></dd>
+                            </div>
+                          </dl>
+
+                          <form
+                            x-show="organizer.extendingContestId === contestId(contest)"
+                            class="mt-4 flex flex-col gap-3 rounded-md border border-cyan-200 bg-white p-4 sm:flex-row sm:items-end"
+                            @submit.prevent="extendContestDeadline(contest)"
+                            @click.stop
+                          >
+                            <label class="flex-1">
+                              <span class="text-sm font-medium text-slate-700">New end date</span>
+                              <input
+                                x-model="organizer.newEndDate"
+                                type="datetime-local"
+                                required
+                                class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                              />
+                            </label>
+                            <button type="submit" class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep">
+                              Save
+                            </button>
+                            <button type="button" @click="organizer.extendingContestId = null" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">
+                              Cancel
+                            </button>
+                          </form>
+
+                          <div x-show="organizer.expandedContestId === contestId(contest)" class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                            <div class="mb-3 flex items-center justify-between">
+                              <h4 class="font-semibold text-slate-900">Leaderboard</h4>
+                              <span x-show="organizer.loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                              <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                <thead>
+                                  <tr class="text-left text-slate-500">
+                                    <th class="py-2 pr-4 font-semibold">Rank</th>
+                                    <th class="py-2 pr-4 font-semibold">Username</th>
+                                    <th class="py-2 pr-4 font-semibold">Score</th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                  <template x-for="entry in organizer.leaderboards[contestId(contest)] || []" :key="entry.user_id">
+                                    <tr>
+                                      <td class="py-3 pr-4" x-text="entry.rank"></td>
+                                      <td class="py-3 pr-4" x-text="entry.username"></td>
+                                      <td class="py-3 pr-4" x-text="formatScore(entry.score)"></td>
+                                    </tr>
+                                  </template>
+                                  <tr x-show="(organizer.leaderboards[contestId(contest)] || []).length === 0">
+                                    <td colspan="3" class="py-4 text-slate-500">No leaderboard entries yet.</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div class="mt-6 border-t border-slate-200 pt-4">
+                              <div class="mb-3 flex items-center justify-between">
+                                <h4 class="font-semibold text-slate-900">Participants</h4>
+                                <span x-show="organizer.loadingParticipantsId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
+                              </div>
+
+                              <form class="mb-4" @submit.prevent="sendInvitations(contest)">
+                                <label class="block">
+                                  <span class="text-sm font-medium text-slate-700">Invite participants by email</span>
+                                  <textarea
+                                    x-model="organizer.inviteEmails"
+                                    rows="2"
+                                    placeholder="anna@example.com, marco@example.com — separate with commas, spaces, or new lines"
+                                    class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                                  ></textarea>
+                                </label>
+                                <button
+                                  type="submit"
+                                  :disabled="organizer.sendingInvites"
+                                  class="mt-2 rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <span x-show="!organizer.sendingInvites">Send invitations</span>
+                                  <span x-show="organizer.sendingInvites">Sending...</span>
+                                </button>
+                              </form>
+
+                              <h5 class="mb-2 text-sm font-semibold text-slate-700">Invited</h5>
+                              <table class="mb-4 min-w-full divide-y divide-slate-200 text-sm">
+                                <thead>
+                                  <tr class="text-left text-slate-500">
+                                    <th class="py-2 pr-4 font-semibold">Email</th>
+                                    <th class="py-2 pr-4 font-semibold">Status</th>
+                                    <th class="py-2 pr-4 font-semibold"></th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                  <template x-for="inv in organizer.invitations[contestId(contest)] || []" :key="inv.id">
+                                    <tr>
+                                      <td class="py-2 pr-4" x-text="inv.email"></td>
+                                      <td class="py-2 pr-4">
+                                        <span
+                                          x-text="inv.used ? 'Accepted' : 'Pending'"
+                                          :class="inv.used ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800' : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800'"
+                                        ></span>
+                                      </td>
+                                      <td class="py-2 pr-4 text-right">
+                                        <button
+                                          x-show="!inv.used"
+                                          type="button"
+                                          @click="revokeInvitation(contest, inv)"
+                                          class="text-xs font-semibold text-red-600 hover:text-red-800"
+                                        >Revoke</button>
+                                      </td>
+                                    </tr>
+                                  </template>
+                                  <tr x-show="(organizer.invitations[contestId(contest)] || []).length === 0">
+                                    <td colspan="3" class="py-3 text-slate-500">No invitations sent yet.</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              <h5 class="mb-2 text-sm font-semibold text-slate-700">Registered</h5>
+                              <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                <thead>
+                                  <tr class="text-left text-slate-500">
+                                    <th class="py-2 pr-4 font-semibold">Username</th>
+                                    <th class="py-2 pr-4 font-semibold">Email</th>
+                                    <th class="py-2 pr-4 font-semibold">Status</th>
+                                    <th class="py-2 pr-4 font-semibold"></th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                  <template x-for="reg in organizer.registrations[contestId(contest)] || []" :key="reg.registration_id">
+                                    <tr>
+                                      <td class="py-2 pr-4" x-text="reg.username"></td>
+                                      <td class="py-2 pr-4" x-text="reg.email"></td>
+                                      <td class="py-2 pr-4" x-text="reg.status"></td>
+                                      <td class="py-2 pr-4 text-right">
+                                        <button
+                                          x-show="reg.status === 'REGISTERED'"
+                                          type="button"
+                                          @click="removeParticipant(contest, reg)"
+                                          class="text-xs font-semibold text-red-600 hover:text-red-800"
+                                        >Remove</button>
+                                      </td>
+                                    </tr>
+                                  </template>
+                                  <tr x-show="(organizer.registrations[contestId(contest)] || []).length === 0">
+                                    <td colspan="4" class="py-3 text-slate-500">No registered participants yet.</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </article>
+                      </template>
+                    </div>
+
+                    <div x-show="monitor.monitoredContest" class="space-y-3">
+                      <div class="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 class="text-base font-semibold text-slate-900"
+                              x-text="monitor.monitoredContest?.name"></h3>
+                          <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
+                        </div>
+                        <button
+                          type="button"
+                          @click="stopMonitor()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                      <p x-show="monitor.monitorError" x-text="monitor.monitorError"
+                         class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
+                      <div class="rounded-md border border-slate-200 bg-white p-4">
+                        <div class="h-72">
+                          <canvas id="monitorChartOrganizer" class="h-full w-full"></canvas>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div x-show="organizer.tab === 'new'" class="space-y-5">
+                    <template x-if="organizer.newStep === 1">
+                      <div class="space-y-5">
+                        <div>
+                          <h2 class="text-xl font-semibold text-slate-900">Choose a Template</h2>
+                          <p class="mt-1 text-sm text-slate-600">Templates provide a ready-made twin, sensors, fault schedule, and initial conditions.</p>
+                        </div>
+                        <p x-show="organizer.loadingTemplates" class="text-sm text-slate-500">Loading templates...</p>
+                        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <template x-for="template in organizer.templates" :key="template.template_id">
+                            <button
+                              type="button"
+                              @click="selectTemplate(template)"
+                              class="rounded-md border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-epic-cyan hover:bg-cyan-50"
+                            >
+                              <h3 x-text="template.name" class="text-lg font-semibold text-epic-deep"></h3>
+                              <p class="mt-2 text-sm font-medium text-epic-cyan" x-text="template.twin_id"></p>
+                              <p class="mt-3 text-sm leading-6 text-slate-600" x-text="template.description"></p>
+                              <p class="mt-3 text-xs font-medium text-slate-500">
+                                Targets:
+                                <span x-text="(template.target_variables || []).join(', ') || 'all selected sensors'"></span>
+                              </p>
+                            </button>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="organizer.newStep === 2">
+                      <form class="space-y-5" @submit.prevent="createContest()">
+                        <div class="flex items-center justify-between gap-4">
+                          <div>
+                            <h2 class="text-xl font-semibold text-slate-900">Create Contest</h2>
+                            <p class="mt-1 text-sm text-slate-600">
+                              Based on <span x-text="organizer.selectedTemplate?.name"></span>
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            @click="organizer.newStep = 1"
+                            class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                          >
+                            Back
+                          </button>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Contest name</span>
+                            <input x-model="organizer.form.name" type="text" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Visibility</span>
+                            <select x-model="organizer.form.visibility" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                              <option value="PUBLIC">PUBLIC</option>
+                              <option value="PRIVATE">PRIVATE</option>
+                            </select>
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Start date</span>
+                            <input x-model="organizer.form.start_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">End date</span>
+                            <input x-model="organizer.form.end_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Sampling rate (Hz)</span>
+                            <input x-model.number="organizer.form.sampling_rate_hz" type="number" min="0.1" step="0.1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                          </label>
+                          <label class="block">
+                            <span class="text-sm font-medium text-slate-700">Score against</span>
+                            <select x-model="organizer.form.score_against" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                              <option value="ground_truth">Ground truth — noiseless latent state (recommended)</option>
+                              <option value="sensors">Sensor readings — noisy measurements</option>
+                            </select>
+                          </label>
+                          <label class="block md:col-span-2">
+                            <span class="text-sm font-medium text-slate-700">Description</span>
+                            <textarea x-model="organizer.form.description" rows="3" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                          </label>
+                          <div class="md:col-span-2 rounded-md border border-cyan-200 bg-cyan-50 p-4 space-y-4">
+                            <div>
+                              <p class="text-sm font-semibold text-epic-navy">Two-phase structure (required)</p>
+                              <p class="mt-1 text-xs text-slate-600">All contests use a two-phase model: participants observe the live stream, then forecast the hidden evaluation window.</p>
+                            </div>
+                            <div class="grid gap-4 sm:grid-cols-2">
+                              <label class="block">
+                                <span class="text-sm font-medium text-slate-700">Observation horizon (days)</span>
+                                <p class="mt-0.5 text-xs text-slate-500">Duration of the live sensor stream, starting from the contest start date.</p>
+                                <input x-model.number="organizer.form.observation_horizon_days" type="number" min="1" step="1" required
+                                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                              </label>
+                              <label class="block">
+                                <span class="text-sm font-medium text-slate-700">Prediction horizon (seconds)</span>
+                                <p class="mt-0.5 text-xs text-slate-500">Duration of the hidden evaluation window. Participants forecast this period.</p>
+                                <input x-model.number="organizer.form.prediction_horizon_seconds" type="number" min="1" step="1" required
+                                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- Sensor configuration -->
+                        <div class="space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-slate-700">Sensors</span>
+                            <span class="text-xs text-slate-400">Select the sensors to include and adjust their parameters.</span>
+                          </div>
+                          <p x-show="organizer.loadingCatalog" class="text-sm text-slate-400">Loading sensors…</p>
+                          <template x-if="!organizer.loadingCatalog && organizer.form.sensor_selections.length === 0">
+                            <p class="text-sm text-slate-400">No sensors available for this twin.</p>
+                          </template>
+                          <template x-for="sensor in organizer.form.sensor_selections" :key="sensor.sensor_id">
+                            <div class="rounded-md border bg-white p-3 transition" :class="sensor.enabled ? 'border-cyan-300' : 'border-slate-200'">
+                              <!-- Header row: toggle + name -->
+                              <div class="flex items-center gap-3">
+                                <input type="checkbox" x-model="sensor.enabled"
+                                  class="h-4 w-4 rounded border-slate-300 text-epic-cyan focus:ring-cyan-200" />
+                                <span class="font-medium text-slate-800" x-text="sensor.name"></span>
+                                <span class="text-xs text-slate-400" x-text="sensor.unit"></span>
+                                <label x-show="sensor.enabled" class="ml-auto inline-flex items-center gap-2 text-xs font-medium text-epic-navy">
+                                  <input
+                                    type="checkbox"
+                                    x-model="sensor.target_selected"
+                                    class="h-4 w-4 rounded border-slate-300 text-epic-cyan focus:ring-cyan-200"
+                                  />
+                                  Forecast target
+                                </label>
+                              </div>
+                              <!-- Parameters (visible only when enabled) -->
+                              <div x-show="sensor.enabled" class="mt-3 space-y-3">
+                                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                  <label class="block">
+                                    <span class="text-xs font-medium text-slate-500">Noise σ</span>
+                                    <input type="number" x-model.number="sensor.noise_std" min="0" step="0.001"
+                                      class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                  </label>
+                                  <label class="block">
+                                    <span class="text-xs font-medium text-slate-500">Gain</span>
+                                    <input type="number" x-model.number="sensor.gain" step="0.01"
+                                      class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                  </label>
+                                  <label class="block">
+                                    <span class="text-xs font-medium text-slate-500">Bias</span>
+                                    <input type="number" x-model.number="sensor.bias" step="0.001"
+                                      class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                  </label>
+                                  <label class="block">
+                                    <span class="text-xs font-medium text-slate-500">Drift rate</span>
+                                    <input type="number" x-model.number="sensor.drift_rate" step="0.0001"
+                                      class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                  </label>
+                                </div>
+                                <!-- Advanced parameters -->
+                                <div>
+                                  <button type="button" @click="sensor.showAdvanced = !sensor.showAdvanced"
+                                    class="text-xs font-medium text-slate-400 hover:text-epic-navy">
+                                    <span x-text="sensor.showAdvanced ? '▴ Hide advanced' : '▾ Show advanced'"></span>
+                                  </button>
+                                  <div x-show="sensor.showAdvanced" class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">Min value</span>
+                                      <input type="number" x-model="sensor.min_value" placeholder="none"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">Max value</span>
+                                      <input type="number" x-model="sensor.max_value" placeholder="none"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">Quantization</span>
+                                      <input type="number" x-model.number="sensor.quantization" min="0" step="0.001"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">Latency (steps)</span>
+                                      <input type="number" x-model.number="sensor.latency_steps" min="0" step="1"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">P(false reading)</span>
+                                      <input type="number" x-model.number="sensor.p_false_reading" min="0" max="1" step="0.01"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                    <label class="block">
+                                      <span class="text-xs font-medium text-slate-500">P(outlier)</span>
+                                      <input type="number" x-model.number="sensor.p_outlier" min="0" max="1" step="0.01"
+                                        class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </template>
+                        </div>
+
+                        <!-- Fault schedule -->
+                        <div class="space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-slate-700">Fault schedule</span>
+                            <button type="button" @click="addFaultEntry()"
+                              :disabled="!organizer.catalogProfile || organizer.catalogProfile.faults.length === 0"
+                              class="rounded-md bg-epic-navy px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-epic-deep disabled:opacity-40">
+                              + Add fault
+                            </button>
+                          </div>
+                          <p x-show="organizer.form.fault_entries.length === 0" class="text-sm text-slate-400">
+                            No faults scheduled — the simulation will run without injected faults.
+                          </p>
+                          <template x-for="(entry, idx) in organizer.form.fault_entries" :key="idx">
+                            <div class="rounded-md border border-orange-200 bg-orange-50 p-3">
+                              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <label class="block sm:col-span-1">
+                                  <span class="text-xs font-medium text-slate-500">Fault type</span>
+                                  <select x-model="entry.fault_id"
+                                    class="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-epic-cyan">
+                                    <template x-for="fault in (organizer.catalogProfile?.faults || [])" :key="fault.fault_id">
+                                      <option :value="fault.fault_id" x-text="fault.name"></option>
+                                    </template>
+                                  </select>
+                                </label>
+                                <label class="block">
+                                  <span class="text-xs font-medium text-slate-500">Start time (s)</span>
+                                  <input type="number" x-model.number="entry.start_time" min="0" step="1"
+                                    class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                </label>
+                                <label class="block">
+                                  <span class="text-xs font-medium text-slate-500">End time (s)</span>
+                                  <input type="number" x-model="entry.end_time" min="0" step="1" placeholder="never"
+                                    class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                </label>
+                                <label class="block">
+                                  <span class="text-xs font-medium text-slate-500">Severity (0 – 1)</span>
+                                  <input type="number" x-model.number="entry.severity" min="0" max="1" step="0.05"
+                                    class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-epic-cyan" />
+                                </label>
+                              </div>
+                              <div class="mt-2 flex items-center gap-2">
+                                <span class="text-xs text-slate-400" x-text="(organizer.catalogProfile?.faults || []).find(f => f.fault_id === entry.fault_id)?.description || ''"></span>
+                                <button type="button" @click="removeFaultEntry(idx)"
+                                  class="ml-auto text-xs font-medium text-red-500 hover:text-red-700">Remove</button>
+                              </div>
+                            </div>
+                          </template>
+                        </div>
+                        <button
+                          type="submit"
+                          :disabled="organizer.creating"
+                          class="rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span x-show="!organizer.creating">Create</span>
+                          <span x-show="organizer.creating">Creating...</span>
+                        </button>
+                      </form>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <template x-if="user.role === 'ADMINISTRATOR'">
+                <div x-init="loadAdminDashboard()" class="space-y-6">
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h1 class="text-3xl font-semibold text-epic-deep">Administrator Dashboard</h1>
+                      <p class="mt-2 text-slate-600">Monitor platform activity and manage users.</p>
+                    </div>
+                    <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        @click="setAdminTab('overview')"
+                        :class="admin.tab === 'overview' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Platform Overview
+                      </button>
+                      <button
+                        type="button"
+                        @click="setAdminTab('users')"
+                        :class="admin.tab === 'users' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Users
+                      </button>
+                    </div>
+                  </div>
+
+                  <p x-show="admin.error" x-text="admin.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+                  <p x-show="admin.success" x-text="admin.success" class="rounded-md bg-cyan-50 px-4 py-3 text-sm text-epic-navy"></p>
+
+                  <div x-show="admin.tab === 'overview'" class="space-y-6">
+                    <div class="flex items-center justify-between gap-4">
+                      <h2 class="text-xl font-semibold text-slate-900">Platform Overview</h2>
+                      <button
+                        type="button"
+                        @click="loadAdminOverview()"
+                        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p x-show="admin.loadingOverview" class="text-sm text-slate-500">Loading platform overview...</p>
+                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Total contests</div>
+                        <div class="mt-2 text-3xl font-semibold text-epic-deep" x-text="admin.contests.length"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Active contests</div>
+                        <div class="mt-2 text-3xl font-semibold text-emerald-700" x-text="admin.contests.filter((contest) => contest.status === 'ACTIVE').length"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Registered users</div>
+                        <div class="mt-2 text-3xl font-semibold text-epic-deep" x-text="admin.totalUsers"></div>
+                      </div>
+                      <div class="rounded-md border border-slate-200 bg-slate-50 p-5">
+                        <div class="text-sm font-medium uppercase tracking-wide text-slate-500">Status breakdown</div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                          <template x-for="status in Object.keys(contestsByStatus())" :key="status">
+                            <span :class="statusBadgeClass(status)" class="rounded-full px-2.5 py-1 text-xs font-semibold">
+                              <span x-text="status"></span>
+                              <span x-text="contestsByStatus()[status]"></span>
+                            </span>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-md border border-slate-200">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                          <tr class="text-left text-slate-500">
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('name')" class="hover:text-epic-navy">Name</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('status')" class="hover:text-epic-navy">Status</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('start_date')" class="hover:text-epic-navy">Start</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">
+                              <button type="button" @click="sortAdminContests('end_date')" class="hover:text-epic-navy">End</button>
+                            </th>
+                            <th class="px-4 py-3 font-semibold">Transition</th>
+                            <th class="px-4 py-3 font-semibold">Monitor</th>
+                            <th class="px-4 py-3 font-semibold">Pause / Resume</th>
+                            <th class="px-4 py-3 font-semibold">Delete</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 bg-white">
+                          <template x-for="contest in sortedAdminContests()" :key="contest.contest_id || contest.id">
+                            <tr>
+                              <td class="px-4 py-3 font-medium text-slate-900" x-text="contest.name"></td>
+                              <td class="px-4 py-3">
+                                <span x-text="contest.status" :class="statusBadgeClass(contest.status)" class="rounded-full px-2.5 py-1 text-xs font-semibold"></span>
+                              </td>
+                              <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.start_date)"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="formatDate(contest.end_date)"></td>
+                              <td class="px-4 py-3">
+                                <select
+                                  @change="transitionAdminContest(contest, $event.target.value); $event.target.value = ''"
+                                  class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                                >
+                                  <option value="">Choose</option>
+                                  <template x-for="status in allowedStatusTransitions(contest.status)" :key="status">
+                                    <option :value="status" x-text="status"></option>
+                                  </template>
+                                </select>
+                              </td>
+                              <td class="px-4 py-3">
+                                <button
+                                  x-show="contest.status === 'ACTIVE'"
+                                  type="button"
+                                  @click="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? stopMonitor() : startMonitor(contest)"
+                                  class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                >
+                                  <span x-text="monitor.monitoredContest && contestId(monitor.monitoredContest) === contestId(contest) ? 'Stop' : 'Monitor'"></span>
+                                </button>
+                              </td>
+                              <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                  <button
+                                    x-show="contest.status === 'ACTIVE'"
+                                    type="button"
+                                    :disabled="admin.pausingContestId === contestId(contest)"
+                                    @click="pauseContest(contest)"
+                                    class="rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <span x-show="admin.pausingContestId !== contestId(contest)">Pause</span>
+                                    <span x-show="admin.pausingContestId === contestId(contest)">Pausing…</span>
+                                  </button>
+                                  <button
+                                    x-show="contest.status === 'PAUSED'"
+                                    type="button"
+                                    :disabled="admin.pausingContestId === contestId(contest)"
+                                    @click="resumeContest(contest)"
+                                    class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <span x-show="admin.pausingContestId !== contestId(contest)">Resume</span>
+                                    <span x-show="admin.pausingContestId === contestId(contest)">Resuming…</span>
+                                  </button>
+                                </div>
+                              </td>
+                              <td class="px-4 py-3">
+                                <button
+                                  x-show="contest.status !== 'ACTIVE'"
+                                  type="button"
+                                  :disabled="admin.deletingContestId === contestId(contest)"
+                                  @click="deleteContest(contest)"
+                                  class="rounded-md border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <span x-show="admin.deletingContestId !== contestId(contest)">Delete</span>
+                                  <span x-show="admin.deletingContestId === contestId(contest)">Deleting…</span>
+                                </button>
+                                <span x-show="contest.status === 'ACTIVE'" class="text-xs text-slate-400">Close first</span>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div x-show="monitor.monitoredContest" class="space-y-3">
+                      <div class="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 class="text-base font-semibold text-slate-900"
+                              x-text="monitor.monitoredContest?.name"></h3>
+                          <p class="text-sm text-slate-500">Live sensor readings — read-only view</p>
+                        </div>
+                        <button
+                          type="button"
+                          @click="stopMonitor()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                      <p x-show="monitor.monitorError" x-text="monitor.monitorError"
+                         class="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800"></p>
+                      <div class="rounded-md border border-slate-200 bg-white p-4">
+                        <div class="h-72">
+                          <canvas id="monitorChartAdmin" class="h-full w-full"></canvas>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div x-show="admin.tab === 'users'" class="space-y-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <h2 class="text-xl font-semibold text-slate-900">Users</h2>
+                      <div class="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          x-model="admin.userSearch"
+                          type="search"
+                          placeholder="Search username or email"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                        />
+                        <button
+                          type="button"
+                          @click="admin.showCreateUser = !admin.showCreateUser"
+                          class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep"
+                        >
+                          New User
+                        </button>
+                        <button
+                          type="button"
+                          @click="loadAdminUsers()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                    <form
+                      x-show="admin.showCreateUser"
+                      @submit.prevent="createUser()"
+                      class="rounded-md border border-cyan-200 bg-cyan-50 p-5 space-y-4"
+                    >
+                      <h3 class="text-base font-semibold text-slate-900">New User</h3>
+                      <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Username</span>
+                          <input
+                            x-model="admin.createUserForm.username"
+                            type="text"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Email</span>
+                          <input
+                            x-model="admin.createUserForm.email"
+                            type="email"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Password</span>
+                          <input
+                            x-model="admin.createUserForm.password"
+                            type="password"
+                            required
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          />
+                        </label>
+                        <label class="block">
+                          <span class="text-sm font-medium text-slate-700">Role</span>
+                          <select
+                            x-model="admin.createUserForm.role"
+                            class="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                          >
+                            <option value="PARTICIPANT">PARTICIPANT</option>
+                            <option value="ORGANIZER">ORGANIZER</option>
+                            <option value="ADMINISTRATOR">ADMINISTRATOR</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div class="flex gap-3">
+                        <button
+                          type="submit"
+                          :disabled="admin.creatingUser"
+                          class="rounded-md bg-epic-navy px-5 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:opacity-60"
+                        >
+                          <span x-show="!admin.creatingUser">Create</span>
+                          <span x-show="admin.creatingUser">Creating...</span>
+                        </button>
+                        <button
+                          type="button"
+                          @click="admin.showCreateUser = false"
+                          class="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                    <p x-show="admin.loadingUsers" class="text-sm text-slate-500">Loading users...</p>
+                    <div class="overflow-x-auto rounded-md border border-slate-200">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                          <tr class="text-left text-slate-500">
+                            <th class="px-4 py-3 font-semibold">Username</th>
+                            <th class="px-4 py-3 font-semibold">Email</th>
+                            <th class="px-4 py-3 font-semibold">Role</th>
+                            <th class="px-4 py-3 font-semibold">Active</th>
+                            <th class="px-4 py-3 font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 bg-white">
+                          <template x-for="account in filteredAdminUsers()" :key="account.id || account.user_id">
+                            <tr>
+                              <td class="px-4 py-3 font-medium text-slate-900" x-text="account.username"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="account.email"></td>
+                              <td class="px-4 py-3">
+                                <span x-text="account.role" :class="roleBadgeClass(account.role)" class="rounded-full px-2.5 py-1 text-xs font-semibold"></span>
+                              </td>
+                              <td class="px-4 py-3">
+                                <span
+                                  x-text="account.is_active ? 'Active' : 'Inactive'"
+                                  :class="account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'"
+                                  class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                ></span>
+                              </td>
+                              <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                  <select
+                                    :value="account.role"
+                                    @change="updateUserRole(account, $event.target.value)"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                                  >
+                                    <option value="ADMINISTRATOR">ADMINISTRATOR</option>
+                                    <option value="ORGANIZER">ORGANIZER</option>
+                                    <option value="PARTICIPANT">PARTICIPANT</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    @click="toggleUserActive(account)"
+                                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                  >
+                                    <span x-text="account.is_active ? 'Deactivate' : 'Activate'"></span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    @click="impersonate(account)"
+                                    x-show="account.id !== user.id"
+                                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                  >
+                                    Impersonate
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </template>
+                          <tr x-show="filteredAdminUsers().length === 0">
+                            <td colspan="5" class="px-4 py-6 text-center text-slate-500">No users match the current search.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+        </main>
+      </template>
+
+      <!-- Delete-confirmation modal -->
+      <template x-if="deleteModal.open">
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="'delete-modal-title'"
+        >
+          <!-- backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            @click="deleteModal.cancel()"
+          ></div>
+
+          <!-- panel -->
+          <div class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
+            <div class="flex items-start gap-4">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <svg class="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <h3 id="delete-modal-title" class="text-base font-semibold text-slate-900">Delete contest</h3>
+                <p class="mt-1 text-sm text-slate-600">
+                  Are you sure you want to delete
+                  <strong x-text="deleteModal.contestName" class="text-slate-900"></strong>?
+                </p>
+                <p class="mt-2 text-sm text-red-700">
+                  This will permanently remove all associated data — registrations, submissions, scores, and sensor observations. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                @click="deleteModal.cancel()"
+                class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy focus:outline-none focus:ring-4 focus:ring-cyan-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                @click="deleteModal.confirm()"
+                class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <script>
+      function epicApp() {
+        return {
+          state: "landing",
+          loading: false,
+          error: "",
+          credentials: {
+            username: "",
+            password: "",
+          },
+          token: null,
+          originalToken: null,
+          impersonating: null,
+          user: {
+            id: "",
+            username: "",
+            role: "",
+          },
+          registration: {
+            token: "",
+            checking: false,
+            valid: false,
+            submitting: false,
+            contestName: "",
+            email: "",
+            error: "",
+            form: {
+              first_name: "",
+              last_name: "",
+              phone_number: "",
+              password: "",
+              password_confirm: "",
+            },
+          },
+          monitor: {
+            monitoredContest: null,
+            monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this.$el._monitorChart (non-reactive)
+            monitorSocket: null,
+            monitorError: "",
+          },
+          participant: {
+            tab: "contests",
+            dashboardLoaded: false,
+            loadingContests: false,
+            loadingActivity: false,
+            submitting: false,
+            activeContests: [],
+            registrations: [],
+            registeredContestIds: new Set(),
+            connectedContest: null,
+            latestObservation: {
+              sequence_id: null,
+              timestamp: "",
+            },
+            submissionPayload: JSON.stringify(
+              {
+                forecast: {
+                  sensor_id: [],
+                },
+              },
+              null,
+              2
+            ),
+            activity: [],
+            error: "",
+            success: "",
+          },
+          organizer: {
+            tab: "contests",
+            dashboardLoaded: false,
+            loadingContests: false,
+            loadingTemplates: false,
+            loadingLeaderboardId: null,
+            creating: false,
+            deletingContestId: null,
+            pausingContestId: null,
+            catalogProfile: null,
+            loadingCatalog: false,
+            contests: [],
+            templates: [],
+            selectedTemplate: null,
+            newStep: 1,
+            form: {
+              name: "",
+              description: "",
+              visibility: "PUBLIC",
+              start_date: "",
+              end_date: "",
+              sampling_rate_hz: 1,
+              twin_id: "",
+              sensor_selections: [],
+              fault_entries: [],
+              initial_conditions: null,
+              task_type: "FORECASTING",
+              metric_ids: ["mae"],
+              score_against: "ground_truth",
+              target_variables: [],
+              observation_horizon_days: 2,
+              prediction_horizon_seconds: 3600,
+            },
+            expandedContestId: null,
+            extendingContestId: null,
+            newEndDate: "",
+            leaderboards: {},
+            invitations: {},
+            registrations: {},
+            loadingParticipantsId: null,
+            inviteEmails: "",
+            sendingInvites: false,
+            error: "",
+            success: "",
+          },
+          deleteModal: {
+            open: false,
+            contestName: "",
+            confirm: () => {},
+            cancel: () => {},
+          },
+          admin: {
+            tab: "overview",
+            dashboardLoaded: false,
+            loadingOverview: false,
+            loadingUsers: false,
+            contests: [],
+            users: [],
+            totalUsers: 0,
+            contestSortKey: "name",
+            contestSortDirection: "asc",
+            deletingContestId: null,
+            pausingContestId: null,
+            userSearch: "",
+            createUserForm: { username: "", email: "", password: "", role: "PARTICIPANT" },
+            creatingUser: false,
+            showCreateUser: false,
+            error: "",
+            success: "",
+          },
+          sensorChart: null,
+          streamSocket: null,
+          init() {
+            // Invitation deep link: /register?token=… from the invitation email.
+            if (window.location.pathname === "/register") {
+              const inviteToken = new URLSearchParams(window.location.search).get("token");
+              this.startRegistration(inviteToken || "");
+              return;
+            }
+            const token = localStorage.getItem("epic_token");
+            if (!token) {
+              return;
+            }
+            this.token = token;
+            const payload = this.decodeToken(token);
+            if (payload && payload.username && payload.role) {
+              this.user = { id: payload.sub, username: payload.username, role: payload.role };
+              this.state = "dashboard";
+            } else {
+              this.logout();
+            }
+          },
+          async startRegistration(inviteToken) {
+            this.state = "register";
+            this.registration.token = inviteToken;
+            this.registration.error = "";
+            if (!inviteToken) {
+              this.registration.valid = false;
+              this.registration.error = "This invitation link is missing its token.";
+              return;
+            }
+            this.registration.checking = true;
+            try {
+              const response = await fetch(
+                `/api/v1/invitations/${encodeURIComponent(inviteToken)}`
+              );
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok || !data.valid) {
+                this.registration.valid = false;
+                this.registration.error =
+                  "This invitation link is invalid, expired, or already used.";
+                return;
+              }
+              this.registration.valid = true;
+              this.registration.contestName = data.contest_name || "an EPIC contest";
+              this.registration.email = data.email || "";
+            } catch (error) {
+              this.registration.valid = false;
+              this.registration.error = "Could not verify the invitation. Please try again.";
+            } finally {
+              this.registration.checking = false;
+            }
+          },
+          async acceptInvitation() {
+            this.registration.error = "";
+            if (this.registration.form.password !== this.registration.form.password_confirm) {
+              this.registration.error = "Passwords do not match.";
+              return;
+            }
+            this.registration.submitting = true;
+            try {
+              const response = await fetch(
+                `/api/v1/invitations/${encodeURIComponent(this.registration.token)}/accept`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    first_name: this.registration.form.first_name,
+                    last_name: this.registration.form.last_name,
+                    phone_number: this.registration.form.phone_number || null,
+                    password: this.registration.form.password,
+                  }),
+                }
+              );
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                const message =
+                  data.error?.message ||
+                  data.detail?.error?.message ||
+                  "Registration failed. The invitation may have expired.";
+                throw new Error(message);
+              }
+              // Log the new participant straight in.
+              this.token = data.access_token;
+              localStorage.setItem("epic_token", this.token);
+              const payload = this.decodeToken(this.token);
+              this.user = { id: payload.sub, username: payload.username, role: payload.role };
+              this.registration.form.password = "";
+              this.registration.form.password_confirm = "";
+              window.history.replaceState({}, "", "/");
+              this.state = "dashboard";
+            } catch (error) {
+              this.registration.error = error.message || "Registration failed.";
+            } finally {
+              this.registration.submitting = false;
+            }
+          },
+          showLogin() {
+            this.error = "";
+            this.state = "login";
+          },
+          async login() {
+            this.loading = true;
+            this.error = "";
+            try {
+              const response = await fetch("/api/v1/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(this.credentials),
+              });
+              if (!response.ok) {
+                throw new Error("Invalid username or password.");
+              }
+              const data = await response.json();
+              this.token = data.access_token;
+              localStorage.setItem("epic_token", this.token);
+              const payload = this.decodeToken(this.token);
+              this.user = {
+                id: payload.sub,
+                username: payload.username,
+                role: payload.role,
+              };
+              this.credentials.password = "";
+              this.state = "dashboard";
+            } catch (error) {
+              this.error = error.message || "Login failed.";
+              localStorage.removeItem("epic_token");
+              this.token = null;
+            } finally {
+              this.loading = false;
+            }
+          },
+          logout() {
+            this.disconnectContest();
+            localStorage.removeItem("epic_token");
+            this.token = null;
+            this.user = { id: "", username: "", role: "" };
+            this.credentials.password = "";
+            this.error = "";
+            this.state = "landing";
+          },
+          async apiRequest(path, options = {}) {
+            const headers = {
+              ...(options.headers || {}),
+              Authorization: `Bearer ${this.token}`,
+            };
+            if (options.body !== undefined) {
+              headers["Content-Type"] = "application/json";
+            }
+            const response = await fetch(path, { ...options, headers });
+            const text = await response.text();
+            let data = {};
+            try {
+              data = text ? JSON.parse(text) : {};
+            } catch (_) {}
+            if (!response.ok) {
+              const message = data.error?.message || `Request failed (${response.status})`;
+              const error = new Error(message);
+              error.status = response.status;
+              throw error;
+            }
+            return data;
+          },
+          async loadParticipantDashboard() {
+            if (this.participant.dashboardLoaded) {
+              return;
+            }
+            this.participant.dashboardLoaded = true;
+            await this.loadActiveContests();
+          },
+          async setParticipantTab(tab) {
+            this.participant.tab = tab;
+            this.participant.error = "";
+            this.participant.success = "";
+            this.stopMonitor();
+            if (tab === "contests") {
+              await this.loadActiveContests();
+            }
+            if (tab === "activity") {
+              this.disconnectContest();
+              await this.loadMyActivity();
+            }
+          },
+          contestId(contest) {
+            return contest.contest_id || contest.id;
+          },
+          formatDate(value) {
+            if (!value) {
+              return "-";
+            }
+            return new Date(value).toLocaleString();
+          },
+          formatScore(value) {
+            if (value === null || value === undefined) {
+              return "-";
+            }
+            return Number(value).toFixed(4);
+          },
+          contestPhaseLabel(contest) {
+            if (!contest.end_of_observation) return "";
+            const now = Date.now();
+            const obsEnd = new Date(contest.end_of_observation).getTime();
+            const evalEnd = obsEnd + (contest.prediction_horizon_seconds || 0) * 1000;
+            if (now < obsEnd) return "Observation";
+            if (now < evalEnd) return "Evaluation";
+            return "Submission open";
+          },
+          contestPhaseClass(contest) {
+            if (!contest.end_of_observation) return "";
+            const now = Date.now();
+            const obsEnd = new Date(contest.end_of_observation).getTime();
+            const evalEnd = obsEnd + (contest.prediction_horizon_seconds || 0) * 1000;
+            if (now < obsEnd) return "bg-cyan-100 text-cyan-800";
+            if (now < evalEnd) return "bg-purple-100 text-purple-800";
+            return "bg-emerald-100 text-emerald-800";
+          },
+          statusBadgeClass(status) {
+            const classes = {
+              ACTIVE: "bg-emerald-100 text-emerald-800",
+              SCHEDULED: "bg-yellow-100 text-yellow-800",
+              DRAFT: "bg-slate-200 text-slate-700",
+              PAUSED: "bg-amber-100 text-amber-800",
+              CLOSED: "bg-red-100 text-red-800",
+              ARCHIVED: "bg-slate-300 text-slate-700",
+            };
+            return classes[status] || "bg-slate-200 text-slate-700";
+          },
+          roleBadgeClass(role) {
+            const classes = {
+              ADMINISTRATOR: "bg-blue-100 text-blue-800",
+              ORGANIZER: "bg-emerald-100 text-emerald-800",
+              PARTICIPANT: "bg-slate-200 text-slate-700",
+            };
+            return classes[role] || "bg-slate-200 text-slate-700";
+          },
+          toLocalDateTime(value) {
+            if (!value) {
+              return "";
+            }
+            const date = new Date(value);
+            const offsetMs = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+          },
+          toApiDateTime(value) {
+            return new Date(value).toISOString();
+          },
+          async loadRegistrations() {
+            const response = await this.apiRequest("/api/v1/contest-registrations");
+            this.participant.registrations = response.registrations || [];
+            this.participant.registeredContestIds = new Set(
+              this.participant.registrations
+                .filter((registration) => registration.status === "REGISTERED")
+                .map((registration) => registration.contest_id)
+            );
+          },
+          async loadActiveContests() {
+            this.participant.loadingContests = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              await this.loadRegistrations();
+              const response = await this.apiRequest("/api/v1/contests?status=ACTIVE");
+              this.participant.activeContests = response.contests || [];
+            } catch (error) {
+              this.participant.error = error.message || "Unable to load active contests.";
+            } finally {
+              this.participant.loadingContests = false;
+            }
+          },
+          isRegistered(contest) {
+            return this.participant.registeredContestIds.has(this.contestId(contest));
+          },
+          async registerContest(contest) {
+            this.participant.error = "";
+            this.participant.success = "";
+            const contestId = this.contestId(contest);
+            try {
+              await this.apiRequest("/api/v1/contest-registrations", {
+                method: "POST",
+                body: JSON.stringify({ contest_id: contestId }),
+              });
+              this.participant.registeredContestIds = new Set([
+                ...this.participant.registeredContestIds,
+                contestId,
+              ]);
+              this.participant.success = "Registration confirmed.";
+            } catch (error) {
+              if (error.status === 409 && error.message.includes("Already registered")) {
+                this.participant.registeredContestIds = new Set([
+                  ...this.participant.registeredContestIds,
+                  contestId,
+                ]);
+                this.participant.success = "Registration confirmed.";
+                return;
+              }
+              this.participant.error = error.message || "Registration failed.";
+            }
+          },
+          connectContest(contest) {
+            this.disconnectContest();
+            this.participant.error = "";
+            this.participant.success = "";
+            this.participant.connectedContest = contest;
+            this.participant.latestObservation = { sequence_id: null, timestamp: "" };
+            this.participant.submissionPayload = JSON.stringify(
+              {
+                forecast: {
+                  sensor_id: [],
+                },
+              },
+              null,
+              2
+            );
+            this.$nextTick(() => {
+              this.createSensorChart();
+              this.openStream(contest);
+            });
+          },
+          disconnectContest() {
+            this.stopMonitor();
+            if (this.streamSocket) {
+              this.streamSocket.close();
+              this.streamSocket = null;
+            }
+            if (this.sensorChart) {
+              this.sensorChart.destroy();
+              this.sensorChart = null;
+            }
+            this.participant.connectedContest = null;
+          },
+          startMonitor(contest) {
+            this.stopMonitor();
+            this.monitor.monitoredContest = contest;
+            this.monitor.monitorError = "";
+            this.$el._monitorChartReady = false;
+            // Open the stream immediately so no messages are missed while the
+            // chart initialises. Messages are buffered and flushed once the
+            // chart is ready.
+            this.$el._monitorBuffer = [];
+            this.openMonitorStream(contest);
+            // Wait for Alpine to show the canvas, then create the chart.
+            this.$nextTick(() => this.createMonitorChart());
+          },
+          stopMonitor() {
+            if (this.monitor.monitorSocket) {
+              this.monitor.monitorSocket.close();
+              this.monitor.monitorSocket = null;
+            }
+            if (this.$el._monitorChart) {
+              this.$el._monitorChart.destroy();
+              this.$el._monitorChart = null;
+            }
+            this.monitor.monitorChart = null;
+            this.monitor.monitoredContest = null;
+            this.$el._monitorChartReady = false;
+            this.$el._monitorBuffer = [];
+          },
+          createMonitorChart() {
+            const ids = ["monitorChartParticipant", "monitorChartOrganizer", "monitorChartAdmin"];
+            const canvas = ids.map(id => document.getElementById(id)).find(el => el && el.offsetParent !== null);
+            if (!canvas || typeof Chart === "undefined") {
+              setTimeout(() => this.createMonitorChart(), 50);
+              return;
+            }
+            // Wait until the canvas has real pixel dimensions (x-show may still
+            // be applying display:none on the parent at this tick).
+            if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+              setTimeout(() => this.createMonitorChart(), 50);
+              return;
+            }
+            // Destroy any existing instance — both our reference and any
+            // Chart.js-internal registration against the canvas element.
+            Chart.getChart(canvas)?.destroy();
+            this.$el._monitorChart = null;
+            // Use responsive:false and set pixel size explicitly to avoid
+            // Chart.js infinite resize loops caused by CSS percentage heights.
+            canvas.width  = canvas.parentElement.clientWidth  || 600;
+            canvas.height = canvas.parentElement.clientHeight || 288;
+            this.$el._monitorChart = new Chart(canvas, {
+              type: "line",
+              data: { labels: [], datasets: [] },
+              options: {
+                animation: false,
+                responsive: false,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: "nearest" },
+                scales: {
+                  x: { ticks: { color: "#475569", maxTicksLimit: 10 }, grid: { color: "#e2e8f0" } },
+                  y: { ticks: { color: "#475569" }, grid: { color: "#e2e8f0" } },
+                },
+                plugins: { legend: { labels: { color: "#0f172a" } } },
+              },
+            });
+            this.$el._monitorChartReady = true;
+            // Flush any observations that arrived before the chart was ready.
+            for (const obs of (this.$el._monitorBuffer || [])) this.appendMonitorObservation(obs);
+            this.$el._monitorBuffer = [];
+          },
+          openMonitorStream(contest) {
+            const contestId = this.contestId(contest);
+            const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+            const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${contestId}?token=${encodeURIComponent(this.token)}`;
+            const connect = () => {
+              if (!this.monitor.monitoredContest) return; // monitor was stopped
+              const ws = new WebSocket(url);
+              this.monitor.monitorSocket = ws;
+              ws.onmessage = (event) => {
+                const observation = JSON.parse(event.data);
+                if (observation.event === "evaluation_started") {
+                  this.monitor.monitorError = "Observation phase ended — the stream has closed.";
+                  return;
+                }
+                if (observation.event === "contest_closed") {
+                  this.monitor.monitorError = "Contest has been closed.";
+                  return;
+                }
+                this.appendMonitorObservation(observation);
+              };
+              ws.onerror = () => {
+                this.monitor.monitorError = "Monitor stream connection failed.";
+              };
+              ws.onclose = () => {
+                if (!this.monitor.monitoredContest) return; // intentional stop
+                if (!this.monitor.monitorError) {
+                  // Transient disconnect — reconnect after 2 s.
+                  this.monitor.monitorError = "Stream disconnected — reconnecting…";
+                  setTimeout(() => {
+                    if (this.monitor.monitoredContest) {
+                      this.monitor.monitorError = "";
+                      connect();
+                    }
+                  }, 2000);
+                }
+              };
+            };
+            connect();
+          },
+          appendMonitorObservation(observation) {
+            if (observation.event) return;
+            // Buffer observations that arrive before the chart is initialised.
+            if (!this.$el._monitorChartReady) {
+              if (!this.$el._monitorBuffer) this.$el._monitorBuffer = [];
+              if (this.$el._monitorBuffer.length < 300) this.$el._monitorBuffer.push(observation);
+              return;
+            }
+            const chart = this.$el._monitorChart;
+            if (!chart) return;
+            const sensors = observation.sensors || {};
+            const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
+            for (const sensorId of Object.keys(sensors)) {
+              if (!chart.data.datasets.some((d) => d.label === sensorId)) {
+                const color = colors[chart.data.datasets.length % colors.length];
+                chart.data.datasets.push({
+                  label: sensorId, data: [], borderColor: color,
+                  backgroundColor: color, borderWidth: 2, pointRadius: 0, tension: 0.25,
+                });
+              }
+            }
+            chart.data.labels.push(observation.sequence_id);
+            for (const dataset of chart.data.datasets) {
+              dataset.data.push(sensors[dataset.label] ?? null);
+              if (dataset.data.length > 150) dataset.data.shift();
+            }
+            if (chart.data.labels.length > 150) chart.data.labels.shift();
+            // Throttle redraws: store the pending flag on the chart object
+            // itself (not on Alpine's reactive `this`) so the RAF callback
+            // never triggers an Alpine re-render that would detach the canvas.
+            if (!chart._rafPending) {
+              chart._rafPending = true;
+              requestAnimationFrame(() => {
+                chart._rafPending = false;
+                if (chart.canvas?.isConnected) chart.update("none");
+              });
+            }
+          },
+          createSensorChart() {
+            if (!this.$refs.sensorChart || typeof Chart === "undefined") {
+              return;
+            }
+            this.sensorChart = new Chart(this.$refs.sensorChart, {
+              type: "line",
+              data: {
+                labels: [],
+                datasets: [],
+              },
+              options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                  intersect: false,
+                  mode: "nearest",
+                },
+                scales: {
+                  x: {
+                    ticks: { color: "#475569", maxTicksLimit: 10 },
+                    grid: { color: "#e2e8f0" },
+                  },
+                  y: {
+                    ticks: { color: "#475569" },
+                    grid: { color: "#e2e8f0" },
+                  },
+                },
+                plugins: {
+                  legend: {
+                    labels: { color: "#0f172a" },
+                  },
+                },
+              },
+            });
+          },
+          openStream(contest) {
+            const contestId = this.contestId(contest);
+            const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+            const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${contestId}?token=${encodeURIComponent(this.token)}`;
+            this.streamSocket = new WebSocket(url);
+            this.streamSocket.onmessage = (event) => {
+              const observation = JSON.parse(event.data);
+              this.participant.latestObservation = {
+                sequence_id: observation.sequence_id,
+                timestamp: observation.timestamp,
+              };
+              this.appendObservation(observation);
+            };
+            this.streamSocket.onerror = () => {
+              this.participant.error = "Live stream connection failed.";
+            };
+            this.streamSocket.onclose = () => {
+              if (this.participant.connectedContest) {
+                this.participant.error = "Live stream disconnected.";
+              }
+            };
+          },
+          appendObservation(observation) {
+            if (!this.sensorChart) {
+              return;
+            }
+            const label = observation.sequence_id;
+            const sensors = observation.sensors || {};
+            const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
+            for (const sensorId of Object.keys(sensors)) {
+              if (!this.sensorChart.data.datasets.some((dataset) => dataset.label === sensorId)) {
+                const color = colors[this.sensorChart.data.datasets.length % colors.length];
+                this.sensorChart.data.datasets.push({
+                  label: sensorId,
+                  data: [],
+                  borderColor: color,
+                  backgroundColor: color,
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  tension: 0.25,
+                });
+              }
+            }
+            this.sensorChart.data.labels.push(label);
+            for (const dataset of this.sensorChart.data.datasets) {
+              dataset.data.push(sensors[dataset.label] ?? null);
+              if (dataset.data.length > 100) {
+                dataset.data.shift();
+              }
+            }
+            if (this.sensorChart.data.labels.length > 100) {
+              this.sensorChart.data.labels.shift();
+            }
+            this.sensorChart.update("none");
+          },
+          async submitPrediction() {
+            this.participant.submitting = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              const payload = JSON.parse(this.participant.submissionPayload);
+              const contestId = this.contestId(this.participant.connectedContest);
+              const response = await this.apiRequest(
+                `/api/v1/contests/${contestId}/submissions`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    task_id: "forecasting",
+                    payload,
+                  }),
+                }
+              );
+              this.participant.success = `Submission ${response.submission_id} received.`;
+            } catch (error) {
+              this.participant.error = error.message || "Submission failed.";
+            } finally {
+              this.participant.submitting = false;
+            }
+          },
+          async loadMyActivity() {
+            this.participant.loadingActivity = true;
+            this.participant.error = "";
+            this.participant.success = "";
+            try {
+              await this.loadRegistrations();
+              const registeredContestIds = Array.from(this.participant.registeredContestIds);
+              const contestsResponse = await this.apiRequest("/api/v1/contests");
+              const contestsById = new Map(
+                (contestsResponse.contests || []).map((contest) => [this.contestId(contest), contest])
+              );
+              const activity = [];
+              for (const contestId of registeredContestIds) {
+                let contest = contestsById.get(contestId);
+                if (!contest) {
+                  contest = await this.apiRequest(`/api/v1/contests/${contestId}`);
+                }
+                const submissionsResponse = await this.apiRequest(
+                  `/api/v1/contests/${contestId}/submissions`
+                );
+                const submissions = [];
+                for (const submission of submissionsResponse.submissions || []) {
+                  let score = null;
+                  if (submission.status === "EVALUATED") {
+                    const scoresResponse = await this.apiRequest(
+                      `/api/v1/submissions/${submission.submission_id}/scores`
+                    );
+                    const scores = scoresResponse.scores || [];
+                    if (scores.length > 0) {
+                      score = scores.reduce((total, item) => total + Number(item.value), 0) / scores.length;
+                    }
+                  }
+                  submissions.push({ ...submission, score });
+                }
+                activity.push({ contest, submissions });
+              }
+              this.participant.activity = activity;
+            } catch (error) {
+              this.participant.error = error.message || "Unable to load activity.";
+            } finally {
+              this.participant.loadingActivity = false;
+            }
+          },
+          async loadOrganizerDashboard() {
+            if (this.organizer.dashboardLoaded) {
+              return;
+            }
+            this.organizer.dashboardLoaded = true;
+            await this.loadOrganizerContests();
+          },
+          async setOrganizerTab(tab) {
+            this.organizer.tab = tab;
+            this.organizer.error = "";
+            this.organizer.success = "";
+            if (tab !== "contests") this.stopMonitor();
+            if (tab === "contests") {
+              await this.loadOrganizerContests();
+            }
+            if (tab === "new") {
+              await this.loadTemplates();
+            }
+          },
+          async loadOrganizerContests() {
+            this.organizer.loadingContests = true;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/contests");
+              const all = response.contests || [];
+              // "My Contests": the listing also includes public contests by
+              // other organizers — keep only the ones this user created.
+              this.organizer.contests = all.filter(
+                (contest) => contest.created_by === this.user.id
+              );
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load contests.";
+            } finally {
+              this.organizer.loadingContests = false;
+            }
+          },
+          async updateContestStatus(contest, status) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status }),
+              });
+              this.replaceOrganizerContest(updated);
+              this.organizer.success = `Contest ${status.toLowerCase()} successfully.`;
+            } catch (error) {
+              this.organizer.error = error.message || "Contest update failed.";
+            }
+          },
+          startDeadlineExtension(contest) {
+            this.organizer.extendingContestId = this.contestId(contest);
+            this.organizer.newEndDate = this.toLocalDateTime(contest.end_date);
+            this.organizer.error = "";
+            this.organizer.success = "";
+          },
+          async extendContestDeadline(contest) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  end_date: this.toApiDateTime(this.organizer.newEndDate),
+                }),
+              });
+              this.replaceOrganizerContest(updated);
+              this.organizer.extendingContestId = null;
+              this.organizer.newEndDate = "";
+              this.organizer.success = "Deadline updated successfully.";
+            } catch (error) {
+              this.organizer.error = error.message || "Deadline update failed.";
+            }
+          },
+          replaceOrganizerContest(updated) {
+            const updatedId = this.contestId(updated);
+            this.organizer.contests = this.organizer.contests.map((contest) =>
+              this.contestId(contest) === updatedId ? updated : contest
+            );
+          },
+          async pauseContest(contest) {
+            const cid = this.contestId(contest);
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.pausingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/contests/${cid}/pause`, { method: "PUT" });
+              if (isOrganizer) {
+                this.replaceOrganizerContest(updated);
+              } else {
+                this.admin.contests = this.admin.contests.map((c) =>
+                  this.contestId(c) === cid ? updated : c
+                );
+              }
+              ns.success = `Contest "${contest.name}" paused — simulation will stop within the next few steps.`;
+            } catch (error) {
+              ns.error = error.message || "Pause failed.";
+            } finally {
+              ns.pausingContestId = null;
+            }
+          },
+          async resumeContest(contest) {
+            const cid = this.contestId(contest);
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.pausingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/contests/${cid}/resume`, { method: "PUT" });
+              if (isOrganizer) {
+                this.replaceOrganizerContest(updated);
+              } else {
+                this.admin.contests = this.admin.contests.map((c) =>
+                  this.contestId(c) === cid ? updated : c
+                );
+              }
+              ns.success = `Contest "${contest.name}" resumed — simulation restarting.`;
+            } catch (error) {
+              ns.error = error.message || "Resume failed.";
+            } finally {
+              ns.pausingContestId = null;
+            }
+          },
+          async deleteContest(contest) {
+            const cid = this.contestId(contest);
+            const confirmed = await new Promise((resolve) => {
+              this.deleteModal.contestName = contest.name;
+              this.deleteModal.confirm = () => { this.deleteModal.open = false; resolve(true); };
+              this.deleteModal.cancel  = () => { this.deleteModal.open = false; resolve(false); };
+              this.deleteModal.open = true;
+            });
+            if (!confirmed) return;
+            const isOrganizer = this.user.role === "ORGANIZER";
+            const ns = isOrganizer ? this.organizer : this.admin;
+            ns.deletingContestId = cid;
+            ns.error = "";
+            ns.success = "";
+            try {
+              await this.apiRequest(`/api/v1/contests/${cid}`, { method: "DELETE" });
+              if (isOrganizer) {
+                this.organizer.contests = this.organizer.contests.filter(
+                  (c) => this.contestId(c) !== cid
+                );
+              } else {
+                this.admin.contests = this.admin.contests.filter(
+                  (c) => this.contestId(c) !== cid
+                );
+              }
+              ns.success = `Contest "${contest.name}" deleted.`;
+            } catch (error) {
+              ns.error = error.message || "Delete failed.";
+            } finally {
+              ns.deletingContestId = null;
+            }
+          },
+          async loadParticipants(contest) {
+            const contestId = this.contestId(contest);
+            this.organizer.loadingParticipantsId = contestId;
+            try {
+              const [invitationsResponse, registrationsResponse] = await Promise.all([
+                this.apiRequest(`/api/v1/contests/${contestId}/invitations`),
+                this.apiRequest(`/api/v1/contest-registrations?contest_id=${contestId}`),
+              ]);
+              this.organizer.invitations = {
+                ...this.organizer.invitations,
+                [contestId]: invitationsResponse.invitations || [],
+              };
+              this.organizer.registrations = {
+                ...this.organizer.registrations,
+                [contestId]: registrationsResponse.registrations || [],
+              };
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load participants.";
+            } finally {
+              this.organizer.loadingParticipantsId = null;
+            }
+          },
+          async sendInvitations(contest) {
+            const emails = this.organizer.inviteEmails
+              .split(/[\s,;]+/)
+              .map((email) => email.trim())
+              .filter((email) => email.length > 0);
+            if (emails.length === 0) {
+              this.organizer.error = "Enter at least one email address.";
+              return;
+            }
+            this.organizer.sendingInvites = true;
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const response = await this.apiRequest(
+                `/api/v1/contests/${contestId}/invitations`,
+                { method: "POST", body: JSON.stringify({ emails }) }
+              );
+              this.organizer.success = `Sent ${response.created} invitation(s).`;
+              this.organizer.inviteEmails = "";
+              await this.loadParticipants(contest);
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to send invitations.";
+            } finally {
+              this.organizer.sendingInvites = false;
+            }
+          },
+          async revokeInvitation(contest, invitation) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              await this.apiRequest(
+                `/api/v1/contests/${contestId}/invitations/${invitation.id}`,
+                { method: "DELETE" }
+              );
+              this.organizer.success = `Invitation for ${invitation.email} revoked.`;
+              await this.loadParticipants(contest);
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to revoke invitation.";
+            }
+          },
+          async removeParticipant(contest, registration) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              await this.apiRequest(
+                `/api/v1/contest-registrations/${registration.registration_id}`,
+                { method: "DELETE" }
+              );
+              this.organizer.success = `${registration.username || registration.email} removed from the contest.`;
+              await this.loadParticipants(contest);
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to remove participant.";
+            }
+          },
+          async toggleLeaderboard(contest) {
+            const contestId = this.contestId(contest);
+            if (this.organizer.expandedContestId === contestId) {
+              this.organizer.expandedContestId = null;
+              return;
+            }
+            this.organizer.expandedContestId = contestId;
+            this.organizer.inviteEmails = "";
+            await this.loadParticipants(contest);
+            if (this.organizer.leaderboards[contestId]) {
+              return;
+            }
+            this.organizer.loadingLeaderboardId = contestId;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest(
+                `/api/v1/contests/${contestId}/leaderboard`
+              );
+              this.organizer.leaderboards = {
+                ...this.organizer.leaderboards,
+                [contestId]: response.entries || [],
+              };
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load leaderboard.";
+              this.organizer.leaderboards = {
+                ...this.organizer.leaderboards,
+                [contestId]: [],
+              };
+            } finally {
+              this.organizer.loadingLeaderboardId = null;
+            }
+          },
+          async loadTemplates() {
+            if (this.organizer.templates.length > 0) {
+              return;
+            }
+            this.organizer.loadingTemplates = true;
+            this.organizer.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/templates");
+              this.organizer.templates = response.templates || [];
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load templates.";
+            } finally {
+              this.organizer.loadingTemplates = false;
+            }
+          },
+          async selectTemplate(template) {
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const fullTemplate = await this.apiRequest(
+                `/api/v1/templates/${template.template_id}`
+              );
+              const now = new Date();
+              const start = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              const end = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+              this.organizer.selectedTemplate = fullTemplate;
+              this.organizer.form = {
+                name: fullTemplate.name,
+                description: fullTemplate.description,
+                visibility: "PUBLIC",
+                start_date: this.toLocalDateTime(start.toISOString()),
+                end_date: this.toLocalDateTime(end.toISOString()),
+                sampling_rate_hz: fullTemplate.sampling_rate_hz,
+                twin_id: fullTemplate.twin_id,
+                sensor_selections: [],
+                fault_entries: [],
+                initial_conditions: fullTemplate.initial_conditions || null,
+                task_type: fullTemplate.task_type || "FORECASTING",
+                metric_ids: fullTemplate.metric_ids || ["mae"],
+                score_against: "ground_truth",
+                target_variables: fullTemplate.target_variables || [],
+                observation_horizon_days: 2,
+                prediction_horizon_seconds: 3600,
+              };
+              await this.loadCatalogProfile(fullTemplate.twin_id, fullTemplate);
+              this.organizer.newStep = 2;
+            } catch (error) {
+              this.organizer.error = error.message || "Unable to load template.";
+            }
+          },
+          async loadCatalogProfile(twin_id, template) {
+            this.organizer.loadingCatalog = true;
+            try {
+              const profile = await this.apiRequest(`/api/v1/catalog/${twin_id}`);
+              this.organizer.catalogProfile = profile;
+              // Build sensor_selections from catalog sensors + template overrides
+              const templateSensorMap = {};
+              for (const sc of (template.sensor_configs || [])) {
+                templateSensorMap[sc.sensor_id] = sc;
+              }
+              const templateTargets = new Set(
+                template.target_variables || (template.sensor_configs || []).map(sc => sc.sensor_id)
+              );
+              this.organizer.form.sensor_selections = profile.sensors.map(sensor => {
+                const tc = templateSensorMap[sensor.sensor_id] || {};
+                const enabled = sensor.sensor_id in templateSensorMap;
+                return {
+                  sensor_id: sensor.sensor_id,
+                  name: sensor.name,
+                  unit: sensor.unit,
+                  enabled: enabled,
+                  target_selected: enabled && templateTargets.has(sensor.sensor_id),
+                  noise_std: tc.noise_std ?? 0.0,
+                  gain: tc.gain ?? 1.0,
+                  bias: tc.bias ?? 0.0,
+                  drift_rate: tc.drift_rate ?? 0.0,
+                  min_value: tc.min_value ?? null,
+                  max_value: tc.max_value ?? null,
+                  quantization: tc.quantization ?? 0.0,
+                  latency_steps: tc.latency_steps ?? 0,
+                  p_false_reading: tc.p_false_reading ?? 0.0,
+                  p_outlier: tc.p_outlier ?? 0.0,
+                  showAdvanced: false,
+                };
+              });
+              // Build fault_entries from template fault_schedule
+              this.organizer.form.fault_entries = (template.fault_schedule || []).map(fe => ({
+                fault_id: fe.fault_id,
+                start_time: fe.start_time ?? 0,
+                end_time: fe.end_time ?? null,
+                severity: fe.severity ?? 0.5,
+              }));
+            } finally {
+              this.organizer.loadingCatalog = false;
+            }
+          },
+          addFaultEntry() {
+            const faults = this.organizer.catalogProfile?.faults || [];
+            if (faults.length === 0) return;
+            this.organizer.form.fault_entries.push({
+              fault_id: faults[0].fault_id,
+              start_time: 0,
+              end_time: null,
+              severity: 0.5,
+            });
+          },
+          removeFaultEntry(idx) {
+            this.organizer.form.fault_entries.splice(idx, 1);
+          },
+          async createContest() {
+            // Build sensor_configs from sensor_selections
+            const sensor_configs = this.organizer.form.sensor_selections
+              .filter(s => s.enabled)
+              .map(s => {
+                const cfg = { sensor_id: s.sensor_id };
+                if (s.noise_std)        cfg.noise_std        = s.noise_std;
+                if (s.gain !== 1.0)     cfg.gain             = s.gain;
+                if (s.bias)             cfg.bias             = s.bias;
+                if (s.drift_rate)       cfg.drift_rate       = s.drift_rate;
+                if (s.min_value !== null && s.min_value !== "") cfg.min_value = Number(s.min_value);
+                if (s.max_value !== null && s.max_value !== "") cfg.max_value = Number(s.max_value);
+                if (s.quantization)     cfg.quantization     = s.quantization;
+                if (s.latency_steps)    cfg.latency_steps    = s.latency_steps;
+                if (s.p_false_reading)  cfg.p_false_reading  = s.p_false_reading;
+                if (s.p_outlier)        cfg.p_outlier        = s.p_outlier;
+                return cfg;
+              });
+            if (sensor_configs.length === 0) {
+              this.organizer.error = "Please enable at least one sensor.";
+              return;
+            }
+            const target_variables = this.organizer.form.sensor_selections
+              .filter(s => s.enabled && s.target_selected)
+              .map(s => s.sensor_id);
+            if (target_variables.length === 0) {
+              this.organizer.error = "Please select at least one forecast target.";
+              return;
+            }
+            // Build fault_schedule from fault_entries
+            const fault_schedule = this.organizer.form.fault_entries.map(fe => ({
+              fault_id: fe.fault_id,
+              start_time: Number(fe.start_time),
+              end_time: (fe.end_time !== null && fe.end_time !== "") ? Number(fe.end_time) : null,
+              severity: Number(fe.severity),
+            }));
+            this.organizer.creating = true;
+            this.organizer.error = "";
+            this.organizer.success = "";
+            try {
+              const request = {
+                name: this.organizer.form.name,
+                description: this.organizer.form.description,
+                visibility: this.organizer.form.visibility,
+                task_type: this.organizer.form.task_type,
+                metric_ids: this.organizer.form.metric_ids,
+                twin_id: this.organizer.form.twin_id,
+                sensor_configs: sensor_configs,
+                fault_schedule: fault_schedule,
+                initial_conditions: this.organizer.form.initial_conditions,
+                sampling_rate_hz: Number(this.organizer.form.sampling_rate_hz),
+                target_variables: target_variables,
+                start_date: this.toApiDateTime(this.organizer.form.start_date),
+                end_date: this.toApiDateTime(this.organizer.form.end_date),
+                end_of_observation: new Date(
+                  new Date(this.organizer.form.start_date).getTime() +
+                  Number(this.organizer.form.observation_horizon_days) * 86400 * 1000
+                ).toISOString(),
+                prediction_horizon_seconds: Number(this.organizer.form.prediction_horizon_seconds),
+                score_against: this.organizer.form.score_against,
+              };
+              const created = await this.apiRequest("/api/v1/contests", {
+                method: "POST",
+                body: JSON.stringify(request),
+              });
+              this.organizer.contests = [created, ...this.organizer.contests];
+              this.organizer.success = "Contest created successfully.";
+              this.organizer.newStep = 1;
+              this.organizer.selectedTemplate = null;
+              this.organizer.tab = "contests";
+            } catch (error) {
+              this.organizer.error = error.message || "Contest creation failed.";
+            } finally {
+              this.organizer.creating = false;
+            }
+          },
+          async loadAdminDashboard() {
+            if (this.admin.dashboardLoaded) {
+              return;
+            }
+            this.admin.dashboardLoaded = true;
+            await this.loadAdminOverview();
+          },
+          async setAdminTab(tab) {
+            this.admin.tab = tab;
+            this.admin.error = "";
+            this.admin.success = "";
+            if (tab !== "overview") this.stopMonitor();
+            if (tab === "overview") {
+              await this.loadAdminOverview();
+            }
+            if (tab === "users") {
+              await this.loadAdminUsers();
+            }
+          },
+          async loadAdminOverview() {
+            this.admin.loadingOverview = true;
+            this.admin.error = "";
+            try {
+              const [contestsResponse, usersResponse] = await Promise.all([
+                this.apiRequest("/api/v1/contests?limit=1000"),
+                this.apiRequest("/api/v1/users?limit=1000"),
+              ]);
+              this.admin.contests = contestsResponse.contests || [];
+              this.admin.users = usersResponse.users || [];
+              this.admin.totalUsers = usersResponse.total ?? this.admin.users.length;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to load platform overview.";
+            } finally {
+              this.admin.loadingOverview = false;
+            }
+          },
+          async loadAdminUsers() {
+            this.admin.loadingUsers = true;
+            this.admin.error = "";
+            try {
+              const response = await this.apiRequest("/api/v1/users?limit=1000");
+              this.admin.users = response.users || [];
+              this.admin.totalUsers = response.total ?? this.admin.users.length;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to load users.";
+            } finally {
+              this.admin.loadingUsers = false;
+            }
+          },
+          contestsByStatus() {
+            return this.admin.contests.reduce((counts, contest) => {
+              counts[contest.status] = (counts[contest.status] || 0) + 1;
+              return counts;
+            }, {});
+          },
+          sortAdminContests(key) {
+            if (this.admin.contestSortKey === key) {
+              this.admin.contestSortDirection =
+                this.admin.contestSortDirection === "asc" ? "desc" : "asc";
+            } else {
+              this.admin.contestSortKey = key;
+              this.admin.contestSortDirection = "asc";
+            }
+          },
+          sortedAdminContests() {
+            const key = this.admin.contestSortKey;
+            const direction = this.admin.contestSortDirection === "asc" ? 1 : -1;
+            return [...this.admin.contests].sort((left, right) => {
+              const leftValue = left[key] ?? "";
+              const rightValue = right[key] ?? "";
+              if (typeof leftValue === "number" && typeof rightValue === "number") {
+                return (leftValue - rightValue) * direction;
+              }
+              return String(leftValue).localeCompare(String(rightValue)) * direction;
+            });
+          },
+          allowedStatusTransitions(status) {
+            // Pause and resume are handled by dedicated PUT endpoints and
+            // their own buttons — not via this transition selector.
+            const transitions = {
+              DRAFT: ["SCHEDULED", "ACTIVE"],
+              SCHEDULED: ["ACTIVE"],
+              ACTIVE: ["CLOSED"],
+              PAUSED: ["CLOSED"],
+              CLOSED: ["ARCHIVED"],
+              ARCHIVED: [],
+            };
+            return transitions[status] || [];
+          },
+          async transitionAdminContest(contest, status) {
+            if (!status) {
+              return;
+            }
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const contestId = this.contestId(contest);
+              const updated = await this.apiRequest(`/api/v1/contests/${contestId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status }),
+              });
+              this.admin.contests = this.admin.contests.map((item) =>
+                this.contestId(item) === this.contestId(updated) ? updated : item
+              );
+              this.admin.success = `Contest moved to ${status}.`;
+            } catch (error) {
+              this.admin.error = error.message || "Contest transition failed.";
+            }
+          },
+          filteredAdminUsers() {
+            const query = this.admin.userSearch.trim().toLowerCase();
+            if (!query) {
+              return this.admin.users;
+            }
+            return this.admin.users.filter((account) =>
+              `${account.username} ${account.email}`.toLowerCase().includes(query)
+            );
+          },
+          async createUser() {
+            this.admin.creatingUser = true;
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const created = await this.apiRequest("/api/v1/users", {
+                method: "POST",
+                body: JSON.stringify(this.admin.createUserForm),
+              });
+              this.admin.users = [created, ...this.admin.users];
+              this.admin.totalUsers += 1;
+              this.admin.success = `User '${created.username}' created successfully.`;
+              this.admin.createUserForm = { username: "", email: "", password: "", role: "PARTICIPANT" };
+              this.admin.showCreateUser = false;
+            } catch (error) {
+              this.admin.error = error.message || "User creation failed.";
+            } finally {
+              this.admin.creatingUser = false;
+            }
+          },
+          async impersonate(account) {
+            try {
+              const data = await this.apiRequest(`/api/v1/users/${account.id}/impersonate`, {
+                method: "POST",
+              });
+              this.originalToken = this.token;
+              this.token = data.access_token;
+              localStorage.setItem("epic_token", this.token);
+              const payload = this.decodeToken(this.token);
+              this.user = { id: payload.sub, username: payload.username, role: payload.role };
+              this.impersonating = payload.username;
+              this.state = "dashboard";
+            } catch (error) {
+              this.admin.error = error.message || "Impersonation failed.";
+            }
+          },
+          stopImpersonating() {
+            this.token = this.originalToken;
+            this.originalToken = null;
+            this.impersonating = null;
+            localStorage.setItem("epic_token", this.token);
+            const payload = this.decodeToken(this.token);
+            this.user = { id: payload.sub, username: payload.username, role: payload.role };
+            this.state = "dashboard";
+          },
+          async updateUserRole(account, role) {
+            if (role === account.role) {
+              return;
+            }
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/users/${account.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ role }),
+              });
+              this.replaceAdminUser(updated);
+              this.admin.success = "User role updated.";
+            } catch (error) {
+              this.admin.error = error.message || "User role update failed.";
+            }
+          },
+          async toggleUserActive(account) {
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(`/api/v1/users/${account.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: account.is_active ? "SUSPENDED" : "ACTIVE",
+                }),
+              });
+              this.replaceAdminUser(updated);
+              this.admin.success = updated.is_active
+                ? "User account activated."
+                : "User account deactivated.";
+            } catch (error) {
+              this.admin.error = error.message || "User active status update failed.";
+            }
+          },
+          replaceAdminUser(updated) {
+            this.admin.users = this.admin.users.map((account) =>
+              account.id === updated.id ? updated : account
+            );
+          },
+          decodeToken(token) {
+            try {
+              const payload = token.split(".")[1];
+              const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+              const json = decodeURIComponent(
+                atob(base64)
+                  .split("")
+                  .map((char) => "%" + ("00" + char.charCodeAt(0).toString(16)).slice(-2))
+                  .join("")
+              );
+              return JSON.parse(json);
+            } catch (error) {
+              return null;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

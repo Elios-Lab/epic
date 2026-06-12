@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from epic_core.broadcaster import ContestBroadcaster
+from epic.core.broadcaster import ContestBroadcaster
 
 
 @pytest.fixture

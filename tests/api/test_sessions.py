@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from epic_core.db.models import Contest, SimulationSession
+from epic.core.db.models import Contest, SimulationSession
 
 
 async def _create_contest(db_factory, name: str = "API Contest") -> Contest:

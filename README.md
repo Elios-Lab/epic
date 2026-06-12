@@ -1,194 +1,480 @@
-# EPIC — ELIOS Predictive Intelligence Challenge
+# EPIC - ELIOS Predictive Intelligence Challenge
 
-> A simulation-driven machine learning competition platform built on extensible digital twins, real-time sensor streaming, and automated evaluation.
+EPIC is a competition platform for predictive intelligence on live digital
+twins. It turns a simulated physical system into a real-time machine learning
+challenge: participants connect to sensor streams, collect their own data,
+predict a hidden future window, and are scored automatically against ground
+truth that is recorded by the platform but never shown to participants.
 
-| Endpoint | URL |
+| Resource | URL |
 |---|---|
-| Live instace | [https://epic.elioslab.net](https://epic.elioslab.net) |
-| REST API | [https://epic.elioslab.net/api/v1](https://epic.elioslab.net/api/v1) |
-| Swagger UI | [https://epic.elioslab.net/docs](https://epic.elioslab.net/docs) |
+| Live platform | https://epic.elioslab.net |
+| REST API | https://epic.elioslab.net/api/v1 |
+| OpenAPI / Swagger | https://epic.elioslab.net/docs |
+| Participant SDK | `pip install epic-elios-client` |
 
----
+EPIC is built for classrooms, research benchmarks, and industrial AI
+experiments where static datasets are too simple. An organizer can choose a
+digital twin, configure sensors and faults, invite participants, run a contest,
+and get a live leaderboard without writing backend code.
 
-## What is EPIC?
+## Contents
 
-EPIC (ELIOS Predictive Intelligence Challenge) is a framework for running **machine learning competitions** based on **simulated physical systems**, called **digital twins**. Rather than handing participants a static dataset, EPIC runs a **real time simulation** and lets participants collect their own data by **streaming live sensor readings**. Participants then train predictive models and submit forecasts to be scored against hidden ground-truth trajectories.
+- [Concept](#concept)
+- [Architecture](#architecture)
+- [How a Contest Works](#how-a-contest-works)
+- [Roles and Account Flow](#roles-and-account-flow)
+- [Participant Quickstart](#participant-quickstart)
+- [Organizer Workflow](#organizer-workflow)
+- [Administrator Workflow](#administrator-workflow)
+- [Scoring Model](#scoring-model)
+- [Built-in Twins and Sensors](#built-in-twins-and-sensors)
+- [API and WebSocket Surface](#api-and-websocket-surface)
+- [Local Development](#local-development)
+- [Testing](#testing)
+- [Extending EPIC](#extending-epic)
+- [Roadmap](#roadmap)
 
-The platform is designed to support:
+## Concept
 
-- **Education** — professors set up contests for their students without writing code.
-- **Research** — researchers benchmark algorithms on reproducible simulation scenarios.
-- **Industrial AI experimentation** — realistic predictive maintenance challenges.
+Most machine learning competitions start with a file. EPIC starts with a
+system.
 
-The currently supported ML task is **time-series forecasting**, scored with MAE. Anomaly detection, fault diagnosis, predictive maintenance, prognostics, and remaining useful life estimation are planned for future releases.
+That system is a digital twin: a compact simulation of a physical asset such as
+a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, or a
+smart building. The twin evolves in real wall-clock time. Sensors observe it
+through a configurable measurement pipeline: noise, bias, drift, latency,
+quantization, saturation, false readings, and outliers. Faults are scheduled
+inside the twin and alter the latent physics.
 
----
+Participants only receive the sensor stream. They do not receive the clean
+state, fault labels, or future observations. EPIC stores those private signals
+for scoring and keeps the competition honest by closing the stream before the
+evaluation window is generated. A participant must forecast the future from
+what they observed, not from what the server has already revealed.
 
-## How a contest works
+The result is a richer contest format than a static benchmark. Students and
+researchers practice the whole predictive-intelligence loop: instrumentation,
+data collection, temporal reasoning, modelling, submission integrity, and live
+leaderboard feedback.
 
-Every EPIC contest follows a **two-phase structure**:
+## Architecture
 
-### Phase 1 — Observation window
+EPIC separates competition infrastructure from simulated domains.
 
-From `start_date` to `end_of_observation`, the digital twin simulation runs in real time and broadcasts sensor readings to all registered participants. This is the **data-collection window**. Participants receive timestamped sensor observations and use them to train a predictive model.
+![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
-### Phase 2 — Evaluation window
-
-From `end_of_observation` and for `prediction_horizon_seconds`, the simulation keeps running but the sensor stream is closed. The **ground-truth values** for this window are recorded by the platform but hidden from participants. This prevents any post-hoc prediction.
-
-### Submission window
-
-Once the evaluation window ends, **participants submit a forecast** covering every time step of the evaluation window. Submissions are scored automatically against the ground truth and the leaderboard is updated immediately.
-
-The number of values to predict per sensor is:
-
+```text
+Browser / SDK
+    |
+FastAPI REST + WebSocket API
+    |
+Contest, user, submission, scoring, leaderboard routers
+    |
+SimulationEngine + ContestBroadcaster
+    |
+DigitalTwin plugins + Sensor plugins + Metric / TaskEvaluator plugins
+    |
+SQLAlchemy models + Alembic migrations
 ```
-eval_steps = round(prediction_horizon_seconds × sampling_rate_hz)
+
+Repository layout:
+
+```text
+epic/
+├── epic/core/       interfaces, registries, engine, broadcaster, db, auth
+├── epic/api/        FastAPI app, routers, schemas, templates, email service
+├── epic/twins/      built-in digital twin packages
+├── epic/sensors/    reusable scalar sensors
+├── epic/gui/        static single-page web app served by FastAPI
+├── epic_client/     standalone participant SDK package
+├── notebooks/       participant notebooks
+├── alembic/         database migrations
+└── tests/           core, API, twin, sensor, and UI tests
 ```
 
----
+Important design boundaries:
 
-## Participating
+- `epic.core` is domain-independent.
+- Twins own physical dynamics and fault effects.
+- Sensors own measurement corruption.
+- The engine streams only participant-visible sensor readings.
+- Evaluation observations store private `ground_truth` and `labels`.
+- Registries hold prototypes; sessions run independent copies.
+- Production schema management is Alembic-only.
 
-EPIC defines two primary user roles:
+## How a Contest Works
 
-1. **Organizers**, who create and manage competitions, invite participants, configure digital twins and fault scenarios, monitor submissions, and oversee the evaluation process.
+An EPIC contest moves through a lifecycle:
 
-2. **Participants**, who register for competitions, collect data from the available digital twins, develop forecasting or diagnostic models, submit predictions, and track their performance on the leaderboard.
+```text
+DRAFT -> SCHEDULED -> ACTIVE -> CLOSED -> ARCHIVED
+  |                       |
+  +-------> ACTIVE        v
+                        PAUSED -> ACTIVE
+                           |
+                           +-------> CLOSED
+```
 
-### Registration
+The active phase is split into three time windows.
 
-EPIC supports two distinct registration paths depending on the role.
+| Window | Time Range | What Happens |
+|---|---|---|
+| Observation | `start_date` to `end_of_observation` | The simulation runs and registered participants receive sensor readings over WebSocket. |
+| Evaluation | `end_of_observation` for `prediction_horizon_seconds` | The simulation continues, the stream is closed, and private ground truth is recorded. |
+| Submission | after evaluation until `end_date` | Participants submit forecasts for the hidden evaluation window. |
 
-**Organizers** register through a self-service form at `POST /api/v1/organizer-requests`. The request enters a PENDING queue and is reviewed by an administrator. On approval the account is created automatically and the organizer receives an email with their login link. On rejection they receive a notification explaining the outcome.
+For forecasting contests, EPIC computes:
 
-**Participants** are invited by the organizer of a specific competition. The organizer uploads a list of email addresses for their contest; each address receives a personal, one-time invitation link valid for 7 days. Following the link brings the participant to a registration form where they provide their name, phone number, and a password. Once submitted, the account is created and immediately linked to that competition — no further steps are required before accessing data streams, interacting with digital twins, and submitting forecasts.
+```text
+eval_steps = round(prediction_horizon_seconds * sampling_rate_hz)
+```
 
-### Install the SDK
+Each forecast target must contain exactly `eval_steps` values. Organizers choose
+the required target variables with `target_variables`, a non-empty subset of
+configured sensor ids. Other sensors can still be streamed as explanatory
+features, but they do not affect the score.
+
+## Roles and Account Flow
+
+| Role | Scope |
+|---|---|
+| `PARTICIPANT` | Join contests, stream data, submit forecasts, view own submissions and scores. |
+| `ORGANIZER` | Create and manage own contests, invite participants, inspect submissions, pause and resume sessions. |
+| `ADMINISTRATOR` | Manage users, organizer requests, all contests, impersonation, and platform operations. |
+
+Account creation is intentionally controlled:
+
+- Organizers submit a public request at `POST /api/v1/organizer-requests`.
+  Administrators approve or reject it.
+- Participants join through contest invitations. An organizer sends invitations
+  with `POST /api/v1/contests/{contest_id}/invitations`; the invitee accepts a
+  one-time token and is registered for that contest.
+- Administrators can create users directly with `POST /api/v1/users`.
+- A bootstrap administrator can be seeded at startup with `ADMIN_USERNAME` and
+  `ADMIN_PASSWORD`.
+
+## Participant Quickstart
+
+Install the SDK:
 
 ```bash
 pip install epic-elios-client
 ```
 
-### Quick example
+Minimal forecasting workflow:
 
 ```python
 import asyncio
 from epic_client import EPICClient
 
+
 async def main():
     client = EPICClient("https://epic.elioslab.net")
     client.login("your-username", "your-password")
 
-    # Find an active contest and read how many steps to forecast
     contests = client.list_contests(status="ACTIVE")
-    contest_id = contests[0]["contest_id"]
-    eval_steps = contests[0]["tasks"][0]["configuration"]["eval_steps"]
+    contest = contests[0]
+    contest_id = contest["contest_id"]
+
+    task_config = contest["tasks"][0]["configuration"]
+    eval_steps = task_config["eval_steps"]
+    target_variables = task_config["target_variables"]
 
     client.register(contest_id)
-
-    # Collect live sensor data during the observation phase
     observations = await client.collect(contest_id, duration_seconds=120)
 
-    # Build a forecast (replace with your model)
     last = observations[-1]["sensors"]
-    forecast = {sensor: [value] * eval_steps for sensor, value in last.items()}
+    forecast = {
+        target: [last[target]] * eval_steps
+        for target in target_variables
+    }
 
-    # Submit
-    result = client.submit(
+    submission = client.submit(
         contest_id=contest_id,
         task_id="forecasting",
         payload={"forecast": forecast},
     )
-    print("Submitted:", result["submission_id"])
+    print(submission)
 
 asyncio.run(main())
 ```
 
-Full SDK documentation and a step-by-step Jupyter notebook are available in the [`epic_client/`](epic_client/README.md) package and in [`notebooks/quickstart.ipynb`](notebooks/quickstart.ipynb).
+More participant material:
 
----
+- SDK package README: [`epic_client/README.md`](epic_client/README.md)
+- General notebook: [`notebooks/quickstart.ipynb`](notebooks/quickstart.ipynb)
+- Mass-spring-damper example:
+  [`notebooks/mass_spring_damper_forecasting.ipynb`](notebooks/mass_spring_damper_forecasting.ipynb)
 
-## Architecture
+## Organizer Workflow
 
-The architecture is organized around three clearly separated layers of responsibility:
+The organizer dashboard is the normal contest-authoring surface.
 
-1. **Competition management**, which handles the complete contest lifecycle, including organizer and participant registration, competition configuration, submission management, scoring, and leaderboard generation.
+1. Request organizer access and wait for administrator approval.
+2. Create a contest from a template or from scratch.
+3. Choose the twin, sensors, target variables, faults, initial conditions,
+   scoring metric, and dates.
+4. Activate or schedule the contest.
+5. Invite participants.
+6. Monitor registrations, submissions, scores, and leaderboard entries.
+7. Pause, resume, extend, close, delete, or archive the contest as needed.
 
-2. **Simulation infrastructure**, which executes digital twin simulations in real time at a configurable sampling rate and distributes sensor measurements to connected participants through a scalable communication layer.
+Contest creation is configuration-driven. A representative request:
 
-3. **Digital twin implementations**, which encapsulate the physical models, sensor definitions, and fault injection mechanisms. These models operate independently from both the simulation engine and the competition management layer.
-
-By maintaining a strict separation between these concerns, the system achieves a high degree of modularity and extensibility. New digital twins, sensor types, or fault models can be added by implementing well-defined interfaces and registering the new components within the platform. This approach allows the platform to evolve and support new application domains without requiring modifications to its core architecture.
-
-### Key components
-
-| Component | Description |
-|---|---|
-| `epic_core` | Interfaces, plugin registries, simulation engine, WebSocket broadcaster, database models, authentication |
-| `epic_api` | FastAPI application — REST and WebSocket routers, dependency injection, error handling |
-| `epic_twins` | Digital twin implementations (mass-spring-damper, pump, electric motor, rotating machinery, smart building) |
-| `epic_sensors` | Sensor implementations, decoupled from twins via a physical-quantity ontology |
-| `epic_client` | Participant Python SDK published on PyPI |
-| `epic_gui` | Single-page web frontend with role-based dashboards |
-| `alembic` | Database migration scripts |
-| `docs` | Architecture, API, and authoring documentation |
-| `notebooks` | Jupyter notebooks for participants |
-| `tests` | Unit, integration, and end-to-end API tests |
-
-### Repository structure
-
-```text
-epic/
-├── epic_core/              ← interfaces, registry, engine, broadcaster, db models, auth
-│   ├── db/                 ← SQLAlchemy models and Alembic migrations
-│   └── quantities.py       ← PhysicalQuantity ontology (shared by sensors and twins)
-├── epic_api/               ← FastAPI application and routers
-│   └── routers/            ← auth, users, contests, registrations, submissions, ws, …
-├── epic_twins/             ← digital twins (state, dynamics, fault management)
-│   ├── mass_spring_damper/
-│   ├── industrial_pump/
-│   ├── electric_motor/
-│   ├── rotating_machinery/
-│   └── smart_building/
-├── epic_sensors/           ← reusable sensors, independent of specific twins
-├── epic_gui/               ← single-page web frontend
-├── epic_client/            ← participant SDK (published on PyPI)
-├── alembic/                ← database migrations
-├── docs/                   ← architecture and API documentation
-├── notebooks/              ← Jupyter quickstart and example notebooks
-└── tests/                  ← unit, integration, and API tests
+```json
+{
+  "name": "Pump Bearing Wear Challenge",
+  "description": "Forecast flow and vibration during progressive bearing wear.",
+  "visibility": "PUBLIC",
+  "task_type": "FORECASTING",
+  "metric_ids": ["mae"],
+  "twin_id": "industrial_pump",
+  "sensor_configs": [
+    {"sensor_id": "flow_rate", "noise_std": 0.2},
+    {"sensor_id": "pressure", "noise_std": 0.02},
+    {"sensor_id": "temperature", "noise_std": 0.05},
+    {"sensor_id": "vibration", "noise_std": 0.03}
+  ],
+  "target_variables": ["flow_rate", "vibration"],
+  "fault_schedule": [
+    {
+      "fault_id": "bearing_wear",
+      "start_time": 20.0,
+      "end_time": null,
+      "severity": 0.7
+    }
+  ],
+  "initial_conditions": {
+    "flow_rate": 120.0,
+    "pressure": 4.0,
+    "wear": 0.05
+  },
+  "sampling_rate_hz": 10.0,
+  "score_against": "ground_truth",
+  "start_date": "2027-01-10T09:00:00Z",
+  "end_of_observation": "2027-01-10T09:30:00Z",
+  "prediction_horizon_seconds": 60.0,
+  "end_date": "2027-01-10T09:40:00Z"
+}
 ```
 
----
+The API stores the scoring configuration as a contest `Task`. Responses include
+`tasks[0].configuration.eval_steps`, `target_variables`,
+`prediction_horizon_seconds`, and `score_against`.
 
-## Digital twins
+Templates are available at `GET /api/v1/templates`. Each template includes a
+twin id, compatible sensors, fault schedule, initial conditions, sampling rate,
+task type, and target variables.
 
-EPIC ships with five digital twins covering a range of industrial domains:
+## Administrator Workflow
 
-| Twin | Domain | Physical quantities |
+Administrators operate the whole platform. They can:
+
+- approve or reject organizer requests;
+- create, suspend, restore, delete, and promote users;
+- impersonate active users for support;
+- manage any contest regardless of owner;
+- inspect all sessions, submissions, scores, and leaderboards;
+- configure bootstrap admin and SMTP notification settings.
+
+The administrator dashboard lives in the static web app under
+`epic/gui/index.html`.
+
+## Scoring Model
+
+The implemented task evaluator is `FORECASTING`.
+
+A submission payload contains one list per required target variable:
+
+```json
+{
+  "forecast": {
+    "position": [0.12, 0.13, 0.14],
+    "velocity": [1.8, 1.7, 1.6]
+  }
+}
+```
+
+Validation rules:
+
+- every configured target variable must be present;
+- each list must contain exactly `eval_steps` values;
+- values must be numeric;
+- extra forecast keys are accepted but ignored for scoring.
+
+Task configuration:
+
+| Field | Meaning |
+|---|---|
+| `eval_steps` | Number of predicted values per target variable. |
+| `target_variables` | Configured sensor ids required and scored. |
+| `score_against` | `ground_truth` or `sensors`. |
+| `metric_ids` | Registered metrics to compute. |
+
+`ground_truth` compares against clean latent values recorded before sensor
+corruption. `sensors` compares against noisy sensor readings when the contest is
+about predicting the measured signal itself.
+
+Built-in metrics:
+
+| Metric | Direction | Purpose |
 |---|---|---|
-| **Mass-Spring-Damper** | Mechanical | Position, velocity, acceleration |
-| **Industrial Pump** | Fluid machinery | Flow rate, pressure, vibration, temperature |
-| **Electric Motor** | Electrical machinery | Current, voltage, RPM, temperature |
-| **Rotating Machinery** | Shaft and gearbox | Vibration, power, speed, temperature |
-| **Smart Building** | HVAC and energy | Temperature, humidity, CO₂, occupancy |
+| `mae` | minimize | Mean absolute error for forecasting. |
+| `f1` | maximize | Binary F1 score for anomaly-detection style tasks. |
 
-Each twin is fully self-contained: it manages its own physical state, fault injection, and sensor compatibility. Adding a new twin requires only implementing the `DigitalTwin` interface — no changes to EPIC Core.
+Leaderboards keep each participant's best evaluated submission, respecting the
+metric direction.
 
-A detailed description of each twin — the physics it simulates, the faults it supports, and the initial conditions it accepts — is available in the catalog section of [Digital Twins](docs/digital-twins.md).
+## Built-in Twins and Sensors
 
----
+Digital twins implement `DigitalTwin` and live under `epic/twins/`. Each twin is
+self-contained: it owns state evolution, fault activation, and fault effects.
 
-## Getting started (self-hosting)
+| Twin ID | System | Quantities | Faults |
+|---|---|---|---|
+| `mass_spring_damper` | Mechanical oscillator | `position`, `velocity`, `acceleration`, `temperature` | `increased_damping`, `reduced_stiffness`, `increased_friction` |
+| `industrial_pump` | Centrifugal pump | `flow_rate`, `pressure`, `temperature`, `vibration` | `cavitation`, `bearing_wear`, `filter_clog` |
+| `electric_motor` | Three-phase induction motor | `current`, `voltage`, `rotational_speed`, `temperature` | `overheating`, `bearing_fault`, `voltage_imbalance` |
+| `rotating_machinery` | Shaft and gearbox | `rotational_speed`, `vibration`, `temperature`, `power` | `unbalance`, `misalignment`, `gear_tooth_wear` |
+| `smart_building` | HVAC-managed floor | `temperature`, `humidity`, `co2_concentration`, `occupancy` | `hvac_failure`, `sensor_drift`, `occupancy_spike` |
 
-### Prerequisites
+The runtime source of truth is the catalog API:
+
+```text
+GET /api/v1/catalog
+GET /api/v1/catalog/{twin_id}
+```
+
+Registered scalar sensors:
+
+| Sensor ID | Unit | Typical Use |
+|---|---|---|
+| `position` | m | Mechanical displacement |
+| `velocity` | m/s | Linear velocity |
+| `acceleration` | m/s2 | Linear acceleration |
+| `temperature` | deg C | Thermal behaviour |
+| `flow_rate` | m3/h | Pump flow |
+| `pressure` | bar | Fluid pressure |
+| `vibration` | mm/s | Machinery health |
+| `current` | A | Motor current |
+| `voltage` | V | Electrical supply |
+| `rotational_speed` | RPM | Shaft or motor speed |
+| `power` | W | Mechanical or electrical power |
+| `humidity` | %RH | Building environment |
+| `co2_concentration` | ppm | Indoor air quality |
+| `occupancy` | people | Building load |
+
+Each sensor supports the same measurement-pipeline parameters:
+
+| Parameter | Effect |
+|---|---|
+| `noise_std` | Gaussian noise. |
+| `gain` | Multiplicative calibration factor. |
+| `bias` | Additive offset. |
+| `drift_rate` | Time-dependent drift. |
+| `min_value`, `max_value` | Saturation bounds. |
+| `quantization` | Rounding step. |
+| `latency_steps` | Delayed output. |
+| `p_false_reading` | Probability of replacing the reading with a false value. |
+| `p_outlier` | Probability of injecting a large outlier. |
+
+The registry stores sensor prototypes. The engine creates a fresh configured
+sensor instance for each session so drift, buffers, and random state never leak
+between contests.
+
+## API and WebSocket Surface
+
+The endpoint-level contract is generated by FastAPI at `/docs`. All protected
+REST endpoints use:
+
+```text
+Authorization: Bearer <JWT>
+```
+
+Core route groups:
+
+| Area | Routes |
+|---|---|
+| Auth | `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
+| Users | `POST/GET /api/v1/users`, `GET/PATCH/DELETE /api/v1/users/{user_id}`, impersonation |
+| Organizer requests | public request creation, admin list/approve/reject |
+| Contests | create, list, read, update status/deadline, pause, resume, delete |
+| Invitations | create/list/revoke contest invitations, validate/accept public token |
+| Registrations | join, list, inspect, withdraw/remove |
+| Streaming | `WS /api/v1/ws/contests/{contest_id}?token=...` |
+| Submissions | create/list/read submissions and scores |
+| Leaderboards | public contest leaderboard and permission-checked user entry |
+| Metadata | templates, catalog, twin metadata, compatible sensors, faults |
+
+Business-rule failures use a stable error envelope:
+
+```json
+{
+  "error": {
+    "code": "CONTEST_STATE_ERROR",
+    "message": "Contest is not active"
+  }
+}
+```
+
+Common error codes include `INVALID_CREDENTIALS`, `FORBIDDEN`,
+`CONTEST_NOT_FOUND`, `CONTEST_STATE_ERROR`, `REGISTRATION_ERROR`,
+`SUBMISSION_ERROR`, `VALIDATION_ERROR`, `PLUGIN_NOT_FOUND`, and
+`PLUGIN_EXECUTION_ERROR`.
+
+### WebSocket Messages
+
+Participants connect with the token in the query string:
+
+```text
+wss://<host>/api/v1/ws/contests/{contest_id}?token=<JWT>
+```
+
+Observation messages:
+
+```json
+{
+  "timestamp": "2027-01-15T10:00:00.500000+00:00",
+  "session_id": "8d44f402-0000-0000-0000-000000000000",
+  "sequence_id": 116,
+  "committed_through": 110,
+  "sensors": {
+    "position": 0.15,
+    "velocity": 1.82
+  }
+}
+```
+
+`sequence_id` increments every simulation step. `committed_through` is the
+highest sequence safely flushed to the database. The stream never includes
+ground truth, labels, or the twin's internal state.
+
+When the observation phase ends, the server sends:
+
+```json
+{
+  "event": "evaluation_started",
+  "observation_end_sequence_id": 400,
+  "evaluation_steps": 20
+}
+```
+
+Then it closes the stream. If a contest is closed early, the server sends:
+
+```json
+{ "event": "contest_closed" }
+```
+
+## Local Development
+
+Requirements:
 
 - Python 3.11 or later
-- [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- A supported database (SQLite for development, PostgreSQL for production)
+- `uv`
+- SQLite for local development, PostgreSQL for production
 
-### 1. Clone and install
+Install:
 
 ```bash
 git clone https://github.com/Elios-Lab/epic.git
@@ -196,9 +482,7 @@ cd epic
 uv sync
 ```
 
-### 2. Configure the environment
-
-Create a `.env` file in the project root:
+Create `.env`:
 
 ```env
 DATABASE_URL=sqlite+aiosqlite:///./epic.db
@@ -206,124 +490,147 @@ SECRET_KEY=change-me-in-production
 ADMIN_USERNAME=admin
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change-me
+BASE_URL=http://localhost:8000
 ```
 
-For production, use a PostgreSQL URL:
-
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/epic
-```
-
-### 3. Run database migrations
+Run migrations:
 
 ```bash
-set -a && source .env && set +a
-alembic upgrade head
+set -a
+source .env
+set +a
+uv run alembic upgrade head
 ```
 
-### 4. Start the server
+Start the server:
 
 ```bash
-uv run uvicorn "epic_api.main:create_app" --factory --reload
+uv run uvicorn "epic.api.main:create_app" --factory --reload
 ```
 
-The web interface is at `http://localhost:8000` and the Swagger UI at `http://localhost:8000/docs`.
+Open:
 
-### 5. Run the tests
+- Web UI: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+
+Useful optional settings:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT lifetime |
+| `SESSION_QUEUE_CAPACITY` | `1000` | Per-client WebSocket queue |
+| `BASE_URL` | `http://localhost:8000` | Invitation link base URL |
+| `SMTP_HOST` | unset | Enables email notifications when configured |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_TLS` | `true` | STARTTLS |
+
+## Testing
+
+Default suite:
 
 ```bash
-uv run pytest
+uv run pytest tests/ --tb=short -q
 ```
 
----
+Focused suites:
 
-## Authoring a contest
+```bash
+uv run pytest tests/core
+uv run pytest tests/api
+uv run pytest tests/twins
+uv run pytest tests/sensors
+uv run pytest epic_client/tests
+```
 
-Contests are created through the web interface (Organizer or Administrator role) or via the REST API. The fastest path is to start from a **contest template** — a predefined configuration for a specific twin that sets sensor configs, fault schedule, initial conditions, and scoring parameters.
+The Playwright UI suite is excluded from the default run:
 
-Templates are listed at `GET /api/v1/templates` and can be loaded directly from the web UI's contest creation form.
+```bash
+uv run pytest tests/ui
+```
 
-For a full guide on configuring sensors, faults, and scoring from scratch, see the authoring section of [Contests](docs/contest.md).
-
----
+API tests use a per-test SQLite database, fresh plugin registries, FastAPI
+`TestClient`, and a collecting notification service. They must not use
+production settings or production registries.
 
 ## Extending EPIC
 
-### Adding a digital twin
+### Add a Digital Twin
 
-Implement the `DigitalTwin` interface and register it at application startup:
+Implement `DigitalTwin`:
 
 ```python
-from epic_core.registry import twin_registry
-from my_package import MyTwin
-
-twin_registry.register(MyTwin())
+class DigitalTwin:
+    twin_id: str
+    name: str
+    def configure(self, initial_conditions: dict | None, fault_schedule: list[dict]) -> SimulationState: ...
+    def step(self, state: SimulationState, dt: float) -> SimulationState: ...
+    def get_active_faults(self) -> list[dict]: ...
+    def supported_quantities(self) -> set[PhysicalQuantity]: ...
+    def get_faults(self) -> list[FaultDescriptor]: ...
+    def metadata(self) -> dict: ...
 ```
 
-The new twin appears automatically at `GET /api/v1/twins` and can immediately be used in contest configurations. No other changes are needed. See [Digital Twins](docs/digital-twins.md) for the full interface specification.
+Register it:
 
-### Adding a sensor
+```python
+import epic.core.registry as registry_module
+from my_twin import MyTwin
 
-Implement the `Sensor` interface, declare the physical quantity it measures, and register it with `sensor_registry`. As long as the measured quantity is supported by the target twin, the sensor can be used in any contest configuration. See [Sensors](docs/sensors.md).
+registry_module.twin_registry.register(MyTwin())
+```
 
-### Adding a fault model
+### Add a Sensor
 
-Fault models are defined inside the twin that owns them, keeping physical realism self-contained. See the fault sections of [Digital Twins](docs/digital-twins.md).
+Implement `Sensor`, declare `measured_quantity`, and register it with
+`sensor_registry`. If the quantity already exists in `PhysicalQuantity`, no Core
+change is needed. New quantities belong in `epic/core/quantities.py`.
 
-### Adding a scoring metric
+### Add a Metric
 
-Implement the `ScoringMetric` interface and register it with `metric_registry`. New metrics become available in the `metric_ids` field of the contest creation request. See [Scoring](docs/scoring.md).
+Implement `ScoringMetric` and register it with `metric_registry`:
 
-### Adding a contest task type
+```python
+class MyMetric(ScoringMetric):
+    metric_id = "my_metric"
+    direction = "minimize"
+    def compute(self, y_true, y_pred) -> float: ...
+    def metadata(self) -> dict: ...
+```
 
-Implement the `TaskEvaluator` interface — payload validation, metric application, and the leaderboard ranking policy for one task type — and register it with `task_evaluator_registry`. The new task type is immediately accepted at contest creation and scored automatically, with no changes to EPIC Core or the API. See [Scoring](docs/scoring.md).
+### Add a Task Type
 
----
+Implement `TaskEvaluator` and register it with `task_evaluator_registry`. A task
+evaluator owns payload validation, metric application, and the leaderboard
+ranking value for one task type.
 
-## Documentation
+## Roadmap
 
-The documentation is organized so that each reader has one obvious starting point.
+Implemented:
 
-**For participants** — [API Conventions & WebSocket Protocol](docs/api-specification.md) covers everything a competitor's client touches: the conventions all endpoints share, the full streaming protocol, and how to collect data client-side. The endpoint-by-endpoint reference is the live [Swagger UI](https://epic.elioslab.net/docs), and the [SDK README](epic_client/README.md) plus [quickstart notebook](notebooks/quickstart.ipynb) get a model submitted fastest.
+- domain-independent interfaces and plugin registries;
+- FastAPI backend with JWT authentication;
+- organizer requests, participant invitations, admin user management, and
+  impersonation;
+- two-phase forecasting contests with WebSocket observation streams;
+- pause, resume, close, restart recovery, and session isolation;
+- configurable sensors and fault schedules;
+- target-variable forecasting with automatic scoring and leaderboards;
+- contest templates and twin catalog API;
+- static role-based GUI;
+- PyPI-ready participant SDK and notebooks.
 
-**For contest organizers** — [Contests](docs/contest.md) explains how contests work and how to author one through configuration alone, and the catalog in [Digital Twins](docs/digital-twins.md) describes the five built-in twins to choose from.
+Planned:
 
-**For plugin authors** — the development guide in [Digital Twins](docs/digital-twins.md) covers implementing a twin and its faults, [Sensors](docs/sensors.md) covers the physical-quantity ontology and the measurement pipeline, and [Scoring](docs/scoring.md) covers metrics and task evaluators.
+- anomaly detection, fault classification, and remaining-useful-life task
+  evaluators;
+- public/private leaderboard splits;
+- runtime plugin governance;
+- larger-scale distributed simulation;
+- more digital twin domain packs.
 
-**For platform developers and operators** — [Architecture](docs/architecture.md) is the map, with [Simulation Engine](docs/simulation-engine.md) for the loop and error isolation, [Domain Model](docs/domain-model.md) for the schema rationale, [Authentication](docs/authentication.md) for roles and registration workflows, [Configuration](docs/configuration.md) for environment variables, and [Testing](docs/testing.md) for the test strategy and CI.
+## Credits
 
----
+EPIC is developed by Elios Lab at the University of Genoa.
 
-## Development roadmap
-
-### ✅ Phase 0 — Foundation
-Core interfaces (`DigitalTwin`, `Sensor`, `FaultDescriptor`, `ScoringMetric`), plugin registries, configuration system, repository structure and documentation.
-
-### ✅ Phase 1 — Minimal vertical slice
-FastAPI backend, JWT authentication, mass-spring-damper twin, WebSocket streaming, contest lifecycle management (DRAFT → ACTIVE → CLOSED), real-time simulation engine.
-
-### ✅ Phase 2 — Contest platform
-Three-role system (ADMINISTRATOR, ORGANIZER, PARTICIPANT), two-phase contest model (observation → evaluation → submission), MAE scoring for forecasting tasks, automated leaderboards, deadline extension.
-
-### ✅ Phase 3 — Advanced simulation
-Sensor noise, drift, latency, quantization, saturation, outliers — fully configurable per sensor. Multiple simultaneous and intermittent faults with gradual physical effects.
-
-### ✅ Phase 4 — Industrial twins
-Industrial Pump, Electric Motor, Rotating Machinery, and Smart Building twins integrated with zero changes to EPIC Core, validating the extensibility architecture.
-
-### ✅ Phase 5 — Educational ecosystem
-`epic-elios-client` SDK on PyPI, Jupyter quickstart notebook, contest templates, twin catalog API, responsive single-page web frontend with role-based dashboards for all three roles, admin bootstrap, closed registration.
-
-### 🔜 Phase 6 — Advanced contest types
-Fault classification tasks, remaining useful life estimation, multi-task contests (combined forecasting + anomaly detection), public and private leaderboard separation.
-
-### 🔜 Phase 7 — Research platform
-Multi-agent simulations, federated learning challenges, reinforcement learning environments, digital twin benchmarking, large-scale distributed simulations.
-
----
-
-## Powered by Elios Lab
-
-EPIC is developed and maintained by [Elios Lab](https://www.elios.unige.it/) at the University of Genoa.
-
-The long-term vision is a domain-independent framework where digital twins, sensors, fault models, and contest types are interchangeable building blocks — and where a new machine learning competition can be created entirely through configuration, while a new application domain can be introduced by implementing a small, well-defined set of interfaces.
+The long-term goal is simple: a new competition should be configuration, not
+backend code; and a new application domain should be a plugin, not a rewrite.

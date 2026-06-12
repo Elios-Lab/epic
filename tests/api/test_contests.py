@@ -4,8 +4,8 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from epic_core.db.models import SensorObservation, SimulationSession, User
-from epic_core.db.session import get_session_factory
+from epic.core.db.models import SensorObservation, SimulationSession, User
+from epic.core.db.session import get_session_factory
 
 
 def contest_payload(**overrides):
@@ -105,7 +105,7 @@ def submit_for_contest(client, headers, contest_id: str):
 
 def force_contest_status(db_factory, contest_id: str, status: str) -> None:
     """Set contest status directly in the DB without starting the engine."""
-    from epic_core.db.models import Contest as ContestModel
+    from epic.core.db.models import Contest as ContestModel
     async def _set():
         async with db_factory() as db:
             result = await db.execute(
@@ -231,7 +231,7 @@ def test_create_contest_with_invalid_visibility_returns_422(client, admin_header
 def test_list_contests_returns_created_contest(client, admin_headers):
     contest = create_contest(client, admin_headers)
 
-    response = client.get("/api/v1/contests")
+    response = client.get("/api/v1/contests", headers=admin_headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -252,7 +252,9 @@ def test_list_contests_with_status_filter_returns_matching_contests(
     )
     assert schedule_response.status_code == 200
 
-    response = client.get("/api/v1/contests", params={"status": "DRAFT"})
+    response = client.get(
+        "/api/v1/contests", params={"status": "DRAFT"}, headers=admin_headers
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -265,14 +267,16 @@ def test_list_contests_with_status_filter_returns_matching_contests(
 def test_get_contest_returns_contest(client, admin_headers):
     contest = create_contest(client, admin_headers)
 
-    response = client.get(f"/api/v1/contests/{contest['contest_id']}")
+    response = client.get(
+        f"/api/v1/contests/{contest['contest_id']}", headers=admin_headers
+    )
 
     assert response.status_code == 200
     assert response.json()["contest_id"] == contest["contest_id"]
 
 
-def test_get_nonexistent_contest_returns_404(client):
-    response = client.get("/api/v1/contests/nonexistent")
+def test_get_nonexistent_contest_returns_404(client, admin_headers):
+    response = client.get("/api/v1/contests/nonexistent", headers=admin_headers)
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "CONTEST_NOT_FOUND"
@@ -512,7 +516,9 @@ def test_delete_draft_contest_returns_204(client, admin_headers):
     )
 
     assert response.status_code == 204
-    get_response = client.get(f"/api/v1/contests/{contest_id}")
+    get_response = client.get(
+        f"/api/v1/contests/{contest_id}", headers=admin_headers
+    )
     assert get_response.status_code == 404
 
 
@@ -523,12 +529,12 @@ def test_delete_contest_removes_all_associated_data(
     scores, leaderboard entries, simulation session, and sensor observations."""
     import asyncio, time
     from sqlalchemy import select
-    from epic_core.db.models import (
+    from epic.core.db.models import (
         Task, ContestRegistration, Submission, Score,
         LeaderboardEntry, SimulationSession, SensorObservation,
     )
     from uuid import UUID
-    from epic_api.routers.submissions import _score_submission
+    from epic.api.routers.submissions import _score_submission
 
     # Create and activate contest
     contest = create_contest(
@@ -635,7 +641,10 @@ def test_delete_own_contest_by_organizer_returns_204(client, organizer_headers):
     )
 
     assert response.status_code == 204
-    assert client.get(f"/api/v1/contests/{contest_id}").status_code == 404
+    assert (
+        client.get(f"/api/v1/contests/{contest_id}", headers=organizer_headers).status_code
+        == 404
+    )
 
 
 def test_delete_other_organizers_contest_returns_403(
@@ -1021,3 +1030,115 @@ def test_two_phase_submission_rejected_before_eval_ends(client, admin_headers, a
 
     assert sub_response.status_code == 409
     assert sub_response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+
+
+# ── Listing and get visibility ───────────────────────────────────────────────
+
+def test_list_contests_requires_authentication(client):
+    response = client.get("/api/v1/contests")
+    assert response.status_code == 401
+
+
+def _restricted_contest(client, organizer_headers, name, visibility, status="SCHEDULED"):
+    payload = contest_payload()
+    payload["name"] = name
+    payload["visibility"] = visibility
+    response = client.post("/api/v1/contests", json=payload, headers=organizer_headers)
+    assert response.status_code == 201, response.json()
+    contest = response.json()
+    if status != "DRAFT":
+        patched = client.patch(
+            f"/api/v1/contests/{contest['contest_id']}",
+            json={"status": status},
+            headers=organizer_headers,
+        )
+        assert patched.status_code == 200
+        contest = patched.json()
+    return contest
+
+
+def test_participant_does_not_see_drafts_or_restricted_contests(
+    client, admin_headers, organizer_headers, auth_headers
+):
+    draft = _restricted_contest(
+        client, organizer_headers, "Hidden draft", "PUBLIC", status="DRAFT"
+    )
+    private = _restricted_contest(client, organizer_headers, "Hidden private", "PRIVATE")
+    public = _restricted_contest(client, organizer_headers, "Visible public", "PUBLIC")
+
+    response = client.get("/api/v1/contests", headers=auth_headers)
+    assert response.status_code == 200
+    visible_ids = {c["contest_id"] for c in response.json()["contests"]}
+
+    assert public["contest_id"] in visible_ids
+    assert draft["contest_id"] not in visible_ids
+    assert private["contest_id"] not in visible_ids
+
+    # Direct GET of a hidden contest is a 404, not a 403 — no existence leak.
+    for hidden in (draft, private):
+        get_response = client.get(
+            f"/api/v1/contests/{hidden['contest_id']}", headers=auth_headers
+        )
+        assert get_response.status_code == 404
+
+
+def test_invited_participant_sees_restricted_contest(
+    client, organizer_headers, auth_headers, registered_user
+):
+    contest = _restricted_contest(
+        client, organizer_headers, "Private-but-invited", "PRIVATE"
+    )
+    invite = client.post(
+        f"/api/v1/contests/{contest['contest_id']}/invitations",
+        json={"emails": [registered_user["email"]]},
+        headers=organizer_headers,
+    )
+    assert invite.status_code == 201
+
+    listing = client.get("/api/v1/contests", headers=auth_headers)
+    visible_ids = {c["contest_id"] for c in listing.json()["contests"]}
+    assert contest["contest_id"] in visible_ids
+
+    get_response = client.get(
+        f"/api/v1/contests/{contest['contest_id']}", headers=auth_headers
+    )
+    assert get_response.status_code == 200
+
+
+def test_organizer_sees_own_draft_but_not_others_private(
+    client, admin_headers, organizer_headers
+):
+    own_draft = _restricted_contest(
+        client, organizer_headers, "Own draft", "PUBLIC", status="DRAFT"
+    )
+    # A different owner: the admin creates a private contest.
+    payload = contest_payload()
+    payload["name"] = "Admin private"
+    payload["visibility"] = "PRIVATE"
+    admin_private = client.post(
+        "/api/v1/contests", json=payload, headers=admin_headers
+    ).json()
+    client.patch(
+        f"/api/v1/contests/{admin_private['contest_id']}",
+        json={"status": "SCHEDULED"},
+        headers=admin_headers,
+    )
+
+    listing = client.get("/api/v1/contests", headers=organizer_headers)
+    visible_ids = {c["contest_id"] for c in listing.json()["contests"]}
+    assert own_draft["contest_id"] in visible_ids
+    assert admin_private["contest_id"] not in visible_ids
+
+
+def test_admin_sees_everything(client, admin_headers, organizer_headers):
+    draft = _restricted_contest(
+        client, organizer_headers, "Admin-view draft", "PUBLIC", status="DRAFT"
+    )
+    private = _restricted_contest(
+        client, organizer_headers, "Admin-view private", "PRIVATE"
+    )
+
+    listing = client.get("/api/v1/contests", headers=admin_headers)
+    visible_ids = {c["contest_id"] for c in listing.json()["contests"]}
+    assert draft["contest_id"] in visible_ids
+    assert private["contest_id"] in visible_ids

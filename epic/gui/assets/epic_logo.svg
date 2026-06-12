@@ -1,0 +1,13 @@
+<svg viewBox="0 0 590 190" xmlns="http://www.w3.org/2000/svg">
+  <rect width="580" height="180" fill="#ffffff"/>
+  <path d="M22,90 C32,70 42,70 52,90 C62,110 72,110 82,90" stroke="#0d3b6e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M82,90 L89,57 L96,123 L103,57 L110,90" stroke="#0096c7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="96" cy="88" r="4.5" fill="#0096c7"/>
+  <path d="M110,90 C120,70 130,70 140,90 C150,110 160,110 170,90" stroke="#0d3b6e" stroke-width="2.5" fill="none" stroke-dasharray="6,4" stroke-linecap="round" opacity="0.45"/>
+  <text x="188" y="126" font-family="'Segoe UI', system-ui, sans-serif" font-size="62" font-weight="900" letter-spacing="3" fill="#0d3b6e">EPIC</text>
+  <line x1="360" y1="52" x2="360" y2="140" stroke="#0096c7" stroke-width="1.5" opacity="0.5"/>
+  <text x="374" y="78" font-family="'Segoe UI', system-ui, sans-serif" font-size="20" font-weight="800" letter-spacing="1.5" fill="#0d3b6e">ELIOS</text>
+  <text x="374" y="100" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Predictive</text>
+  <text x="374" y="119" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Intelligence</text>
+  <text x="374" y="138" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400" letter-spacing="0.5" fill="#0096c7">Challenge</text>
+</svg>

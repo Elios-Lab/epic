@@ -1,11 +1,11 @@
 import pytest
 
-import epic_core.registry as registry_module
-from epic_core.interfaces import FaultDescriptor, SimulationState
-from epic_core.quantities import PhysicalQuantity
-from epic_core.testing import test_registry_context as registry_context
-from epic_twins.electric_motor.plugin import register
-from epic_twins.electric_motor.twin import ElectricMotorState, ElectricMotorTwin
+import epic.core.registry as registry_module
+from epic.core.interfaces import FaultDescriptor, SimulationState
+from epic.core.quantities import PhysicalQuantity
+from epic.core.testing import test_registry_context as registry_context
+from epic.twins.electric_motor.plugin import register
+from epic.twins.electric_motor.twin import ElectricMotorState, ElectricMotorTwin
 
 
 def _schedule(fault_id: str, severity: float = 1.0, end_time=None) -> list[dict]:

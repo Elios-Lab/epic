@@ -2,8 +2,8 @@
 
 import asyncio
 from sqlalchemy import select
-from epic_core.db.models import Invitation
-from epic_core.db.session import get_session_factory
+from epic.core.db.models import Invitation
+from epic.core.db.session import get_session_factory
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ def test_accept_invitation_creates_contest_registration(
 ):
     """Accepting an invitation must register the participant for the contest,
     so they can stream and submit with no further steps (as documented)."""
-    from epic_core.db.models import ContestRegistration
+    from epic.core.db.models import ContestRegistration
 
     client.post(
         f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
@@ -293,3 +293,75 @@ def test_register_deep_link_serves_spa(client):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "epicApp" in response.text
+
+
+# ── Organizer invitation management ───────────────────────────────────────────
+
+def test_owner_lists_contest_invitations(client, organizer_headers, registered_contest):
+    client.post(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
+        json={"emails": ["x1@example.com", "x2@example.com"]},
+        headers=organizer_headers,
+    )
+
+    response = client.get(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
+        headers=organizer_headers,
+    )
+
+    assert response.status_code == 200
+    invitations = response.json()["invitations"]
+    assert {inv["email"] for inv in invitations} == {"x1@example.com", "x2@example.com"}
+    assert all(inv["used"] is False for inv in invitations)
+    assert all("token" not in inv for inv in invitations)
+
+
+def test_non_owner_organizer_cannot_list_or_create_invitations(
+    client, admin_headers, organizer_headers
+):
+    """Invitation management is scoped to the contest owner."""
+    from tests.api.test_registrations import contest_payload
+
+    payload = contest_payload("Admin-owned for invitations")
+    contest = client.post("/api/v1/contests", json=payload, headers=admin_headers).json()
+
+    listing = client.get(
+        f"/api/v1/contests/{contest['contest_id']}/invitations",
+        headers=organizer_headers,
+    )
+    assert listing.status_code == 403
+
+    creating = client.post(
+        f"/api/v1/contests/{contest['contest_id']}/invitations",
+        json={"emails": ["y@example.com"]},
+        headers=organizer_headers,
+    )
+    assert creating.status_code == 403
+
+
+def test_owner_revokes_unused_invitation(client, organizer_headers, registered_contest):
+    client.post(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
+        json={"emails": ["revoke-me@example.com"]},
+        headers=organizer_headers,
+    )
+    listing = client.get(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
+        headers=organizer_headers,
+    ).json()
+    invitation_id = listing["invitations"][0]["id"]
+    token = _get_token_for_email("revoke-me@example.com")
+
+    response = client.delete(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations/{invitation_id}",
+        headers=organizer_headers,
+    )
+    assert response.status_code == 204
+
+    # The invitation is gone and its registration link is dead.
+    after = client.get(
+        f"/api/v1/contests/{registered_contest['contest_id']}/invitations",
+        headers=organizer_headers,
+    ).json()
+    assert after["invitations"] == []
+    assert client.get(f"/api/v1/invitations/{token}").status_code == 404

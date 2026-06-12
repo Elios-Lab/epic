@@ -24,7 +24,7 @@ jobs:
         run: uv sync
 
       - name: Run unit and API tests
-        run: uv run pytest --cov=epic_core --cov=epic_api --cov-report=term
+        run: uv run pytest --cov=epic.core --cov=epic.api --cov-report=term
 
       - name: Run client SDK tests
         run: uv run pytest epic_client/tests

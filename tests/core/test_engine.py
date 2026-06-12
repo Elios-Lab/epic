@@ -7,10 +7,10 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from epic_core.db.base import create_all_tables, create_engine
-from epic_core.db.models import Contest, SensorObservation, SimulationSession
-from epic_core.engine import SimulationEngine
-from epic_core.testing import (
+from epic.core.db.base import create_all_tables, create_engine
+from epic.core.db.models import Contest, SensorObservation, SimulationSession
+from epic.core.engine import SimulationEngine
+from epic.core.testing import (
     MockSensor,
     MockTwin,
     test_registry_context as registry_context,
@@ -428,7 +428,7 @@ async def test_two_phase_broadcast_stops_at_evaluation_started(engine_db_factory
 # ── Engine notifications ──────────────────────────────────────────────────────
 
 async def _create_user(db_factory, username: str, email: str, role: str):
-    from epic_core.db.models import User
+    from epic.core.db.models import User
 
     async with db_factory() as db:
         user = User(
@@ -447,7 +447,7 @@ async def _create_user(db_factory, username: str, email: str, role: str):
 @pytest.mark.asyncio
 async def test_session_failure_notifies_owner_and_admins(engine_db_factory):
     """A crashing twin must alert the contest owner and every administrator."""
-    from epic_core.notifications import CollectingNotificationService, SessionFailed
+    from epic.core.notifications import CollectingNotificationService, SessionFailed
 
     admin = await _create_user(
         engine_db_factory, "admin", "admin@example.com", "ADMINISTRATOR"
@@ -488,8 +488,8 @@ async def test_two_phase_completion_notifies_registered_participants(
 ):
     """When the evaluation window ends, registered participants must be told
     the submission window is open. Unregistered users must not be."""
-    from epic_core.db.models import ContestRegistration
-    from epic_core.notifications import (
+    from epic.core.db.models import ContestRegistration
+    from epic.core.notifications import (
         CollectingNotificationService,
         SubmissionWindowOpen,
     )

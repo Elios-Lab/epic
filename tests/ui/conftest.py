@@ -14,14 +14,14 @@ import pytest
 import uvicorn
 from playwright.sync_api import Page, sync_playwright
 
-from epic_api.main import create_app
-from epic_core.config import Settings
-from epic_core.db.base import create_all_tables
-from epic_core.db.session import get_engine, get_session_factory, init_db
-import epic_core.db.session as db_session_module
-from epic_core.testing import test_registry_context
+from epic.api.main import create_app
+from epic.core.config import Settings
+from epic.core.db.base import create_all_tables
+from epic.core.db.session import get_engine, get_session_factory, init_db
+import epic.core.db.session as db_session_module
+from epic.core.testing import test_registry_context
 from sqlalchemy import select
-from epic_core.db.models import User
+from epic.core.db.models import User
 
 
 # ── Server fixture ────────────────────────────────────────────────────────────

@@ -2,9 +2,9 @@
 
 import pytest
 
-from epic_core.evaluators import ForecastingEvaluator
-from epic_core.exceptions import EvaluationPendingError, SubmissionError
-from epic_core.scoring import F1Score, MAE
+from epic.core.evaluators import ForecastingEvaluator
+from epic.core.exceptions import EvaluationPendingError, SubmissionError
+from epic.core.scoring import F1Score, MAE
 
 
 def make_observations(values: list[float], with_ground_truth: bool = True):

@@ -3,8 +3,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from epic_api.routers.submissions import _score_submission
-from epic_core.db.models import Contest, SensorObservation, SimulationSession, Task
+from sqlalchemy import select
+
+from epic.api.routers.submissions import _score_submission
+from epic.core.db.models import Contest, Invitation, SensorObservation, SimulationSession, Task, User
 
 
 def create_user_and_headers(client, admin_headers, username: str, email: str, password: str):
@@ -299,6 +301,19 @@ def test_get_leaderboard_private_contest_accessible_to_registered_participant(
     _, member_headers = create_user_and_headers(
         client, admin_headers, "member_lb", "member_lb@example.com", "pass"
     )
+
+    async def invite_member():
+        async with db_factory() as db:
+            admin_result = await db.execute(select(User).where(User.username == "admin1"))
+            admin = admin_result.scalar_one()
+            db.add(Invitation(
+                email="member_lb@example.com",
+                contest_id=contest.id,
+                invited_by=admin.id,
+            ))
+            await db.commit()
+
+    asyncio.run(invite_member())
     register(client, member_headers, str(contest.id))
 
     response = client.get(
@@ -314,8 +329,8 @@ def test_update_leaderboard_honours_maximize_direction(client, db_factory):
     rank 1 and a participant's lower new score must not replace their best."""
     import uuid
 
-    from epic_api.routers.submissions import _update_leaderboard
-    from epic_core.db.models import LeaderboardEntry
+    from epic.api.routers.submissions import _update_leaderboard
+    from epic.core.db.models import LeaderboardEntry
     from sqlalchemy import select
 
     contest_id = uuid.uuid4()
@@ -350,8 +365,8 @@ def test_update_leaderboard_honours_minimize_direction(client, db_factory):
     """With a minimize metric (e.g. MAE) the lowest score wins rank 1."""
     import uuid
 
-    from epic_api.routers.submissions import _update_leaderboard
-    from epic_core.db.models import LeaderboardEntry
+    from epic.api.routers.submissions import _update_leaderboard
+    from epic.core.db.models import LeaderboardEntry
     from sqlalchemy import select
 
     contest_id = uuid.uuid4()

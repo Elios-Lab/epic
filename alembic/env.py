@@ -11,8 +11,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from epic_core.db.base import Base
-from epic_core.db import models  # noqa: F401
+from epic.core.db.base import Base
+from epic.core.db import models  # noqa: F401
 
 config = context.config
 
