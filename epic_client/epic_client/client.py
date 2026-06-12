@@ -20,7 +20,7 @@ class EPICClientError(RuntimeError):
 
     def __init__(
         self,
-        status_code: int,
+        status_code: int | None,
         message: str,
         *,
         error_code: str | None = None,
@@ -57,18 +57,31 @@ class RegistrationNotOpenError(EPICClientError):
     """Raised when a contest is visible but not open for registration."""
 
 
+class StreamUnavailableError(EPICClientError):
+    """Raised when a contest stream cannot be opened for the current user."""
+
+
 class EPICClient:
-    def __init__(self, server_url: str = "https://epic.elioslab.net") -> None:
+    def __init__(
+        self,
+        server_url: str = "https://epic.elioslab.net",
+        *,
+        raise_on_error: bool = False,
+    ) -> None:
         self.server_url = server_url.rstrip("/") + "/"
         self._token: str | None = None
+        self.raise_on_error = raise_on_error
 
     def login(self, username: str, password: str) -> dict:
-        response = self._request(
-            "POST",
-            "/api/v1/auth/login",
-            {"username": username, "password": password},
-            authenticated=False,
-        )
+        try:
+            response = self._request(
+                "POST",
+                "/api/v1/auth/login",
+                {"username": username, "password": password},
+                authenticated=False,
+            )
+        except RuntimeError as exc:
+            return self._warning_result(exc)
         self._token = response["access_token"]
         return response
 
@@ -95,7 +108,7 @@ class EPICClient:
             }
         except RuntimeError as exc:
             if "Already registered for this contest" not in str(exc):
-                raise
+                return self._warning_result(exc, contest_id=contest_id)
             return {
                 "contest_id": contest_id,
                 "status": "REGISTERED",
@@ -115,18 +128,27 @@ class EPICClient:
         if visibility is not None:
             params["visibility"] = visibility
         query = f"?{urlencode(params)}"
-        response = self._request("GET", f"/api/v1/contests{query}")
+        try:
+            response = self._request("GET", f"/api/v1/contests{query}")
+        except RuntimeError as exc:
+            self._warn_or_raise(exc)
+            return []
         contests = response["contests"]
         for contest in contests:
             self._normalize_contest(contest)
         return contests
 
     def get_contest(self, contest_id: str) -> dict:
-        contest = self._request("GET", f"/api/v1/contests/{contest_id}")
+        try:
+            contest = self._request("GET", f"/api/v1/contests/{contest_id}")
+        except RuntimeError as exc:
+            return self._warning_result(exc, contest_id=contest_id)
         return self._normalize_contest(contest)
 
     def get_task_spec(self, contest_id: str, task_type: str = "FORECASTING") -> dict:
         contest = self.get_contest(contest_id)
+        if contest.get("status") == "ERROR":
+            return contest
         requested = task_type.upper()
         task = next(
             (
@@ -138,7 +160,7 @@ class EPICClient:
             None,
         )
         if task is None:
-            raise RuntimeError(
+            return self._warning_result(
                 f"Contest '{contest_id}' has no task matching '{task_type}'."
             )
 
@@ -169,8 +191,18 @@ class EPICClient:
         contest_id: str,
         *,
         include_events: bool = False,
+        raise_on_stream_error: bool = False,
     ) -> AsyncIterator[dict]:
-        self._require_token()
+        try:
+            self._require_token()
+        except RuntimeError as exc:
+            error = self._stream_error(exc)
+            if raise_on_stream_error or self.raise_on_error:
+                raise error from None
+            warnings.warn(str(error), RuntimeWarning, stacklevel=2)
+            if include_events:
+                yield self._event_result("stream_unavailable", error)
+            return
         websocket_url = self._websocket_url(f"/api/v1/ws/contests/{contest_id}")
         reconnect_delay = 1.0
         first_attempt = True
@@ -196,9 +228,13 @@ class EPICClient:
                 raise
             except Exception as exc:
                 if first_attempt:
-                    raise RuntimeError(
-                        f"Could not connect to contest stream: {exc}"
-                    ) from exc
+                    error = self._stream_error(exc)
+                    if raise_on_stream_error or self.raise_on_error:
+                        raise error from None
+                    warnings.warn(str(error), RuntimeWarning, stacklevel=2)
+                    if include_events:
+                        yield self._event_result("stream_unavailable", error)
+                    return
             await asyncio.sleep(reconnect_delay)
 
     async def collect(
@@ -206,6 +242,8 @@ class EPICClient:
         contest_id: str,
         duration_seconds: float,
         csv_path: str | Path | None = None,
+        *,
+        raise_on_stream_error: bool = False,
     ) -> list[dict]:
         observations: list[dict] = []
         deadline = time.monotonic() + duration_seconds
@@ -216,7 +254,10 @@ class EPICClient:
             csv_file = Path(csv_path).open("w", newline="")
 
         try:
-            stream = self.stream(contest_id).__aiter__()
+            stream = self.stream(
+                contest_id,
+                raise_on_stream_error=raise_on_stream_error,
+            ).__aiter__()
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -226,6 +267,11 @@ class EPICClient:
                 except asyncio.TimeoutError:
                     break
                 except StopAsyncIteration:
+                    break
+                except StreamUnavailableError as exc:
+                    if raise_on_stream_error:
+                        raise
+                    warnings.warn(str(exc), RuntimeWarning, stacklevel=2)
                     break
                 observations.append(observation)
                 if csv_file is not None:
@@ -273,21 +319,46 @@ class EPICClient:
                 "message": str(exc),
                 "opens_at": exc.opens_at,
             }
+        except RuntimeError as exc:
+            return self._warning_result(exc)
 
     def get_scores(self, contest_id: str) -> dict:
-        submissions = self._request(
-            "GET", f"/api/v1/contests/{contest_id}/submissions"
-        )["submissions"]
+        try:
+            submissions = self._request(
+                "GET", f"/api/v1/contests/{contest_id}/submissions"
+            )["submissions"]
+        except RuntimeError as exc:
+            self._warn_or_raise(exc)
+            return {
+                "contest_id": contest_id,
+                "status": "ERROR",
+                "message": str(exc),
+                "submissions": [],
+            }
         scored_submissions = []
         for submission in submissions:
-            scores = self._request(
-                "GET", f"/api/v1/submissions/{submission['submission_id']}/scores"
-            )
+            try:
+                scores = self._request(
+                    "GET", f"/api/v1/submissions/{submission['submission_id']}/scores"
+                )
+            except RuntimeError as exc:
+                self._warn_or_raise(exc)
+                scored_submissions.append({**submission, "scores": [], "score_error": str(exc)})
+                continue
             scored_submissions.append({**submission, "scores": scores["scores"]})
         return {"contest_id": contest_id, "submissions": scored_submissions}
 
     def get_leaderboard(self, contest_id: str) -> dict:
-        return self._request("GET", f"/api/v1/contests/{contest_id}/leaderboard")
+        try:
+            return self._request("GET", f"/api/v1/contests/{contest_id}/leaderboard")
+        except RuntimeError as exc:
+            self._warn_or_raise(exc)
+            return {
+                "contest_id": contest_id,
+                "status": "ERROR",
+                "message": str(exc),
+                "entries": [],
+            }
 
     def _request(
         self,
@@ -328,6 +399,32 @@ class EPICClient:
     def _require_token(self) -> None:
         if self._token is None:
             raise RuntimeError("Not authenticated. Call login() first.")
+
+    def _warn_or_raise(self, exc: RuntimeError | str) -> None:
+        if isinstance(exc, str):
+            exc = RuntimeError(exc)
+        if self.raise_on_error:
+            raise exc
+        warnings.warn(str(exc), RuntimeWarning, stacklevel=3)
+
+    def _warning_result(self, exc: RuntimeError | str, **extra: object) -> dict:
+        if isinstance(exc, str):
+            exc = RuntimeError(exc)
+        self._warn_or_raise(exc)
+        return {
+            **extra,
+            "status": "ERROR",
+            "message": str(exc),
+        }
+
+    def _event_result(self, event: str, exc: EPICClientError) -> dict:
+        return {
+            "event": event,
+            "status": "ERROR",
+            "message": str(exc),
+            "error_code": exc.error_code,
+            "status_code": exc.status_code,
+        }
 
     def _api_error(self, status_code: int, response_text: str) -> EPICClientError:
         error_code = None
@@ -393,6 +490,30 @@ class EPICClient:
         if match:
             return re.sub(r"\s+", " ", match.group(1)).strip()
         return None
+
+    def _stream_error(self, exc: Exception) -> StreamUnavailableError:
+        status_code = self._websocket_status_code(exc)
+        if status_code in {401, 403}:
+            message = (
+                "The contest stream is not available for this account. "
+                "Make sure you are logged in, registered for the contest, "
+                "the contest is ACTIVE, and the observation phase is still open."
+            )
+        else:
+            message = f"Could not connect to contest stream: {exc}"
+        return StreamUnavailableError(
+            status_code,
+            message,
+            error_code="STREAM_UNAVAILABLE",
+        )
+
+    def _websocket_status_code(self, exc: Exception) -> int | None:
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if isinstance(status_code, int):
+            return status_code
+        match = re.search(r"HTTP (\d{3})", str(exc))
+        return int(match.group(1)) if match else None
 
     def _normalize_contest(self, contest: dict) -> dict:
         if "contest_id" not in contest and "id" in contest:

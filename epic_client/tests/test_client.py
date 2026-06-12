@@ -12,6 +12,7 @@ from epic_client import (
     EPICClient,
     EPICClientError,
     RegistrationNotOpenError,
+    StreamUnavailableError,
     SubmissionNotOpenError,
 )
 
@@ -24,8 +25,8 @@ def make_client(server_url: str = "https://epic.example.com") -> EPICClient:
     return EPICClient(server_url)
 
 
-def authenticated_client() -> EPICClient:
-    client = make_client()
+def authenticated_client(*, raise_on_error: bool = False) -> EPICClient:
+    client = EPICClient("https://epic.example.com", raise_on_error=raise_on_error)
     client._token = "test-token"
     return client
 
@@ -50,6 +51,14 @@ class FakeWebSocket:
             yield json.dumps(p)
 
 
+class FakeWebSocketStatusError(Exception):
+    def __init__(self, status_code: int) -> None:
+        self.response = type("Response", (), {"status_code": status_code})()
+        super().__init__(
+            f"server rejected WebSocket connection: HTTP {status_code}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Initialisation
 # ---------------------------------------------------------------------------
@@ -72,23 +81,35 @@ def test_token_starts_as_none():
 # Authentication guard
 # ---------------------------------------------------------------------------
 
-def test_unauthenticated_submit_raises():
+def test_unauthenticated_submit_returns_error_with_warning():
     client = make_client()
-    with pytest.raises(RuntimeError, match="Not authenticated"):
-        client.submit("cid", "forecasting", {"forecast": {}})
+    with pytest.warns(RuntimeWarning, match="Not authenticated"):
+        result = client.submit("cid", "forecasting", {"forecast": {}})
+
+    assert result["status"] == "ERROR"
+    assert "Not authenticated" in result["message"]
 
 
-def test_unauthenticated_list_raises():
+def test_unauthenticated_list_returns_empty_with_warning():
     client = make_client()
+    with pytest.warns(RuntimeWarning, match="Not authenticated"):
+        result = client.list_contests()
+
+    assert result == []
+
+
+def test_unauthenticated_stream_stops_with_warning():
+    client = make_client()
+    with pytest.warns(RuntimeWarning, match="Not authenticated"):
+        # Calling __aiter__ triggers _require_token before the first yield.
+        with pytest.raises(StopAsyncIteration):
+            asyncio.run(client.stream("cid").__anext__())
+
+
+def test_strict_client_raises_authentication_errors():
+    client = EPICClient("https://epic.example.com", raise_on_error=True)
     with pytest.raises(RuntimeError, match="Not authenticated"):
         client.list_contests()
-
-
-def test_unauthenticated_stream_raises():
-    client = make_client()
-    with pytest.raises(RuntimeError, match="Not authenticated"):
-        # Calling __aiter__ triggers _require_token before the first yield.
-        asyncio.run(client.stream("cid").__anext__())
 
 
 # ---------------------------------------------------------------------------
@@ -205,12 +226,15 @@ def test_get_task_spec_extracts_forecasting_configuration():
     assert result["sampling_rate_hz"] == 10.0
 
 
-def test_get_task_spec_raises_when_missing():
+def test_get_task_spec_returns_error_when_missing():
     client = authenticated_client()
     contest = {"contest_id": "c1", "tasks": []}
     with patch.object(client, "get_contest", return_value=contest):
-        with pytest.raises(RuntimeError, match="has no task"):
-            client.get_task_spec("c1")
+        with pytest.warns(RuntimeWarning, match="has no task"):
+            result = client.get_task_spec("c1")
+
+    assert result["status"] == "ERROR"
+    assert "has no task" in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +260,19 @@ def test_register_already_registered_returns_gracefully():
     assert result["contest_id"] == "c1"
 
 
-def test_register_propagates_other_errors():
+def test_register_returns_error_for_other_errors():
     client = authenticated_client()
+    with patch.object(client, "_request", side_effect=RuntimeError("Network error")):
+        with pytest.warns(RuntimeWarning, match="Network error"):
+            result = client.register("c1")
+
+    assert result["contest_id"] == "c1"
+    assert result["status"] == "ERROR"
+    assert result["message"] == "Network error"
+
+
+def test_register_propagates_other_errors_in_strict_mode():
+    client = authenticated_client(raise_on_error=True)
     with patch.object(client, "_request", side_effect=RuntimeError("Network error")):
         with pytest.raises(RuntimeError, match="Network error"):
             client.register("c1")
@@ -447,13 +482,28 @@ async def test_stream_stops_on_contest_closed_event():
     assert collected == [obs]
 
 
-async def test_stream_raises_on_first_connection_failure():
+async def test_stream_stops_with_warning_on_first_connection_failure():
     client = authenticated_client()
 
     with patch("websockets.connect", side_effect=OSError("refused")):
-        with pytest.raises(RuntimeError, match="Could not connect"):
-            async for _ in client.stream("c1"):
+        with pytest.warns(RuntimeWarning, match="Could not connect"):
+            collected = [o async for o in client.stream("c1")]
+
+    assert collected == []
+
+
+async def test_stream_can_raise_clean_error_on_first_403_in_strict_mode():
+    client = authenticated_client()
+
+    with patch("websockets.connect", side_effect=FakeWebSocketStatusError(403)):
+        with pytest.raises(StreamUnavailableError) as exc_info:
+            async for _ in client.stream("c1", raise_on_stream_error=True):
                 pass
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.error_code == "STREAM_UNAVAILABLE"
+    assert "registered for the contest" in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
 
 
 async def test_stream_reconnects_after_clean_close():
@@ -486,7 +536,7 @@ async def test_stream_reconnects_after_clean_close():
 
 def _make_stream(*observations: dict):
     """Return an async generator that yields the given observations."""
-    async def _gen(contest_id):
+    async def _gen(contest_id, **kwargs):
         for obs in observations:
             yield obs
     return _gen
@@ -530,6 +580,44 @@ async def test_collect_writes_csv(tmp_path):
     assert "7" in lines[1]
     assert "2027-01-01T00:00:07Z" in lines[1]
     assert "0.7" in lines[1]
+
+
+async def test_collect_returns_partial_results_with_warning_on_stream_error():
+    client = authenticated_client()
+
+    async def unavailable_stream(contest_id, **kwargs):
+        raise StreamUnavailableError(
+            403,
+            "The contest stream is not available for this account.",
+            error_code="STREAM_UNAVAILABLE",
+        )
+        yield
+
+    with patch.object(client, "stream", unavailable_stream):
+        with pytest.warns(RuntimeWarning, match="stream is not available"):
+            result = await client.collect("c1", duration_seconds=5)
+
+    assert result == []
+
+
+async def test_collect_can_raise_stream_error_in_strict_mode():
+    client = authenticated_client()
+
+    async def unavailable_stream(contest_id, **kwargs):
+        raise StreamUnavailableError(
+            403,
+            "The contest stream is not available for this account.",
+            error_code="STREAM_UNAVAILABLE",
+        )
+        yield
+
+    with patch.object(client, "stream", unavailable_stream):
+        with pytest.raises(StreamUnavailableError):
+            await client.collect(
+                "c1",
+                duration_seconds=5,
+                raise_on_stream_error=True,
+            )
 
 
 # ---------------------------------------------------------------------------

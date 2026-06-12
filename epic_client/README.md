@@ -226,19 +226,22 @@ asyncio.run(main())
 
 ## API reference
 
-### `EPICClient(server_url)`
+### `EPICClient(server_url, raise_on_error=False)`
 
 Instantiate the client by passing the server URL. Defaults to `"https://epic.elioslab.net"` if omitted.
+By default, the SDK is notebook-friendly: expected platform states and API
+errors become warnings plus structured return values instead of long stack
+traces. Pass `raise_on_error=True` when writing scripts that should fail fast.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `login` | `login(username, password) → dict` | Authenticate with the platform and store the bearer token for all subsequent requests. Returns the token payload. |
-| `list_contests` | `list_contests(status=None, visibility=None, limit=100, offset=0) → list[dict]` | Return all contests visible to you. Pass `status="ACTIVE"` to filter to running contests only. Other values: `"DRAFT"`, `"PAUSED"`, `"CLOSED"`. |
-| `get_contest` | `get_contest(contest_id) → dict` | Return the full contest object, including task configuration and sensor configuration. |
-| `get_task_spec` | `get_task_spec(contest_id, task_type="FORECASTING") → dict` | Return the task plus convenience fields such as `eval_steps`, `target_variables`, `sampling_rate_hz`, and configured `sensor_ids`. |
+| `list_contests` | `list_contests(status=None, visibility=None, limit=100, offset=0) → list[dict]` | Return all contests visible to you. Pass `status="ACTIVE"` to filter to running contests only. Returns `[]` with a warning if the request cannot be completed. |
+| `get_contest` | `get_contest(contest_id) → dict` | Return the full contest object, including task configuration and sensor configuration. Returns `{"status": "ERROR", ...}` with a warning if unavailable. |
+| `get_task_spec` | `get_task_spec(contest_id, task_type="FORECASTING") → dict` | Return the task plus convenience fields such as `eval_steps`, `target_variables`, `sampling_rate_hz`, and configured `sensor_ids`. Returns `{"status": "ERROR", ...}` with a warning if unavailable. |
 | `register` | `register(contest_id, raise_on_not_open=False) → dict` | Register for a contest. Idempotent — calling it again on an already-registered contest is safe. If the contest is visible but not open for registration, returns `{"status": "NOT_OPEN", ...}` and emits a warning. |
-| `collect` | `collect(contest_id, duration_seconds, csv_path=None) → list[dict]` | Stream observations for up to `duration_seconds` and return them as a list. Stops early if the observation phase ends. Optionally writes each observation to a CSV file as it arrives. |
-| `stream` | `stream(contest_id, include_events=False) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. |
+| `collect` | `collect(contest_id, duration_seconds, csv_path=None, raise_on_stream_error=False) → list[dict]` | Stream observations for up to `duration_seconds` and return them as a list. Stops early if the observation phase ends. Optionally writes each observation to a CSV file as it arrives. If the stream is not available, returns collected observations so far and emits a warning. |
+| `stream` | `stream(contest_id, include_events=False) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. If the server rejects the initial connection, emits a warning and stops unless strict mode is enabled. |
 | `submit` | `submit(contest_id, task_id, payload, raise_on_not_open=False) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"target_variable": [v1, v2, …], …}}` with exactly `eval_steps` values per configured target variable. |
 | `get_scores` | `get_scores(contest_id) → dict` | Return all your submissions for this contest together with their computed scores. |
 | `get_leaderboard` | `get_leaderboard(contest_id) → dict` | Return the current public leaderboard for this contest. |
