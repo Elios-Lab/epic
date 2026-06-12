@@ -67,7 +67,11 @@ The steps below walk through a complete participation cycle.
 from epic_client import EPICClient
 
 client = EPICClient("https://epic.elioslab.net")
-client.login("your-username", "your-password")
+login = client.login("your-username", "your-password")
+if login.get("status") == "ERROR":
+    print("Login failed:", login["message"])
+else:
+    print("Logged in.")
 ```
 
 `login()` stores the bearer token internally. All subsequent calls are authenticated automatically.
@@ -182,7 +186,10 @@ from epic_client import EPICClient
 
 async def main():
     client = EPICClient("https://epic.elioslab.net")
-    client.login("your-username", "your-password")
+    login = client.login("your-username", "your-password")
+    if login.get("status") == "ERROR":
+        print("Login failed:", login["message"])
+        return
 
     # Discover the contest
     contests = client.list_contests(status="ACTIVE")
@@ -235,7 +242,7 @@ traces. Pass `raise_on_error=True` when writing scripts that should fail fast.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `login` | `login(username, password) → dict` | Authenticate with the platform and store the bearer token for all subsequent requests. Returns the token payload. |
+| `login` | `login(username, password) → dict` | Authenticate with the platform and store the bearer token for all subsequent requests. Returns the token payload, or `{"status": "ERROR", ...}` with a warning if credentials are invalid. |
 | `list_contests` | `list_contests(status=None, visibility=None, limit=100, offset=0) → list[dict]` | Return all contests visible to you. Pass `status="ACTIVE"` to filter to running contests only. Returns `[]` with a warning if the request cannot be completed. |
 | `get_contest` | `get_contest(contest_id) → dict` | Return the full contest object, including task configuration and sensor configuration. Returns `{"status": "ERROR", ...}` with a warning if unavailable. |
 | `get_task_spec` | `get_task_spec(contest_id, task_type="FORECASTING") → dict` | Return the task plus convenience fields such as `eval_steps`, `target_variables`, `sampling_rate_hz`, and configured `sensor_ids`. Returns `{"status": "ERROR", ...}` with a warning if unavailable. |

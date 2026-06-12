@@ -131,6 +131,23 @@ def test_login_stores_token():
     )
 
 
+def test_login_returns_error_with_warning():
+    client = make_client()
+    with patch.object(client, "_request", side_effect=EPICClientError(401, "Invalid credentials")):
+        with pytest.warns(RuntimeWarning, match="Invalid credentials"):
+            result = client.login("alice", "wrong")
+
+    assert client._token is None
+    assert result == {"status": "ERROR", "message": "Invalid credentials"}
+
+
+def test_login_raises_in_strict_mode():
+    client = EPICClient("https://epic.example.com", raise_on_error=True)
+    with patch.object(client, "_request", side_effect=EPICClientError(401, "Invalid credentials")):
+        with pytest.raises(EPICClientError, match="Invalid credentials"):
+            client.login("alice", "wrong")
+
+
 # ---------------------------------------------------------------------------
 # list_contests()
 # ---------------------------------------------------------------------------

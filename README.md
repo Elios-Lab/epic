@@ -1,10 +1,6 @@
 # EPIC - ELIOS Predictive Intelligence Challenge
 
-EPIC is a competition platform for predictive intelligence on live digital
-twins. It turns a simulated physical system into a real-time machine learning
-challenge: participants connect to sensor streams, collect their own data,
-predict a hidden future window, and are scored automatically against ground
-truth that is recorded by the platform but never shown to participants.
+EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a **real-time machine learning challenge**: participants connect to sensor streams, collect their own data, predict a hidden future window, and are scored automatically against ground truth that is recorded by the platform, but never shown to participants.
 
 | Resource | URL |
 |---|---|
@@ -13,10 +9,7 @@ truth that is recorded by the platform but never shown to participants.
 | OpenAPI / Swagger | https://epic.elioslab.net/docs |
 | Participant SDK | `pip install epic-elios-client` |
 
-EPIC is built for classrooms, research benchmarks, and industrial AI
-experiments where static datasets are too simple. An organizer can choose a
-digital twin, configure sensors and faults, invite participants, run a contest,
-and get a live leaderboard without writing backend code.
+EPIC is built for classrooms, research benchmarks, and industrial experiments where static datasets are too simple. An **organizer** can choose a digital twin, configure sensors and faults, invite **participants**, run a **contest**, and get a live **leaderboard** without writing backend code.
 
 ## Contents
 
@@ -37,71 +30,19 @@ and get a live leaderboard without writing backend code.
 
 ## Concept
 
-Most machine learning competitions start with a file. EPIC starts with a
-system.
+Most machine learning competitions start with a file. EPIC starts with a system. That system is a **digital twin**: a compact simulation of a physical asset such as a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following **its internal physics** (e.g. differential equations), **faults** can be scheduled inside the twin and alter the latent physics (e.g. the spring gets weaker, the pump cavitates, the motor overheats). **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements.
 
-That system is a digital twin: a compact simulation of a physical asset such as
-a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, or a
-smart building. The twin evolves in real wall-clock time. Sensors observe it
-through a configurable measurement pipeline: noise, bias, drift, latency,
-quantization, saturation, false readings, and outliers. Faults are scheduled
-inside the twin and alter the latent physics.
+Participants only receive the sensor stream. They do not receive the clean state, fault labels, or future observations. EPIC stores those private signals for scoring and keeps the competition honest by closing the stream before the evaluation window is generated. **Participants must forecast the future from what they have observed**.
 
-Participants only receive the sensor stream. They do not receive the clean
-state, fault labels, or future observations. EPIC stores those private signals
-for scoring and keeps the competition honest by closing the stream before the
-evaluation window is generated. A participant must forecast the future from
-what they observed, not from what the server has already revealed.
-
-The result is a richer contest format than a static benchmark. Students and
-researchers practice the whole predictive-intelligence loop: instrumentation,
-data collection, temporal reasoning, modelling, submission integrity, and live
-leaderboard feedback.
+The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
 
 ## Architecture
 
-EPIC separates competition infrastructure from simulated domains.
+EPIC separates competition infrastructure from simulated domains:
 
 ![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
-```text
-Browser / SDK
-    |
-FastAPI REST + WebSocket API
-    |
-Contest, user, submission, scoring, leaderboard routers
-    |
-SimulationEngine + ContestBroadcaster
-    |
-DigitalTwin plugins + Sensor plugins + Metric / TaskEvaluator plugins
-    |
-SQLAlchemy models + Alembic migrations
-```
-
-Repository layout:
-
-```text
-epic/
-├── epic/core/       interfaces, registries, engine, broadcaster, db, auth
-├── epic/api/        FastAPI app, routers, schemas, templates, email service
-├── epic/twins/      built-in digital twin packages
-├── epic/sensors/    reusable scalar sensors
-├── epic/gui/        static single-page web app served by FastAPI
-├── epic_client/     standalone participant SDK package
-├── notebooks/       participant notebooks
-├── alembic/         database migrations
-└── tests/           core, API, twin, sensor, and UI tests
-```
-
-Important design boundaries:
-
-- `epic.core` is domain-independent.
-- Twins own physical dynamics and fault effects.
-- Sensors own measurement corruption.
-- The engine streams only participant-visible sensor readings.
-- Evaluation observations store private `ground_truth` and `labels`.
-- Registries hold prototypes; sessions run independent copies.
-- Production schema management is Alembic-only.
+At runtime, FastAPI exposes the platform API and WebSocket stream, SQLAlchemy stores contests and observations, plugin registries load twins, sensors, and metrics, and the simulation engine connects them into live contest sessions.
 
 ## How a Contest Works
 
