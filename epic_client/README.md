@@ -146,20 +146,18 @@ forecast = {
 Wait until the submission window opens (evaluation phase has ended), then submit:
 
 ```python
-from epic_client import SubmissionNotOpenError
-
-try:
-    submission = client.submit(
-        contest_id=contest_id,
-        task_id="forecasting",
-        payload={"forecast": forecast},
-    )
-    print(submission)
-except SubmissionNotOpenError as exc:
-    print(f"Submission window opens at {exc.opens_at}")
+submission = client.submit(
+    contest_id=contest_id,
+    task_id="forecasting",
+    payload={"forecast": forecast},
+)
+print(submission)
 ```
 
 `payload["forecast"]` must be a dict mapping each required target variable to a list of exactly `eval_steps` float values. You may submit multiple times — the platform keeps all submissions and scores each one.
+If the submission window is not open yet, `submit()` returns
+`{"status": "NOT_OPEN", "opens_at": "..."}` and emits a warning instead of
+raising a traceback.
 
 ### 6. Check your scores and the leaderboard
 
@@ -240,7 +238,7 @@ Instantiate the client by passing the server URL. Defaults to `"https://epic.eli
 | `register` | `register(contest_id) → dict` | Register for a contest. Idempotent — calling it again on an already-registered contest is safe. |
 | `collect` | `collect(contest_id, duration_seconds, csv_path=None) → list[dict]` | Stream observations for up to `duration_seconds` and return them as a list. Stops early if the observation phase ends. Optionally writes each observation to a CSV file as it arrives. |
 | `stream` | `stream(contest_id, include_events=False) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. |
-| `submit` | `submit(contest_id, task_id, payload) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"target_variable": [v1, v2, …], …}}` with exactly `eval_steps` values per configured target variable. |
+| `submit` | `submit(contest_id, task_id, payload, raise_on_not_open=False) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"target_variable": [v1, v2, …], …}}` with exactly `eval_steps` values per configured target variable. |
 | `get_scores` | `get_scores(contest_id) → dict` | Return all your submissions for this contest together with their computed scores. |
 | `get_leaderboard` | `get_leaderboard(contest_id) → dict` | Return the current public leaderboard for this contest. |
 

@@ -7,6 +7,7 @@ import csv
 import json
 import re
 import time
+import warnings
 from pathlib import Path
 from typing import AsyncIterator
 from urllib.error import HTTPError, URLError
@@ -233,15 +234,27 @@ class EPICClient:
         contest_id: str,
         task_id: str,
         payload: dict,
+        *,
+        raise_on_not_open: bool = False,
     ) -> dict:
-        return self._request(
-            "POST",
-            f"/api/v1/contests/{contest_id}/submissions",
-            {
-                "task_id": task_id,
-                "payload": payload,
-            },
-        )
+        try:
+            return self._request(
+                "POST",
+                f"/api/v1/contests/{contest_id}/submissions",
+                {
+                    "task_id": task_id,
+                    "payload": payload,
+                },
+            )
+        except SubmissionNotOpenError as exc:
+            if raise_on_not_open:
+                raise
+            warnings.warn(str(exc), RuntimeWarning, stacklevel=2)
+            return {
+                "status": "NOT_OPEN",
+                "message": str(exc),
+                "opens_at": exc.opens_at,
+            }
 
     def get_scores(self, contest_id: str) -> dict:
         submissions = self._request(

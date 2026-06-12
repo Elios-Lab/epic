@@ -265,6 +265,45 @@ def test_submit_does_not_include_prediction_from_sequence():
     assert "prediction_from_sequence" not in body
 
 
+def test_submit_returns_not_open_status_with_warning():
+    client = authenticated_client()
+    exc = SubmissionNotOpenError(
+        409,
+        "Submissions are not yet accepted — the evaluation phase has not ended. "
+        "Submissions open at 2026-06-14T13:06:00+00:00",
+        error_code="CONTEST_STATE_ERROR",
+        opens_at="2026-06-14T13:06:00+00:00",
+    )
+
+    with patch.object(client, "_request", side_effect=exc):
+        with pytest.warns(RuntimeWarning, match="Submissions are not yet accepted"):
+            result = client.submit("c1", "forecasting", {"forecast": {}})
+
+    assert result == {
+        "status": "NOT_OPEN",
+        "message": str(exc),
+        "opens_at": "2026-06-14T13:06:00+00:00",
+    }
+
+
+def test_submit_can_raise_when_not_open_in_strict_mode():
+    client = authenticated_client()
+    exc = SubmissionNotOpenError(
+        409,
+        "Submissions are not yet accepted",
+        error_code="CONTEST_STATE_ERROR",
+    )
+
+    with patch.object(client, "_request", side_effect=exc):
+        with pytest.raises(SubmissionNotOpenError):
+            client.submit(
+                "c1",
+                "forecasting",
+                {"forecast": {}},
+                raise_on_not_open=True,
+            )
+
+
 # ---------------------------------------------------------------------------
 # get_scores()
 # ---------------------------------------------------------------------------
@@ -508,7 +547,12 @@ def test_request_raises_submission_not_open_error():
 
     with patch("epic_client.client.urlopen", side_effect=err):
         with pytest.raises(SubmissionNotOpenError) as exc_info:
-            client.submit("c1", "forecasting", {"forecast": {}})
+            client.submit(
+                "c1",
+                "forecasting",
+                {"forecast": {}},
+                raise_on_not_open=True,
+            )
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.error_code == "CONTEST_STATE_ERROR"
