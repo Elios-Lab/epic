@@ -44,16 +44,74 @@ class EPICClient:
                 "message": "Already registered for this contest",
             }
 
-    def list_contests(self, status: str | None = None) -> list[dict]:
-        query = f"?{urlencode({'status': status})}" if status is not None else ""
+    def list_contests(
+        self,
+        status: str | None = None,
+        visibility: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        params = {"limit": limit, "offset": offset}
+        if status is not None:
+            params["status"] = status
+        if visibility is not None:
+            params["visibility"] = visibility
+        query = f"?{urlencode(params)}"
         response = self._request("GET", f"/api/v1/contests{query}")
         contests = response["contests"]
         for contest in contests:
-            if "contest_id" not in contest and "id" in contest:
-                contest["contest_id"] = contest["id"]
+            self._normalize_contest(contest)
         return contests
 
-    async def stream(self, contest_id: str) -> AsyncIterator[dict]:
+    def get_contest(self, contest_id: str) -> dict:
+        contest = self._request("GET", f"/api/v1/contests/{contest_id}")
+        return self._normalize_contest(contest)
+
+    def get_task_spec(self, contest_id: str, task_type: str = "FORECASTING") -> dict:
+        contest = self.get_contest(contest_id)
+        requested = task_type.upper()
+        task = next(
+            (
+                task
+                for task in contest.get("tasks", [])
+                if task.get("task_type", "").upper() == requested
+                or task.get("task_id") == task_type
+            ),
+            None,
+        )
+        if task is None:
+            raise RuntimeError(
+                f"Contest '{contest_id}' has no task matching '{task_type}'."
+            )
+
+        configuration = task.get("configuration") or {}
+        spec = {
+            **task,
+            "contest_id": contest["contest_id"],
+            "configuration": configuration,
+            "sampling_rate_hz": contest.get("sampling_rate_hz"),
+            "sensor_ids": [
+                sensor["sensor_id"]
+                for sensor in contest.get("sensor_configs", [])
+                if "sensor_id" in sensor
+            ],
+        }
+        for key in (
+            "eval_steps",
+            "prediction_horizon_seconds",
+            "score_against",
+            "target_variables",
+        ):
+            if key in configuration:
+                spec[key] = configuration[key]
+        return spec
+
+    async def stream(
+        self,
+        contest_id: str,
+        *,
+        include_events: bool = False,
+    ) -> AsyncIterator[dict]:
         self._require_token()
         websocket_url = self._websocket_url(f"/api/v1/ws/contests/{contest_id}")
         reconnect_delay = 1.0
@@ -67,15 +125,14 @@ class EPICClient:
                     first_attempt = False
                     async for message in websocket:
                         payload = json.loads(message)
-                        # The server sends {"event": "evaluation_started", ...} when the
-                        # observation phase ends, then closes the stream.  Stop iterating.
-                        if payload.get("event") == "evaluation_started":
-                            return
-                        yield {
-                            "sequence_id": payload["sequence_id"],
-                            "timestamp": payload["timestamp"],
-                            "sensors": payload["sensors"],
-                        }
+                        event = payload.get("event")
+                        if event is not None:
+                            if include_events:
+                                yield payload
+                            if event in {"evaluation_started", "contest_closed"}:
+                                return
+                            continue
+                        yield self._normalize_observation(payload)
                 # Clean close without evaluation_started — reconnect.
             except asyncio.CancelledError:
                 raise
@@ -94,16 +151,11 @@ class EPICClient:
     ) -> list[dict]:
         observations: list[dict] = []
         deadline = time.monotonic() + duration_seconds
-        writer = None
+        writer: csv.DictWriter | None = None
         csv_file = None
 
         if csv_path is not None:
             csv_file = Path(csv_path).open("w", newline="")
-            writer = csv.DictWriter(
-                csv_file,
-                fieldnames=["sequence_id", "timestamp", "sensors"],
-            )
-            writer.writeheader()
 
         try:
             stream = self.stream(contest_id).__aiter__()
@@ -118,14 +170,19 @@ class EPICClient:
                 except StopAsyncIteration:
                     break
                 observations.append(observation)
-                if writer is not None:
-                    writer.writerow(
-                        {
-                            "sequence_id": observation["sequence_id"],
-                            "timestamp": observation["timestamp"],
-                            "sensors": json.dumps(observation["sensors"]),
-                        }
-                    )
+                if csv_file is not None:
+                    if writer is None:
+                        writer = csv.DictWriter(
+                            csv_file,
+                            fieldnames=[
+                                "sequence_id",
+                                "timestamp",
+                                *sorted(observation["sensors"]),
+                            ],
+                            extrasaction="ignore",
+                        )
+                        writer.writeheader()
+                    writer.writerow(self._csv_row(observation))
         finally:
             if csv_file is not None:
                 csv_file.close()
@@ -201,6 +258,29 @@ class EPICClient:
     def _require_token(self) -> None:
         if self._token is None:
             raise RuntimeError("Not authenticated. Call login() first.")
+
+    def _normalize_contest(self, contest: dict) -> dict:
+        if "contest_id" not in contest and "id" in contest:
+            contest["contest_id"] = contest["id"]
+        return contest
+
+    def _normalize_observation(self, payload: dict) -> dict:
+        observation = {
+            "sequence_id": payload["sequence_id"],
+            "timestamp": payload["timestamp"],
+            "sensors": payload["sensors"],
+        }
+        for key in ("session_id", "committed_through"):
+            if key in payload:
+                observation[key] = payload[key]
+        return observation
+
+    def _csv_row(self, observation: dict) -> dict:
+        return {
+            "sequence_id": observation["sequence_id"],
+            "timestamp": observation["timestamp"],
+            **observation["sensors"],
+        }
 
     def _websocket_url(self, path: str) -> str:
         self._require_token()

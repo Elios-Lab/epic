@@ -116,7 +116,7 @@ def test_list_contests_no_filter():
         result = client.list_contests()
 
     assert result == contests_data
-    mock_req.assert_called_once_with("GET", "/api/v1/contests")
+    mock_req.assert_called_once_with("GET", "/api/v1/contests?limit=100&offset=0")
 
 
 def test_list_contests_with_status_filter():
@@ -126,6 +126,17 @@ def test_list_contests_with_status_filter():
 
     args = mock_req.call_args[0]
     assert "status=ACTIVE" in args[1]
+
+
+def test_list_contests_with_visibility_and_pagination():
+    client = authenticated_client()
+    with patch.object(client, "_request", return_value={"contests": []}) as mock_req:
+        client.list_contests(visibility="PUBLIC", limit=10, offset=20)
+
+    args = mock_req.call_args[0]
+    assert "visibility=PUBLIC" in args[1]
+    assert "limit=10" in args[1]
+    assert "offset=20" in args[1]
 
 
 def test_list_contests_normalises_id_field():
@@ -143,6 +154,58 @@ def test_list_contests_keeps_contest_id_when_present():
         result = client.list_contests()
 
     assert result[0]["contest_id"] == "c2"
+
+
+# ---------------------------------------------------------------------------
+# get_contest() / get_task_spec()
+# ---------------------------------------------------------------------------
+
+def test_get_contest_normalises_id_field():
+    client = authenticated_client()
+    with patch.object(client, "_request", return_value={"id": "c1", "tasks": []}) as mock_req:
+        result = client.get_contest("c1")
+
+    assert result["contest_id"] == "c1"
+    mock_req.assert_called_once_with("GET", "/api/v1/contests/c1")
+
+
+def test_get_task_spec_extracts_forecasting_configuration():
+    client = authenticated_client()
+    contest = {
+        "contest_id": "c1",
+        "sampling_rate_hz": 10.0,
+        "sensor_configs": [{"sensor_id": "position"}, {"sensor_id": "velocity"}],
+        "tasks": [
+            {
+                "task_id": "t1",
+                "task_type": "FORECASTING",
+                "name": "FORECASTING",
+                "weight": 1.0,
+                "configuration": {
+                    "eval_steps": 20,
+                    "prediction_horizon_seconds": 2.0,
+                    "target_variables": ["position"],
+                    "score_against": "ground_truth",
+                },
+            }
+        ],
+    }
+    with patch.object(client, "get_contest", return_value=contest):
+        result = client.get_task_spec("c1")
+
+    assert result["task_id"] == "t1"
+    assert result["eval_steps"] == 20
+    assert result["target_variables"] == ["position"]
+    assert result["sensor_ids"] == ["position", "velocity"]
+    assert result["sampling_rate_hz"] == 10.0
+
+
+def test_get_task_spec_raises_when_missing():
+    client = authenticated_client()
+    contest = {"contest_id": "c1", "tasks": []}
+    with patch.object(client, "get_contest", return_value=contest):
+        with pytest.raises(RuntimeError, match="has no task"):
+            client.get_task_spec("c1")
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +310,12 @@ _EVAL_STARTED = {"event": "evaluation_started", "observation_end_sequence_id": 0
 
 async def test_stream_yields_observations():
     client = authenticated_client()
-    obs1 = {"sequence_id": 1, "timestamp": "2027-01-01T00:00:00Z", "sensors": {"pos": 0.1}}
+    obs1 = {
+        "sequence_id": 1,
+        "committed_through": 0,
+        "timestamp": "2027-01-01T00:00:00Z",
+        "sensors": {"pos": 0.1},
+    }
     obs2 = {"sequence_id": 2, "timestamp": "2027-01-01T00:00:01Z", "sensors": {"pos": 0.2}}
 
     with patch("websockets.connect", return_value=FakeWebSocket(obs1, obs2, _EVAL_STARTED)):
@@ -255,6 +323,7 @@ async def test_stream_yields_observations():
 
     assert len(collected) == 2
     assert collected[0]["sequence_id"] == 1
+    assert collected[0]["committed_through"] == 0
     assert collected[1]["sensors"]["pos"] == 0.2
 
 
@@ -278,6 +347,28 @@ async def test_stream_evaluation_started_only_no_crash():
         collected = [o async for o in client.stream("c1")]
 
     assert collected == []
+
+
+async def test_stream_can_include_control_events():
+    client = authenticated_client()
+    obs = {"sequence_id": 1, "timestamp": "T", "sensors": {"pos": 0.1}}
+
+    with patch("websockets.connect", return_value=FakeWebSocket(obs, _EVAL_STARTED)):
+        collected = [o async for o in client.stream("c1", include_events=True)]
+
+    assert collected[0]["sequence_id"] == 1
+    assert collected[1]["event"] == "evaluation_started"
+    assert collected[1]["evaluation_steps"] == 0
+
+
+async def test_stream_stops_on_contest_closed_event():
+    client = authenticated_client()
+    obs = {"sequence_id": 1, "timestamp": "T", "sensors": {"pos": 0.1}}
+
+    with patch("websockets.connect", return_value=FakeWebSocket(obs, {"event": "contest_closed"})):
+        collected = [o async for o in client.stream("c1")]
+
+    assert collected == [obs]
 
 
 async def test_stream_raises_on_first_connection_failure():
@@ -348,16 +439,21 @@ async def test_collect_stops_when_stream_ends():
 
 async def test_collect_writes_csv(tmp_path):
     client = authenticated_client()
-    obs = {"sequence_id": 7, "timestamp": "2027-01-01T00:00:07Z", "sensors": {"pos": 0.7}}
+    obs = {
+        "sequence_id": 7,
+        "timestamp": "2027-01-01T00:00:07Z",
+        "sensors": {"pos": 0.7, "vel": 1.2},
+    }
 
     with patch.object(client, "stream", _make_stream(obs)):
         csv_file = tmp_path / "out.csv"
         await client.collect("c1", duration_seconds=5, csv_path=csv_file)
 
     lines = csv_file.read_text().splitlines()
-    assert lines[0] == "sequence_id,timestamp,sensors"
+    assert lines[0] == "sequence_id,timestamp,pos,vel"
     assert "7" in lines[1]
     assert "2027-01-01T00:00:07Z" in lines[1]
+    assert "0.7" in lines[1]
 
 
 # ---------------------------------------------------------------------------

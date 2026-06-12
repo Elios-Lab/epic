@@ -50,9 +50,9 @@ You can read `eval_steps` and the required `target_variables` directly from the 
 
 ```python
 contests = client.list_contests(status="ACTIVE")
-task_config = contests[0]["tasks"][0]["configuration"]
-eval_steps = task_config["eval_steps"]
-target_variables = task_config["target_variables"]
+task_spec = client.get_task_spec(contests[0]["contest_id"])
+eval_steps = task_spec["eval_steps"]
+target_variables = task_spec["target_variables"]
 ```
 
 ---
@@ -80,6 +80,7 @@ for c in contests:
     print(c["contest_id"], c["name"], c["sampling_rate_hz"], "Hz")
 
 contest_id = contests[0]["contest_id"]
+task_spec = client.get_task_spec(contest_id)
 client.register(contest_id)   # idempotent — safe to call more than once
 ```
 
@@ -104,6 +105,9 @@ observations = asyncio.run(
 )
 ```
 
+The CSV file is written with one column per sensor, for example
+`sequence_id,timestamp,position,velocity`.
+
 For finer control, use the async generator `stream()` directly:
 
 ```python
@@ -116,6 +120,8 @@ asyncio.run(collect_custom())
 ```
 
 `stream()` stops automatically when the observation phase ends.
+Pass `include_events=True` if you also want to receive control events such as
+`evaluation_started` before the generator stops.
 
 ### 4. Build your model
 
@@ -124,9 +130,9 @@ Use whatever modelling approach you like. The simplest possible baseline just re
 ```python
 last = observations[-1]["sensors"]
 
-task_config = contests[0]["tasks"][0]["configuration"]
-eval_steps = task_config["eval_steps"]
-target_variables = task_config["target_variables"]
+task_spec = client.get_task_spec(contest_id)
+eval_steps = task_spec["eval_steps"]
+target_variables = task_spec["target_variables"]
 
 # Naive forecast: repeat the last observation for every step
 forecast = {
@@ -178,9 +184,9 @@ async def main():
     contests = client.list_contests(status="ACTIVE")
     contest = contests[0]
     contest_id = contest["contest_id"]
-    task_config = contest["tasks"][0]["configuration"]
-    eval_steps = task_config["eval_steps"]
-    target_variables = task_config["target_variables"]
+    task_spec = client.get_task_spec(contest_id)
+    eval_steps = task_spec["eval_steps"]
+    target_variables = task_spec["target_variables"]
 
     # Register (safe to call even if already registered)
     client.register(contest_id)
@@ -223,10 +229,12 @@ Instantiate the client by passing the server URL. Defaults to `"https://epic.eli
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `login` | `login(username, password) → dict` | Authenticate with the platform and store the bearer token for all subsequent requests. Returns the token payload. |
-| `list_contests` | `list_contests(status=None) → list[dict]` | Return all contests visible to you. Pass `status="ACTIVE"` to filter to running contests only. Other values: `"DRAFT"`, `"PAUSED"`, `"CLOSED"`. |
+| `list_contests` | `list_contests(status=None, visibility=None, limit=100, offset=0) → list[dict]` | Return all contests visible to you. Pass `status="ACTIVE"` to filter to running contests only. Other values: `"DRAFT"`, `"PAUSED"`, `"CLOSED"`. |
+| `get_contest` | `get_contest(contest_id) → dict` | Return the full contest object, including task configuration and sensor configuration. |
+| `get_task_spec` | `get_task_spec(contest_id, task_type="FORECASTING") → dict` | Return the task plus convenience fields such as `eval_steps`, `target_variables`, `sampling_rate_hz`, and configured `sensor_ids`. |
 | `register` | `register(contest_id) → dict` | Register for a contest. Idempotent — calling it again on an already-registered contest is safe. |
 | `collect` | `collect(contest_id, duration_seconds, csv_path=None) → list[dict]` | Stream observations for up to `duration_seconds` and return them as a list. Stops early if the observation phase ends. Optionally writes each observation to a CSV file as it arrives. |
-| `stream` | `stream(contest_id) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. |
+| `stream` | `stream(contest_id, include_events=False) → AsyncIterator[dict]` | Async generator that yields one observation dict per sensor tick. Reconnects automatically on transient network errors. Stops when the observation phase ends. |
 | `submit` | `submit(contest_id, task_id, payload) → dict` | Submit a forecast. `task_id` is `"forecasting"`. `payload` must be `{"forecast": {"target_variable": [v1, v2, …], …}}` with exactly `eval_steps` values per configured target variable. |
 | `get_scores` | `get_scores(contest_id) → dict` | Return all your submissions for this contest together with their computed scores. |
 | `get_leaderboard` | `get_leaderboard(contest_id) → dict` | Return the current public leaderboard for this contest. |
@@ -238,6 +246,7 @@ Each observation yielded by `stream()` or returned inside the list from `collect
 ```python
 {
     "sequence_id": 42,                          # monotonically increasing integer
+    "committed_through": 40,                    # latest sequence durably stored by the server
     "timestamp":   "2027-01-10T09:00:04.200Z",  # UTC ISO-8601 string
     "sensors":     {                             # one key per configured sensor
         "position": 0.134,
