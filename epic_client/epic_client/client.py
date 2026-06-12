@@ -5,12 +5,51 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import re
 import time
 from pathlib import Path
 from typing import AsyncIterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
+
+
+class EPICClientError(RuntimeError):
+    """Raised when the EPIC API returns an error response."""
+
+    def __init__(
+        self,
+        status_code: int,
+        message: str,
+        *,
+        error_code: str | None = None,
+        response_body: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_code = error_code
+        self.response_body = response_body
+
+
+class SubmissionNotOpenError(EPICClientError):
+    """Raised when a forecast is submitted before the submission window opens."""
+
+    def __init__(
+        self,
+        status_code: int,
+        message: str,
+        *,
+        error_code: str | None = None,
+        response_body: str | None = None,
+        opens_at: str | None = None,
+    ) -> None:
+        super().__init__(
+            status_code,
+            message,
+            error_code=error_code,
+            response_body=response_body,
+        )
+        self.opens_at = opens_at
 
 
 class EPICClient:
@@ -246,8 +285,8 @@ class EPICClient:
             with urlopen(request) as response:
                 response_body = response.read()
         except HTTPError as exc:
-            message = exc.read().decode("utf-8")
-            raise RuntimeError(f"EPIC API request failed: {exc.code} {message}") from exc
+            response_text = exc.read().decode("utf-8")
+            raise self._api_error(exc.code, response_text) from exc
         except URLError as exc:
             raise RuntimeError(f"EPIC API request failed: {exc.reason}") from exc
 
@@ -258,6 +297,44 @@ class EPICClient:
     def _require_token(self) -> None:
         if self._token is None:
             raise RuntimeError("Not authenticated. Call login() first.")
+
+    def _api_error(self, status_code: int, response_text: str) -> EPICClientError:
+        error_code = None
+        message = response_text
+        try:
+            payload = json.loads(response_text)
+        except json.JSONDecodeError:
+            payload = None
+
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, dict):
+                error_code = error.get("code")
+                message = error.get("message") or response_text
+
+        if (
+            status_code == 409
+            and error_code == "CONTEST_STATE_ERROR"
+            and "Submissions are not yet accepted" in message
+        ):
+            return SubmissionNotOpenError(
+                status_code,
+                message,
+                error_code=error_code,
+                response_body=response_text,
+                opens_at=self._extract_opens_at(message),
+            )
+
+        return EPICClientError(
+            status_code,
+            f"EPIC API request failed: {status_code} {message}",
+            error_code=error_code,
+            response_body=response_text,
+        )
+
+    def _extract_opens_at(self, message: str) -> str | None:
+        match = re.search(r"Submissions open at (\S+)", message)
+        return match.group(1) if match else None
 
     def _normalize_contest(self, contest: dict) -> dict:
         if "contest_id" not in contest and "id" in contest:

@@ -146,12 +146,17 @@ forecast = {
 Wait until the submission window opens (evaluation phase has ended), then submit:
 
 ```python
-submission = client.submit(
-    contest_id=contest_id,
-    task_id="forecasting",
-    payload={"forecast": forecast},
-)
-print(submission)
+from epic_client import SubmissionNotOpenError
+
+try:
+    submission = client.submit(
+        contest_id=contest_id,
+        task_id="forecasting",
+        payload={"forecast": forecast},
+    )
+    print(submission)
+except SubmissionNotOpenError as exc:
+    print(f"Submission window opens at {exc.opens_at}")
 ```
 
 `payload["forecast"]` must be a dict mapping each required target variable to a list of exactly `eval_steps` float values. You may submit multiple times — the platform keeps all submissions and scores each one.

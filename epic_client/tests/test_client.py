@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from epic_client import EPICClient
+from epic_client import EPICClient, EPICClientError, SubmissionNotOpenError
 
 
 # ---------------------------------------------------------------------------
@@ -470,6 +470,50 @@ def test_request_raises_runtime_error_on_http_error():
     with patch("epic_client.client.urlopen", side_effect=err):
         with pytest.raises(RuntimeError, match="422"):
             client._request("POST", "/api/v1/contests/x/submissions", {})
+
+
+def test_request_parses_standard_epic_error():
+    from urllib.error import HTTPError
+    import io
+
+    client = authenticated_client()
+    body = b'{"error":{"code":"SUBMISSION_ERROR","message":"Payload is invalid"}}'
+    err = HTTPError(url="u", code=422, msg="Unprocessable", hdrs={}, fp=io.BytesIO(body))
+
+    with patch("epic_client.client.urlopen", side_effect=err):
+        with pytest.raises(EPICClientError) as exc_info:
+            client._request("POST", "/api/v1/contests/x/submissions", {})
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.error_code == "SUBMISSION_ERROR"
+    assert str(exc_info.value) == "EPIC API request failed: 422 Payload is invalid"
+
+
+def test_request_raises_submission_not_open_error():
+    from urllib.error import HTTPError
+    import io
+
+    client = authenticated_client()
+    message = (
+        "Submissions are not yet accepted — the evaluation phase has not ended. "
+        "Submissions open at 2026-06-14T13:06:00+00:00"
+    )
+    body = json.dumps({
+        "error": {
+            "code": "CONTEST_STATE_ERROR",
+            "message": message,
+        }
+    }).encode("utf-8")
+    err = HTTPError(url="u", code=409, msg="Conflict", hdrs={}, fp=io.BytesIO(body))
+
+    with patch("epic_client.client.urlopen", side_effect=err):
+        with pytest.raises(SubmissionNotOpenError) as exc_info:
+            client.submit("c1", "forecasting", {"forecast": {}})
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.error_code == "CONTEST_STATE_ERROR"
+    assert exc_info.value.opens_at == "2026-06-14T13:06:00+00:00"
+    assert str(exc_info.value) == message
 
 
 def test_request_raises_runtime_error_on_url_error():
