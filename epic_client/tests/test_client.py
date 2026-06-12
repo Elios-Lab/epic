@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from epic_client import EPICClient, EPICClientError, SubmissionNotOpenError
+from epic_client import (
+    EPICClient,
+    EPICClientError,
+    RegistrationNotOpenError,
+    SubmissionNotOpenError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +241,38 @@ def test_register_propagates_other_errors():
     with patch.object(client, "_request", side_effect=RuntimeError("Network error")):
         with pytest.raises(RuntimeError, match="Network error"):
             client.register("c1")
+
+
+def test_register_returns_not_open_status_with_warning():
+    client = authenticated_client()
+    exc = RegistrationNotOpenError(
+        409,
+        "Contest is not open for registration",
+        error_code="REGISTRATION_ERROR",
+    )
+
+    with patch.object(client, "_request", side_effect=exc):
+        with pytest.warns(RuntimeWarning, match="Contest is not open"):
+            result = client.register("c1")
+
+    assert result == {
+        "contest_id": "c1",
+        "status": "NOT_OPEN",
+        "message": "Contest is not open for registration",
+    }
+
+
+def test_register_can_raise_when_not_open_in_strict_mode():
+    client = authenticated_client()
+    exc = RegistrationNotOpenError(
+        409,
+        "Contest is not open for registration",
+        error_code="REGISTRATION_ERROR",
+    )
+
+    with patch.object(client, "_request", side_effect=exc):
+        with pytest.raises(RegistrationNotOpenError):
+            client.register("c1", raise_on_not_open=True)
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +544,7 @@ def test_request_raises_runtime_error_on_http_error():
     err = HTTPError(url="u", code=422, msg="Unprocessable", hdrs={}, fp=io.BytesIO(b'{"detail":"bad"}'))
 
     with patch("epic_client.client.urlopen", side_effect=err):
-        with pytest.raises(RuntimeError, match="422"):
+        with pytest.raises(RuntimeError, match="bad"):
             client._request("POST", "/api/v1/contests/x/submissions", {})
 
 
@@ -525,7 +562,45 @@ def test_request_parses_standard_epic_error():
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.error_code == "SUBMISSION_ERROR"
-    assert str(exc_info.value) == "EPIC API request failed: 422 Payload is invalid"
+    assert str(exc_info.value) == "Payload is invalid"
+
+
+def test_request_extracts_html_error_title():
+    from urllib.error import HTTPError
+    import io
+
+    client = authenticated_client()
+    body = b"<html><body><center><h1>413 Request Entity Too Large</h1></center></body></html>"
+    err = HTTPError(url="u", code=413, msg="Too Large", hdrs={}, fp=io.BytesIO(body))
+
+    with patch("epic_client.client.urlopen", side_effect=err):
+        with pytest.raises(EPICClientError) as exc_info:
+            client._request("POST", "/api/v1/contests/x/submissions", {})
+
+    assert exc_info.value.status_code == 413
+    assert str(exc_info.value) == "EPIC API request failed: 413 413 Request Entity Too Large"
+
+
+def test_request_raises_registration_not_open_error():
+    from urllib.error import HTTPError
+    import io
+
+    client = authenticated_client()
+    body = json.dumps({
+        "error": {
+            "code": "REGISTRATION_ERROR",
+            "message": "Contest is not open for registration",
+        }
+    }).encode("utf-8")
+    err = HTTPError(url="u", code=409, msg="Conflict", hdrs={}, fp=io.BytesIO(body))
+
+    with patch("epic_client.client.urlopen", side_effect=err):
+        with pytest.raises(RegistrationNotOpenError) as exc_info:
+            client.register("c1", raise_on_not_open=True)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.error_code == "REGISTRATION_ERROR"
+    assert str(exc_info.value) == "Contest is not open for registration"
 
 
 def test_request_raises_submission_not_open_error():

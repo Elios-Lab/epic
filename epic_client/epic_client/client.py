@@ -53,6 +53,10 @@ class SubmissionNotOpenError(EPICClientError):
         self.opens_at = opens_at
 
 
+class RegistrationNotOpenError(EPICClientError):
+    """Raised when a contest is visible but not open for registration."""
+
+
 class EPICClient:
     def __init__(self, server_url: str = "https://epic.elioslab.net") -> None:
         self.server_url = server_url.rstrip("/") + "/"
@@ -68,13 +72,27 @@ class EPICClient:
         self._token = response["access_token"]
         return response
 
-    def register(self, contest_id: str) -> dict:
+    def register(
+        self,
+        contest_id: str,
+        *,
+        raise_on_not_open: bool = False,
+    ) -> dict:
         try:
             return self._request(
                 "POST",
                 "/api/v1/contest-registrations",
                 {"contest_id": contest_id},
             )
+        except RegistrationNotOpenError as exc:
+            if raise_on_not_open:
+                raise
+            warnings.warn(str(exc), RuntimeWarning, stacklevel=2)
+            return {
+                "contest_id": contest_id,
+                "status": "NOT_OPEN",
+                "message": str(exc),
+            }
         except RuntimeError as exc:
             if "Already registered for this contest" not in str(exc):
                 raise
@@ -299,9 +317,9 @@ class EPICClient:
                 response_body = response.read()
         except HTTPError as exc:
             response_text = exc.read().decode("utf-8")
-            raise self._api_error(exc.code, response_text) from exc
+            raise self._api_error(exc.code, response_text) from None
         except URLError as exc:
-            raise RuntimeError(f"EPIC API request failed: {exc.reason}") from exc
+            raise RuntimeError(f"EPIC API request failed: {exc.reason}") from None
 
         if not response_body:
             return {}
@@ -324,6 +342,12 @@ class EPICClient:
             if isinstance(error, dict):
                 error_code = error.get("code")
                 message = error.get("message") or response_text
+            elif payload.get("detail"):
+                message = str(payload["detail"])
+        elif response_text.lstrip().startswith("<"):
+            message = self._extract_html_error_title(response_text) or (
+                f"HTTP {status_code} error"
+            )
 
         if (
             status_code == 409
@@ -338,9 +362,21 @@ class EPICClient:
                 opens_at=self._extract_opens_at(message),
             )
 
+        if (
+            status_code == 409
+            and error_code == "REGISTRATION_ERROR"
+            and "Contest is not open for registration" in message
+        ):
+            return RegistrationNotOpenError(
+                status_code,
+                message,
+                error_code=error_code,
+                response_body=response_text,
+            )
+
         return EPICClientError(
             status_code,
-            f"EPIC API request failed: {status_code} {message}",
+            message if error_code is not None else f"EPIC API request failed: {status_code} {message}",
             error_code=error_code,
             response_body=response_text,
         )
@@ -348,6 +384,15 @@ class EPICClient:
     def _extract_opens_at(self, message: str) -> str | None:
         match = re.search(r"Submissions open at (\S+)", message)
         return match.group(1) if match else None
+
+    def _extract_html_error_title(self, response_text: str) -> str | None:
+        match = re.search(r"<h1>(.*?)</h1>", response_text, flags=re.IGNORECASE)
+        if match:
+            return re.sub(r"\s+", " ", match.group(1)).strip()
+        match = re.search(r"<title>(.*?)</title>", response_text, flags=re.IGNORECASE)
+        if match:
+            return re.sub(r"\s+", " ", match.group(1)).strip()
+        return None
 
     def _normalize_contest(self, contest: dict) -> dict:
         if "contest_id" not in contest and "id" in contest:
