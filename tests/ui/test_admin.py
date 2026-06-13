@@ -94,6 +94,114 @@ def test_admin_can_transition_contest_status(
         )
 
 
+def test_admin_can_send_participant_invitation_from_contest_panel(
+    admin_page: Page, live_server: str, organizer_token: str
+):
+    """Admins should be able to invite participants from the contest overview."""
+    contest = create_active_contest(live_server, organizer_token)
+    email = f"admin_invite_{uuid.uuid4().hex[:6]}@test.com"
+    try:
+        admin_page.reload()
+        admin_page.wait_for_load_state("networkidle")
+        row = admin_page.locator("tr").filter(has_text=contest["name"])
+        row.get_by_role("button", name="Participants").click()
+
+        panel = admin_page.get_by_test_id("admin-participants-panel")
+        expect(panel.get_by_text(f"Participants for {contest['name']}")).to_be_visible(timeout=5000)
+        panel.get_by_placeholder("anna@example.com").fill(email)
+        panel.get_by_role("button", name="Send invitations").click()
+
+        expect(panel.get_by_text(email)).to_be_visible(timeout=5000)
+        expect(panel.get_by_text("Pending")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+def test_admin_can_list_and_remove_registered_participant(
+    admin_page: Page,
+    live_server: str,
+    organizer_token: str,
+    participant_token: str,
+):
+    """Admins should see registered participants and remove their access."""
+    import requests
+
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        registration = requests.post(
+            f"{live_server}/api/v1/contest-registrations",
+            json={"contest_id": contest["contest_id"]},
+            headers={"Authorization": f"Bearer {participant_token}"},
+        )
+        assert registration.status_code == 201
+
+        admin_page.reload()
+        admin_page.wait_for_load_state("networkidle")
+        row = admin_page.locator("tr").filter(has_text=contest["name"])
+        row.get_by_role("button", name="Participants").click()
+
+        panel = admin_page.get_by_test_id("admin-participants-panel")
+        expect(panel.get_by_text("participant_ui")).to_be_visible(timeout=5000)
+        expect(panel.get_by_text("part@test.com")).to_be_visible(timeout=5000)
+        panel.get_by_role("button", name="Remove").click()
+        expect(panel.get_by_text("BANNED")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+# ── Organizer request review ──────────────────────────────────────────────────
+
+def _create_organizer_request(live_server: str, email: str, password: str = "OrgSecret123!"):
+    import requests
+
+    response = requests.post(
+        f"{live_server}/api/v1/organizer-requests",
+        json={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": email,
+            "phone_number": "+39012345678",
+            "password": password,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_admin_can_approve_organizer_request(admin_page: Page, live_server: str):
+    """Admins should be able to approve a pending organizer request from the UI."""
+    import requests
+
+    password = "OrgSecret123!"
+    email = f"candidate_org_{uuid.uuid4().hex[:6]}@test.com"
+    _create_organizer_request(live_server, email, password=password)
+
+    admin_page.get_by_role("button", name="Organizer Requests").click()
+    row = admin_page.get_by_role("row").filter(has_text=email)
+    expect(row.get_by_text("PENDING", exact=True)).to_be_visible(timeout=5000)
+    row.get_by_role("button", name="Approve").click()
+
+    expect(row.get_by_text("APPROVED", exact=True)).to_be_visible(timeout=5000)
+    login = requests.post(
+        f"{live_server}/api/v1/auth/login",
+        json={"username": email, "password": password},
+    )
+    assert login.status_code == 200
+
+
+def test_admin_can_reject_organizer_request(admin_page: Page, live_server: str):
+    """Admins should also be able to reject requests from the review queue."""
+    email = f"rejected_org_{uuid.uuid4().hex[:6]}@test.com"
+    _create_organizer_request(live_server, email)
+
+    admin_page.get_by_role("button", name="Organizer Requests").click()
+    row = admin_page.get_by_role("row").filter(has_text=email)
+    expect(row.get_by_text("PENDING", exact=True)).to_be_visible(timeout=5000)
+    row.get_by_role("button", name="Reject").click()
+
+    expect(row.get_by_text("REJECTED", exact=True)).to_be_visible(timeout=5000)
+
+
 # ── User management ───────────────────────────────────────────────────────────
 
 def test_admin_users_tab_shows_table(admin_page: Page):

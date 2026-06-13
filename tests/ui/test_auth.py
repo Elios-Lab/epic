@@ -1,5 +1,7 @@
 """UI tests for the landing page and authentication flow."""
 
+import uuid
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -52,6 +54,24 @@ def test_logout_returns_to_landing(unauth_page: Page):
     unauth_page.wait_for_selector("text=Administrator Dashboard", timeout=5000)
     unauth_page.get_by_role("button", name="Logout").click()
     expect(unauth_page.get_by_role("button", name="Log in")).to_be_visible(timeout=3000)
+
+
+def test_landing_organizer_access_request_submits(unauth_page: Page):
+    """A prospective organizer should be able to request access from the landing page."""
+    email = f"organizer_request_{uuid.uuid4().hex[:6]}@test.com"
+
+    unauth_page.get_by_role("button", name="Request organizer access").click()
+    expect(unauth_page.get_by_role("heading", name="Request organizer access")).to_be_visible(timeout=3000)
+
+    unauth_page.get_by_label("First name").fill("Grace")
+    unauth_page.get_by_label("Last name").fill("Hopper")
+    unauth_page.get_by_label("Email").fill(email)
+    unauth_page.get_by_label("Phone number (optional)").fill("+39012345678")
+    unauth_page.get_by_label("Password", exact=True).fill("organizer-secret-123")
+    unauth_page.get_by_label("Confirm password").fill("organizer-secret-123")
+    unauth_page.get_by_role("button", name="Submit request").click()
+
+    expect(unauth_page.get_by_text("Request submitted")).to_be_visible(timeout=5000)
 
 
 def _create_invitation(live_server: str, organizer_token: str, email: str) -> str:

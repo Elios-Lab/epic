@@ -211,3 +211,55 @@ def test_create_contest_form_submits_successfully(
         if c["name"] == name:
             requests.delete(f"{live_server}/api/v1/contests/{c['contest_id']}", headers={"Authorization": f"Bearer {organizer_token}"})
             break
+
+
+# ── Participant management ───────────────────────────────────────────────────
+
+def test_organizer_can_send_participant_invitation(
+    page: Page, live_server: str, organizer_token: str
+):
+    """The contest detail panel should send invitation emails and list them."""
+    import uuid
+
+    contest = create_active_contest(live_server, organizer_token)
+    email = f"invite_{uuid.uuid4().hex[:6]}@test.com"
+    try:
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+        card.get_by_placeholder("anna@example.com").fill(email)
+        card.get_by_role("button", name="Send invitations").click()
+
+        expect(card.get_by_text(email)).to_be_visible(timeout=5000)
+        expect(card.get_by_text("Pending")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+def test_organizer_can_list_and_remove_registered_participant(
+    page: Page, live_server: str, organizer_token: str, participant_token: str
+):
+    """A contest owner should see registered participants and remove them."""
+    import requests
+
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        registration = requests.post(
+            f"{live_server}/api/v1/contest-registrations",
+            json={"contest_id": contest["contest_id"]},
+            headers={"Authorization": f"Bearer {participant_token}"},
+        )
+        assert registration.status_code == 201
+
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+
+        expect(card.get_by_text("participant_ui")).to_be_visible(timeout=5000)
+        expect(card.get_by_text("part@test.com")).to_be_visible(timeout=5000)
+        card.get_by_role("button", name="Remove").click()
+        expect(card.get_by_text("BANNED")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])

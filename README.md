@@ -2,31 +2,14 @@
 
 EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a **real-time machine learning challenge**: participants connect to sensor streams, collect their own data, predict a hidden future window, and are scored automatically against ground truth that is recorded by the platform, but never shown to participants.
 
-| Resource | URL |
-|---|---|
-| Live platform | https://epic.elioslab.net |
-| REST API | https://epic.elioslab.net/api/v1 |
-| OpenAPI / Swagger | https://epic.elioslab.net/docs |
-| Participant SDK | `pip install epic-elios-client` |
+| Resource      | URL                              |
+|---------------|----------------------------------|
+| Live platform | https://epic.elioslab.net        |
+| REST API      | https://epic.elioslab.net/api/v1 |
+| API live docs | https://epic.elioslab.net/docs   |
+| SDK           | `pip install epic-elios-client`  |
 
 EPIC is built for classrooms, research benchmarks, and industrial experiments where static datasets are too simple. An **organizer** can choose a digital twin, configure sensors and faults, invite **participants**, run a **contest**, and get a live **leaderboard** without writing backend code.
-
-## Contents
-
-- [Concept](#concept)
-- [Architecture](#architecture)
-- [How a Contest Works](#how-a-contest-works)
-- [Roles and Account Flow](#roles-and-account-flow)
-- [Participant Quickstart](#participant-quickstart)
-- [Organizer Workflow](#organizer-workflow)
-- [Administrator Workflow](#administrator-workflow)
-- [Scoring Model](#scoring-model)
-- [Built-in Twins and Sensors](#built-in-twins-and-sensors)
-- [API and WebSocket Surface](#api-and-websocket-surface)
-- [Local Development](#local-development)
-- [Testing](#testing)
-- [Extending EPIC](#extending-epic)
-- [Roadmap](#roadmap)
 
 ## Concept
 
@@ -42,7 +25,19 @@ EPIC separates competition infrastructure from simulated domains:
 
 ![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
-At runtime, FastAPI exposes the platform API and WebSocket stream, SQLAlchemy stores contests and observations, plugin registries load twins, sensors, and metrics, and the simulation engine connects them into live contest sessions.
+At runtime, EPIC is a layered RESTfull API application. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The plugin registries keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
+
+## Roles and Account Flow
+
+EPIC has three roles with different permissions:
+
+| Role          | Scope                                                                                            |
+|---------------|--------------------------------------------------------------------------------------------------|
+| PARTICIPANT   | Join contests, stream data, submit forecasts, get scores.                                        |
+| ORGANIZER     | Create and manage contests, invite participants, inspect submissions, pause and resume sessions. |
+| ADMINISTRATOR | Manage users, organizer requests, all contests, and platform operations.                         |
+
+Account creation is intentionally **controlled**. Prospective organizers must first submit a request, which is then reviewed and either approved or rejected by an administrator. Once approved, organizers can create contests and invite participants, who may choose to accept or decline the invitation. This workflow is designed for educational and research settings, where organizers are typically teachers or researchers running contests for a predefined group of participants, rather than for open public competitions. Participants may also join public contests without receiving an invitation; however, they must still have an account created or approved by an administrator Administrators can create user accounts directly. To simplify initial deployment, a bootstrap administrator account can be automatically created at startup using the ADMIN_USERNAME and ADMIN_PASSWORD environment variables.
 
 ## How a Contest Works
 
@@ -53,17 +48,15 @@ DRAFT -> SCHEDULED -> ACTIVE -> CLOSED -> ARCHIVED
   |                       |
   +-------> ACTIVE        v
                         PAUSED -> ACTIVE
-                           |
-                           +-------> CLOSED
 ```
 
 The active phase is split into three time windows.
 
-| Window | Time Range | What Happens |
-|---|---|---|
-| Observation | `start_date` to `end_of_observation` | The simulation runs and registered participants receive sensor readings over WebSocket. |
-| Evaluation | `end_of_observation` for `prediction_horizon_seconds` | The simulation continues, the stream is closed, and private ground truth is recorded. |
-| Submission | after evaluation until `end_date` | Participants submit forecasts for the hidden evaluation window. |
+| Window      | Time Range                                        | What Happens                                                                            |
+|-------------|---------------------------------------------------|-----------------------------------------------------------------------------------------|
+| Observation | start_date to end_of_observation                  | The simulation runs and registered participants receive sensor readings over WebSocket. |
+| Evaluation  | end_of_observation for prediction_horizon_seconds | The simulation continues, the stream is closed, and private ground truth is recorded.   |
+| Submission  | after evaluation until end_date                   | Participants submit forecasts for the hidden evaluation window.                         |
 
 For forecasting contests, EPIC computes:
 
@@ -71,29 +64,7 @@ For forecasting contests, EPIC computes:
 eval_steps = round(prediction_horizon_seconds * sampling_rate_hz)
 ```
 
-Each forecast target must contain exactly `eval_steps` values. Organizers choose
-the required target variables with `target_variables`, a non-empty subset of
-configured sensor ids. Other sensors can still be streamed as explanatory
-features, but they do not affect the score.
-
-## Roles and Account Flow
-
-| Role | Scope |
-|---|---|
-| `PARTICIPANT` | Join contests, stream data, submit forecasts, view own submissions and scores. |
-| `ORGANIZER` | Create and manage own contests, invite participants, inspect submissions, pause and resume sessions. |
-| `ADMINISTRATOR` | Manage users, organizer requests, all contests, impersonation, and platform operations. |
-
-Account creation is intentionally controlled:
-
-- Organizers submit a public request at `POST /api/v1/organizer-requests`.
-  Administrators approve or reject it.
-- Participants join through contest invitations. An organizer sends invitations
-  with `POST /api/v1/contests/{contest_id}/invitations`; the invitee accepts a
-  one-time token and is registered for that contest.
-- Administrators can create users directly with `POST /api/v1/users`.
-- A bootstrap administrator can be seeded at startup with `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD`.
+Each forecast must contain exactly eval_steps values. Organizers choose the required **target variables**, a non-empty subset of configured sensors. Other sensors can still be streamed as explanatory features, but they do not affect the score.
 
 ## Participant Quickstart
 
@@ -103,7 +74,7 @@ Install the SDK:
 pip install epic-elios-client
 ```
 
-Minimal forecasting workflow:
+Minimal workflow:
 
 ```python
 import asyncio
@@ -111,57 +82,95 @@ from epic_client import EPICClient
 
 
 async def main():
-    client = EPICClient("https://epic.elioslab.net")
-    client.login("your-username", "your-password")
 
+    # Connect to EPIC and authenticate.
+    client = EPICClient("https://epic.elioslab.net")
+    login = client.login("your-username", "your-password")
+    if login.get("status") == "ERROR":
+        print("Login failed:", login["message"])
+        return
+
+    # List active contests visible to this account:
+    # public contests plus private contests where you were invited or registered.
     contests = client.list_contests(status="ACTIVE")
+    if not contests:
+        print("No active contests are available for this account.")
+        return
+
+    # Pick a contest. Here we use the first one in the list.
     contest = contests[0]
     contest_id = contest["contest_id"]
+    print("Selected contest:", contest["name"])
 
-    task_config = contest["tasks"][0]["configuration"]
-    eval_steps = task_config["eval_steps"]
-    target_variables = task_config["target_variables"]
+    # Read the forecasting task configuration from the platform.
+    task_spec = client.get_task_spec(contest_id)
+    if task_spec.get("status") == "ERROR":
+        print("Could not read task configuration:", task_spec["message"])
+        return
 
-    client.register(contest_id)
+    # 
+    eval_steps = task_spec["eval_steps"]
+    target_variables = task_spec["target_variables"]
+
+    # Register for the contest before streaming or submitting.
+    registration = client.register(contest_id)
+    if registration.get("status") == "NOT_OPEN":
+        print("Registration is not open:", registration["message"])
+        return
+
+    # Collect live observations during the observation window.
     observations = await client.collect(contest_id, duration_seconds=120)
+    if not observations:
+        print("No observations collected. Check registration, contest status, and observation window.")
+        return
 
-    last = observations[-1]["sensors"]
+    # Build a simple persistence forecast: repeat the last observed value
+    # for each target variable and each future evaluation step.
+    last_sensors = observations[-1]["sensors"]
+    missing = [target for target in target_variables if target not in last_sensors]
+    if missing:
+        print("Missing target variables in the stream:", missing)
+        return
+
+    # 
     forecast = {
-        target: [last[target]] * eval_steps
+        target: [float(last_sensors[target])] * eval_steps
         for target in target_variables
     }
 
+    # Submit after the evaluation window has ended.
     submission = client.submit(
         contest_id=contest_id,
         task_id="forecasting",
         payload={"forecast": forecast},
     )
-    print(submission)
+    if submission.get("status") == "NOT_OPEN":
+        print("Submission window is not open yet.")
+        print("Submissions open at:", submission.get("opens_at"))
+        return
+
+    print("Submitted:", submission["submission_id"])
+
+    # Check your scores and the current leaderboard.
+    scores = client.get_scores(contest_id)
+    print("My submissions:", scores["submissions"])
+
+    leaderboard = client.get_leaderboard(contest_id)
+    print("Leaderboard:", leaderboard["entries"])
+
 
 asyncio.run(main())
 ```
 
-More participant material:
-
-- SDK package README: [`epic_client/README.md`](epic_client/README.md)
-- General notebook: [`notebooks/quickstart.ipynb`](notebooks/quickstart.ipynb)
-- Mass-spring-damper example:
-  [`notebooks/mass_spring_damper_forecasting.ipynb`](notebooks/mass_spring_damper_forecasting.ipynb)
-
 ## Organizer Workflow
 
-The organizer dashboard is the normal contest-authoring surface.
+Organizers turn a digital twin into a challenge. After requesting organizer access and receiving administrator approval, they can create a contest from a template or define one from scratch. The key choices are the simulated system, the sensors participants will see, the target variables they must predict, the faults injected into the scenario, the initial conditions, the scoring metric, and the contest timeline.
 
-1. Request organizer access and wait for administrator approval.
-2. Create a contest from a template or from scratch.
-3. Choose the twin, sensors, target variables, faults, initial conditions,
-   scoring metric, and dates.
-4. Activate or schedule the contest.
-5. Invite participants.
-6. Monitor registrations, submissions, scores, and leaderboard entries.
-7. Pause, resume, extend, close, delete, or archive the contest as needed.
+Once the contest is configured, the organizer can schedule it or activate it. Activation starts the simulation session: participants collect data during the observation window, the platform records the hidden evaluation window, and submissions are scored automatically when the submission window opens. During the contest, organizers can invite participants, monitor registrations and
+submissions, inspect the leaderboard, extend deadlines, pause or resume a
+running session, and close or archive the contest when it is finished.
 
-Contest creation is configuration-driven. A representative request:
+Contest creation is fully configuration-driven. A representative request:
 
 ```json
 {
@@ -171,13 +180,6 @@ Contest creation is configuration-driven. A representative request:
   "task_type": "FORECASTING",
   "metric_ids": ["mae"],
   "twin_id": "industrial_pump",
-  "sensor_configs": [
-    {"sensor_id": "flow_rate", "noise_std": 0.2},
-    {"sensor_id": "pressure", "noise_std": 0.02},
-    {"sensor_id": "temperature", "noise_std": 0.05},
-    {"sensor_id": "vibration", "noise_std": 0.03}
-  ],
-  "target_variables": ["flow_rate", "vibration"],
   "fault_schedule": [
     {
       "fault_id": "bearing_wear",
@@ -186,6 +188,13 @@ Contest creation is configuration-driven. A representative request:
       "severity": 0.7
     }
   ],
+  "sensor_configs": [
+    {"sensor_id": "flow_rate", "noise_std": 0.2},
+    {"sensor_id": "pressure", "noise_std": 0.02},
+    {"sensor_id": "temperature", "noise_std": 0.05},
+    {"sensor_id": "vibration", "noise_std": 0.03}
+  ],
+  "target_variables": ["flow_rate", "vibration"],
   "initial_conditions": {
     "flow_rate": 120.0,
     "pressure": 4.0,

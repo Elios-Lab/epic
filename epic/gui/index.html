@@ -62,13 +62,22 @@
                   A simulation-driven machine learning competition platform based on digital twins.
                 </p>
               </div>
-              <button
-                type="button"
-                @click="showLogin()"
-                class="inline-flex items-center rounded-md bg-cyan-400 px-6 py-3 text-base font-semibold text-epic-deep shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-200/50"
-              >
-                Log in
-              </button>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  @click="showLogin()"
+                  class="inline-flex items-center rounded-md bg-cyan-400 px-6 py-3 text-base font-semibold text-epic-deep shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-200/50"
+                >
+                  Log in
+                </button>
+                <button
+                  type="button"
+                  @click="showOrganizerRequest()"
+                  class="inline-flex items-center rounded-md border border-cyan-200/70 px-6 py-3 text-base font-semibold text-cyan-50 transition hover:border-cyan-100 hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-cyan-200/30"
+                >
+                  Request organizer access
+                </button>
+              </div>
             </div>
             <div class="rounded-lg border border-cyan-300/20 bg-white/8 p-6 shadow-2xl shadow-cyan-950/20 backdrop-blur">
               <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
@@ -157,6 +166,117 @@
               >
                 <span x-show="!loading">Log in</span>
                 <span x-show="loading">Logging in...</span>
+              </button>
+            </form>
+          </section>
+        </main>
+      </template>
+
+      <template x-if="state === 'organizerRequest'">
+        <main class="flex min-h-screen items-center justify-center px-6 py-12">
+          <section class="w-full max-w-2xl rounded-lg border border-cyan-300/20 bg-white p-8 text-slate-900 shadow-2xl shadow-cyan-950/30">
+            <button
+              type="button"
+              @click="state = 'landing'; organizerRequest.error = ''; organizerRequest.success = ''"
+              class="mb-6 text-sm font-medium text-epic-navy hover:text-epic-cyan"
+            >
+              Back
+            </button>
+            <h2 class="text-2xl font-semibold text-epic-deep">Request organizer access</h2>
+            <p class="mt-3 text-sm leading-6 text-slate-600">
+              Tell us who you are and choose the password you will use if your request is approved. An administrator reviews organizer requests before the account becomes active.
+            </p>
+
+            <template x-if="organizerRequest.success">
+              <div class="mt-6 rounded-md bg-cyan-50 px-4 py-4 text-sm text-epic-navy">
+                <p x-text="organizerRequest.success"></p>
+                <button
+                  type="button"
+                  @click="showLogin()"
+                  class="mt-4 rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep"
+                >
+                  Go to login
+                </button>
+              </div>
+            </template>
+
+            <form x-show="!organizerRequest.success" class="mt-6 space-y-4" @submit.prevent="submitOrganizerRequest()">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                  <span class="text-sm font-medium text-slate-700">First name</span>
+                  <input
+                    x-model="organizerRequest.form.first_name"
+                    type="text"
+                    required
+                    autocomplete="given-name"
+                    class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                  />
+                </label>
+                <label class="block">
+                  <span class="text-sm font-medium text-slate-700">Last name</span>
+                  <input
+                    x-model="organizerRequest.form.last_name"
+                    type="text"
+                    required
+                    autocomplete="family-name"
+                    class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                  />
+                </label>
+              </div>
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Email</span>
+                <input
+                  x-model="organizerRequest.form.email"
+                  type="email"
+                  required
+                  autocomplete="email"
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <label class="block">
+                <span class="text-sm font-medium text-slate-700">Phone number (optional)</span>
+                <input
+                  x-model="organizerRequest.form.phone_number"
+                  type="tel"
+                  autocomplete="tel"
+                  class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                />
+              </label>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                  <span class="text-sm font-medium text-slate-700">Password</span>
+                  <input
+                    x-model="organizerRequest.form.password"
+                    type="password"
+                    required
+                    minlength="8"
+                    autocomplete="new-password"
+                    class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                  />
+                </label>
+                <label class="block">
+                  <span class="text-sm font-medium text-slate-700">Confirm password</span>
+                  <input
+                    x-model="organizerRequest.form.password_confirm"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                  />
+                </label>
+              </div>
+              <p
+                x-show="organizerRequest.error"
+                x-text="organizerRequest.error"
+                class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+              ></p>
+              <button
+                type="submit"
+                :disabled="organizerRequest.submitting"
+                class="w-full rounded-md bg-epic-navy px-5 py-3 font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span x-show="!organizerRequest.submitting">Submit request</span>
+                <span x-show="organizerRequest.submitting">Submitting...</span>
               </button>
             </form>
           </section>
@@ -781,7 +901,7 @@
                             </button>
                           </form>
 
-                          <div x-show="organizer.expandedContestId === contestId(contest)" class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                          <div x-show="organizer.expandedContestId === contestId(contest)" @click.stop class="mt-5 rounded-md border border-slate-200 bg-white p-4">
                             <div class="mb-3 flex items-center justify-between">
                               <h4 class="font-semibold text-slate-900">Leaderboard</h4>
                               <span x-show="organizer.loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
@@ -1215,6 +1335,14 @@
                       >
                         Users
                       </button>
+                      <button
+                        type="button"
+                        @click="setAdminTab('organizerRequests')"
+                        :class="admin.tab === 'organizerRequests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
+                        class="rounded px-4 py-2 text-sm font-semibold transition"
+                      >
+                        Organizer Requests
+                      </button>
                     </div>
                   </div>
 
@@ -1276,6 +1404,7 @@
                               <button type="button" @click="sortAdminContests('end_date')" class="hover:text-epic-navy">End</button>
                             </th>
                             <th class="px-4 py-3 font-semibold">Transition</th>
+                            <th class="px-4 py-3 font-semibold">Participants</th>
                             <th class="px-4 py-3 font-semibold">Monitor</th>
                             <th class="px-4 py-3 font-semibold">Pause / Resume</th>
                             <th class="px-4 py-3 font-semibold">Delete</th>
@@ -1300,6 +1429,15 @@
                                     <option :value="status" x-text="status"></option>
                                   </template>
                                 </select>
+                              </td>
+                              <td class="px-4 py-3">
+                                <button
+                                  type="button"
+                                  @click="toggleAdminParticipants(contest)"
+                                  class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                                >
+                                  <span x-text="admin.expandedContestId === contestId(contest) ? 'Hide' : 'Participants'"></span>
+                                </button>
                               </td>
                               <td class="px-4 py-3">
                                 <button
@@ -1352,6 +1490,125 @@
                           </template>
                         </tbody>
                       </table>
+                    </div>
+
+                    <div
+                      x-show="admin.expandedContestId"
+                      data-testid="admin-participants-panel"
+                      class="rounded-md border border-slate-200 bg-white p-5"
+                    >
+                      <template x-if="selectedAdminContest()">
+                        <div>
+                          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 class="text-base font-semibold text-slate-900">
+                                Participants for <span x-text="selectedAdminContest().name"></span>
+                              </h3>
+                              <p class="text-sm text-slate-500">
+                                Invite new participants, review who joined, and remove access when needed.
+                              </p>
+                            </div>
+                            <span x-show="admin.loadingParticipantsId === admin.expandedContestId" class="text-sm text-slate-500">Loading...</span>
+                          </div>
+
+                          <form class="mb-5 rounded-md border border-cyan-100 bg-cyan-50 p-4" @submit.prevent="sendInvitations(selectedAdminContest())">
+                            <label class="block">
+                              <span class="text-sm font-medium text-slate-700">Send registration invitation emails</span>
+                              <textarea
+                                x-model="admin.inviteEmails"
+                                rows="2"
+                                placeholder="anna@example.com, marco@example.com — separate with commas, spaces, or new lines"
+                                class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                              ></textarea>
+                            </label>
+                            <button
+                              type="submit"
+                              :disabled="admin.sendingInvites"
+                              class="mt-2 rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <span x-show="!admin.sendingInvites">Send invitations</span>
+                              <span x-show="admin.sendingInvites">Sending...</span>
+                            </button>
+                          </form>
+
+                          <div class="grid gap-5 xl:grid-cols-2">
+                            <div>
+                              <h4 class="mb-2 text-sm font-semibold text-slate-700">Invited</h4>
+                              <div class="overflow-x-auto rounded-md border border-slate-200">
+                                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                  <thead class="bg-slate-50">
+                                    <tr class="text-left text-slate-500">
+                                      <th class="px-3 py-2 font-semibold">Email</th>
+                                      <th class="px-3 py-2 font-semibold">Status</th>
+                                      <th class="px-3 py-2 font-semibold"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody class="divide-y divide-slate-200">
+                                    <template x-for="inv in admin.invitations[admin.expandedContestId] || []" :key="inv.id">
+                                      <tr>
+                                        <td class="px-3 py-2" x-text="inv.email"></td>
+                                        <td class="px-3 py-2">
+                                          <span
+                                            x-text="inv.used ? 'Accepted' : 'Pending'"
+                                            :class="inv.used ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800' : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800'"
+                                          ></span>
+                                        </td>
+                                        <td class="px-3 py-2 text-right">
+                                          <button
+                                            x-show="!inv.used"
+                                            type="button"
+                                            @click="revokeInvitation(selectedAdminContest(), inv)"
+                                            class="text-xs font-semibold text-red-600 hover:text-red-800"
+                                          >Revoke</button>
+                                        </td>
+                                      </tr>
+                                    </template>
+                                    <tr x-show="(admin.invitations[admin.expandedContestId] || []).length === 0">
+                                      <td colspan="3" class="px-3 py-3 text-slate-500">No invitations sent yet.</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            <div>
+                              <h4 class="mb-2 text-sm font-semibold text-slate-700">Registered</h4>
+                              <div class="overflow-x-auto rounded-md border border-slate-200">
+                                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                  <thead class="bg-slate-50">
+                                    <tr class="text-left text-slate-500">
+                                      <th class="px-3 py-2 font-semibold">Username</th>
+                                      <th class="px-3 py-2 font-semibold">Email</th>
+                                      <th class="px-3 py-2 font-semibold">Status</th>
+                                      <th class="px-3 py-2 font-semibold"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody class="divide-y divide-slate-200">
+                                    <template x-for="reg in admin.registrations[admin.expandedContestId] || []" :key="reg.registration_id">
+                                      <tr>
+                                        <td class="px-3 py-2" x-text="reg.username"></td>
+                                        <td class="px-3 py-2" x-text="reg.email"></td>
+                                        <td class="px-3 py-2" x-text="reg.status"></td>
+                                        <td class="px-3 py-2 text-right">
+                                          <button
+                                            x-show="reg.status === 'REGISTERED'"
+                                            type="button"
+                                            @click="removeParticipant(selectedAdminContest(), reg)"
+                                            class="text-xs font-semibold text-red-600 hover:text-red-800"
+                                          >Remove</button>
+                                        </td>
+                                      </tr>
+                                    </template>
+                                    <tr x-show="(admin.registrations[admin.expandedContestId] || []).length === 0">
+                                      <td colspan="4" class="px-3 py-3 text-slate-500">No registered participants yet.</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </template>
                     </div>
 
                     <div x-show="monitor.monitoredContest" class="space-y-3">
@@ -1533,6 +1790,91 @@
                       </table>
                     </div>
                   </div>
+
+                  <div x-show="admin.tab === 'organizerRequests'" class="space-y-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h2 class="text-xl font-semibold text-slate-900">Organizer Requests</h2>
+                        <p class="mt-1 text-sm text-slate-600">Review people who asked to create and manage contests.</p>
+                      </div>
+                      <div class="flex flex-col gap-3 sm:flex-row">
+                        <select
+                          x-model="admin.organizerRequestStatusFilter"
+                          @change="loadAdminOrganizerRequests()"
+                          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                        >
+                          <option value="PENDING">PENDING</option>
+                          <option value="APPROVED">APPROVED</option>
+                          <option value="REJECTED">REJECTED</option>
+                          <option value="ALL">ALL</option>
+                        </select>
+                        <button
+                          type="button"
+                          @click="loadAdminOrganizerRequests()"
+                          class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                    <p x-show="admin.loadingOrganizerRequests" class="text-sm text-slate-500">Loading organizer requests...</p>
+                    <div class="overflow-x-auto rounded-md border border-slate-200">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                          <tr class="text-left text-slate-500">
+                            <th class="px-4 py-3 font-semibold">Name</th>
+                            <th class="px-4 py-3 font-semibold">Email</th>
+                            <th class="px-4 py-3 font-semibold">Phone</th>
+                            <th class="px-4 py-3 font-semibold">Status</th>
+                            <th class="px-4 py-3 font-semibold">Created</th>
+                            <th class="px-4 py-3 font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 bg-white">
+                          <template x-for="request in admin.organizerRequests" :key="request.id">
+                            <tr>
+                              <td class="px-4 py-3 font-medium text-slate-900">
+                                <span x-text="`${request.first_name} ${request.last_name}`"></span>
+                              </td>
+                              <td class="px-4 py-3 text-slate-600" x-text="request.email"></td>
+                              <td class="px-4 py-3 text-slate-600" x-text="request.phone_number || '-'"></td>
+                              <td class="px-4 py-3">
+                                <span
+                                  x-text="request.status"
+                                  :class="organizerRequestBadgeClass(request.status)"
+                                  class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                ></span>
+                              </td>
+                              <td class="px-4 py-3 text-slate-600" x-text="formatDate(request.created_at)"></td>
+                              <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                  <button
+                                    x-show="request.status === 'PENDING'"
+                                    type="button"
+                                    @click="approveOrganizerRequest(request)"
+                                    class="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    x-show="request.status === 'PENDING'"
+                                    type="button"
+                                    @click="rejectOrganizerRequest(request)"
+                                    class="rounded-md border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-50"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </template>
+                          <tr x-show="admin.organizerRequests.length === 0">
+                            <td colspan="6" class="px-4 py-6 text-center text-slate-500">No organizer requests match the current filter.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </template>
             </div>
@@ -1628,6 +1970,19 @@
               password_confirm: "",
             },
           },
+          organizerRequest: {
+            submitting: false,
+            error: "",
+            success: "",
+            form: {
+              first_name: "",
+              last_name: "",
+              email: "",
+              phone_number: "",
+              password: "",
+              password_confirm: "",
+            },
+          },
           monitor: {
             monitoredContest: null,
             monitorChart: null,   // kept for legacy x-show guards only — actual Chart.js instance lives in this.$el._monitorChart (non-reactive)
@@ -1717,9 +2072,13 @@
             dashboardLoaded: false,
             loadingOverview: false,
             loadingUsers: false,
+            loadingOrganizerRequests: false,
             contests: [],
             users: [],
+            organizerRequests: [],
             totalUsers: 0,
+            totalOrganizerRequests: 0,
+            organizerRequestStatusFilter: "PENDING",
             contestSortKey: "name",
             contestSortDirection: "asc",
             deletingContestId: null,
@@ -1728,6 +2087,12 @@
             createUserForm: { username: "", email: "", password: "", role: "PARTICIPANT" },
             creatingUser: false,
             showCreateUser: false,
+            expandedContestId: null,
+            invitations: {},
+            registrations: {},
+            loadingParticipantsId: null,
+            inviteEmails: "",
+            sendingInvites: false,
             error: "",
             success: "",
           },
@@ -1831,6 +2196,58 @@
           showLogin() {
             this.error = "";
             this.state = "login";
+          },
+          showOrganizerRequest() {
+            this.error = "";
+            this.organizerRequest.error = "";
+            this.organizerRequest.success = "";
+            this.state = "organizerRequest";
+          },
+          async submitOrganizerRequest() {
+            this.organizerRequest.error = "";
+            this.organizerRequest.success = "";
+            if (
+              this.organizerRequest.form.password !==
+              this.organizerRequest.form.password_confirm
+            ) {
+              this.organizerRequest.error = "Passwords do not match.";
+              return;
+            }
+            this.organizerRequest.submitting = true;
+            try {
+              const response = await fetch("/api/v1/organizer-requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  first_name: this.organizerRequest.form.first_name,
+                  last_name: this.organizerRequest.form.last_name,
+                  email: this.organizerRequest.form.email,
+                  phone_number: this.organizerRequest.form.phone_number || null,
+                  password: this.organizerRequest.form.password,
+                }),
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                throw new Error(
+                  data.error?.message || "Organizer access request failed."
+                );
+              }
+              this.organizerRequest.success =
+                "Request submitted. An administrator will review it and notify you by email.";
+              this.organizerRequest.form = {
+                first_name: "",
+                last_name: "",
+                email: "",
+                phone_number: "",
+                password: "",
+                password_confirm: "",
+              };
+            } catch (error) {
+              this.organizerRequest.error =
+                error.message || "Organizer access request failed.";
+            } finally {
+              this.organizerRequest.submitting = false;
+            }
           },
           async login() {
             this.loading = true;
@@ -2524,82 +2941,107 @@
               ns.deletingContestId = null;
             }
           },
+          participantManagerState() {
+            return this.user.role === "ADMINISTRATOR" ? this.admin : this.organizer;
+          },
+          selectedAdminContest() {
+            if (!this.admin.expandedContestId) {
+              return null;
+            }
+            return this.admin.contests.find(
+              (contest) => this.contestId(contest) === this.admin.expandedContestId
+            ) || null;
+          },
+          async toggleAdminParticipants(contest) {
+            const contestId = this.contestId(contest);
+            if (this.admin.expandedContestId === contestId) {
+              this.admin.expandedContestId = null;
+              return;
+            }
+            this.admin.expandedContestId = contestId;
+            this.admin.inviteEmails = "";
+            await this.loadParticipants(contest);
+          },
           async loadParticipants(contest) {
             const contestId = this.contestId(contest);
-            this.organizer.loadingParticipantsId = contestId;
+            const ns = this.participantManagerState();
+            ns.loadingParticipantsId = contestId;
             try {
               const [invitationsResponse, registrationsResponse] = await Promise.all([
                 this.apiRequest(`/api/v1/contests/${contestId}/invitations`),
                 this.apiRequest(`/api/v1/contest-registrations?contest_id=${contestId}`),
               ]);
-              this.organizer.invitations = {
-                ...this.organizer.invitations,
+              ns.invitations = {
+                ...ns.invitations,
                 [contestId]: invitationsResponse.invitations || [],
               };
-              this.organizer.registrations = {
-                ...this.organizer.registrations,
+              ns.registrations = {
+                ...ns.registrations,
                 [contestId]: registrationsResponse.registrations || [],
               };
             } catch (error) {
-              this.organizer.error = error.message || "Unable to load participants.";
+              ns.error = error.message || "Unable to load participants.";
             } finally {
-              this.organizer.loadingParticipantsId = null;
+              ns.loadingParticipantsId = null;
             }
           },
           async sendInvitations(contest) {
-            const emails = this.organizer.inviteEmails
+            const ns = this.participantManagerState();
+            const emails = ns.inviteEmails
               .split(/[\s,;]+/)
               .map((email) => email.trim())
               .filter((email) => email.length > 0);
             if (emails.length === 0) {
-              this.organizer.error = "Enter at least one email address.";
+              ns.error = "Enter at least one email address.";
               return;
             }
-            this.organizer.sendingInvites = true;
-            this.organizer.error = "";
-            this.organizer.success = "";
+            ns.sendingInvites = true;
+            ns.error = "";
+            ns.success = "";
             try {
               const contestId = this.contestId(contest);
               const response = await this.apiRequest(
                 `/api/v1/contests/${contestId}/invitations`,
                 { method: "POST", body: JSON.stringify({ emails }) }
               );
-              this.organizer.success = `Sent ${response.created} invitation(s).`;
-              this.organizer.inviteEmails = "";
+              ns.success = `Sent ${response.created} invitation(s).`;
+              ns.inviteEmails = "";
               await this.loadParticipants(contest);
             } catch (error) {
-              this.organizer.error = error.message || "Unable to send invitations.";
+              ns.error = error.message || "Unable to send invitations.";
             } finally {
-              this.organizer.sendingInvites = false;
+              ns.sendingInvites = false;
             }
           },
           async revokeInvitation(contest, invitation) {
-            this.organizer.error = "";
-            this.organizer.success = "";
+            const ns = this.participantManagerState();
+            ns.error = "";
+            ns.success = "";
             try {
               const contestId = this.contestId(contest);
               await this.apiRequest(
                 `/api/v1/contests/${contestId}/invitations/${invitation.id}`,
                 { method: "DELETE" }
               );
-              this.organizer.success = `Invitation for ${invitation.email} revoked.`;
+              ns.success = `Invitation for ${invitation.email} revoked.`;
               await this.loadParticipants(contest);
             } catch (error) {
-              this.organizer.error = error.message || "Unable to revoke invitation.";
+              ns.error = error.message || "Unable to revoke invitation.";
             }
           },
           async removeParticipant(contest, registration) {
-            this.organizer.error = "";
-            this.organizer.success = "";
+            const ns = this.participantManagerState();
+            ns.error = "";
+            ns.success = "";
             try {
               await this.apiRequest(
                 `/api/v1/contest-registrations/${registration.registration_id}`,
                 { method: "DELETE" }
               );
-              this.organizer.success = `${registration.username || registration.email} removed from the contest.`;
+              ns.success = `${registration.username || registration.email} removed from the contest.`;
               await this.loadParticipants(contest);
             } catch (error) {
-              this.organizer.error = error.message || "Unable to remove participant.";
+              ns.error = error.message || "Unable to remove participant.";
             }
           },
           async toggleLeaderboard(contest) {
@@ -2837,6 +3279,9 @@
             if (tab === "users") {
               await this.loadAdminUsers();
             }
+            if (tab === "organizerRequests") {
+              await this.loadAdminOrganizerRequests();
+            }
           },
           async loadAdminOverview() {
             this.admin.loadingOverview = true;
@@ -2866,6 +3311,22 @@
               this.admin.error = error.message || "Unable to load users.";
             } finally {
               this.admin.loadingUsers = false;
+            }
+          },
+          async loadAdminOrganizerRequests() {
+            this.admin.loadingOrganizerRequests = true;
+            this.admin.error = "";
+            try {
+              const status = this.admin.organizerRequestStatusFilter;
+              const query = status === "ALL" ? "" : `?status=${encodeURIComponent(status)}`;
+              const response = await this.apiRequest(`/api/v1/organizer-requests${query}`);
+              this.admin.organizerRequests = response.requests || [];
+              this.admin.totalOrganizerRequests =
+                response.total ?? this.admin.organizerRequests.length;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to load organizer requests.";
+            } finally {
+              this.admin.loadingOrganizerRequests = false;
             }
           },
           contestsByStatus() {
@@ -2927,6 +3388,48 @@
             } catch (error) {
               this.admin.error = error.message || "Contest transition failed.";
             }
+          },
+          organizerRequestBadgeClass(status) {
+            const classes = {
+              PENDING: "bg-amber-100 text-amber-800",
+              APPROVED: "bg-emerald-100 text-emerald-800",
+              REJECTED: "bg-red-100 text-red-800",
+            };
+            return classes[status] || "bg-slate-200 text-slate-700";
+          },
+          async approveOrganizerRequest(request) {
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(
+                `/api/v1/organizer-requests/${request.id}/approve`,
+                { method: "POST" }
+              );
+              this.replaceOrganizerRequest(updated);
+              this.admin.success = `Organizer request for ${request.email} approved.`;
+              await this.loadAdminUsers();
+            } catch (error) {
+              this.admin.error = error.message || "Unable to approve organizer request.";
+            }
+          },
+          async rejectOrganizerRequest(request) {
+            this.admin.error = "";
+            this.admin.success = "";
+            try {
+              const updated = await this.apiRequest(
+                `/api/v1/organizer-requests/${request.id}/reject`,
+                { method: "POST" }
+              );
+              this.replaceOrganizerRequest(updated);
+              this.admin.success = `Organizer request for ${request.email} rejected.`;
+            } catch (error) {
+              this.admin.error = error.message || "Unable to reject organizer request.";
+            }
+          },
+          replaceOrganizerRequest(updated) {
+            this.admin.organizerRequests = this.admin.organizerRequests.map((request) =>
+              request.id === updated.id ? updated : request
+            );
           },
           filteredAdminUsers() {
             const query = this.admin.userSearch.trim().toLowerCase();
