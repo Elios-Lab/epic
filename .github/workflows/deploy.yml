@@ -23,6 +23,10 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Build web frontend
+        working-directory: epic/gui
+        run: npm ci && npm run build
+
       - name: Run unit and API tests
         run: uv run pytest --cov=epic.core --cov=epic.api --cov-report=term
 
@@ -44,6 +48,10 @@ jobs:
           script: |
             cd /opt/epic
             git pull origin main
+            cd /opt/epic/epic/gui
+            npm ci
+            npm run build
+            cd /opt/epic
             source .venv/bin/activate
             pip install -e . --quiet
             export $(grep -v '^#' .env | xargs)

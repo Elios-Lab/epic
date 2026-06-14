@@ -11,6 +11,8 @@ venv/
 
 env/
 
+node_modules/
+
 .pytest_cache/
 
 .mypy_cache/
@@ -36,4 +38,3 @@ build/
 .DS_Store
 
 alembic/versions/*.pyc
-

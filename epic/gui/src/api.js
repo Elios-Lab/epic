@@ -1,4 +1,4 @@
-window.EPICApi = {
+export const api = {
   async request(token, path, options = {}) {
     const headers = {
       ...(options.headers || {}),

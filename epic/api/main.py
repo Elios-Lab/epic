@@ -48,6 +48,14 @@ from epic.twins.rotating_machinery.plugin import register as register_rotating_m
 from epic.twins.smart_building.plugin import register as register_smart_building
 
 GUI_DIR = Path(__file__).resolve().parent.parent / "gui"
+GUI_DIST_DIR = GUI_DIR / "dist"
+
+
+def get_gui_dir() -> Path:
+    """Return built GUI assets when available, otherwise source assets."""
+    if (GUI_DIST_DIR / "index.html").exists():
+        return GUI_DIST_DIR
+    return GUI_DIR
 
 
 async def _recover_after_restart(notifications: NotificationService) -> None:
@@ -196,7 +204,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # take precedence over it.
     @app.get("/register", include_in_schema=False)
     async def spa_register():
-        return FileResponse(GUI_DIR / "index.html")
+        return FileResponse(get_gui_dir() / "index.html")
 
-    app.mount("/", StaticFiles(directory=GUI_DIR, html=True), name="gui")
+    app.mount("/", StaticFiles(directory=get_gui_dir(), html=True), name="gui")
     return app

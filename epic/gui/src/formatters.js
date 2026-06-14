@@ -1,4 +1,4 @@
-window.EPICFormatters = {
+export const formatters = {
   formatDate(value) {
     if (!value) {
       return "-";

@@ -1,14 +1,20 @@
-window.EPICAuth = {
+export const auth = {
+  notifyChanged() {
+    window.dispatchEvent(new CustomEvent("epic-auth-changed"));
+  },
+
   getToken() {
     return localStorage.getItem("epic_token");
   },
 
   storeToken(token) {
     localStorage.setItem("epic_token", token);
+    this.notifyChanged();
   },
 
   clearToken() {
     localStorage.removeItem("epic_token");
+    this.notifyChanged();
   },
 
   decodeToken(token) {

@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --color-epic-navy: #0d3b6e;
+  --color-epic-deep: #061a33;
+  --color-epic-cyan: #0096c7;
+  --color-epic-pale: #e7f7fc;
+}

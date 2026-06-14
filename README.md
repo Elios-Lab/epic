@@ -229,8 +229,8 @@ Administrators operate the whole platform. They can:
 - inspect all sessions, submissions, scores, and leaderboards;
 - configure bootstrap admin and SMTP notification settings.
 
-The administrator dashboard lives in the static web app under
-`epic/gui/index.html`.
+The web interface is a Vue/Vite app under `epic/gui`. Production serves the
+built `epic/gui/dist` assets from FastAPI.
 
 ## Scoring Model
 
@@ -453,10 +453,30 @@ set +a
 uv run alembic upgrade head
 ```
 
+Build the web interface before using FastAPI as the frontend host:
+
+```bash
+cd epic/gui
+npm ci
+npm run build
+cd ../..
+```
+
 Start the server:
 
 ```bash
 uv run uvicorn "epic.api.main:create_app" --factory --reload
+```
+
+For frontend development, run the API and Vite dev server separately. Vite
+proxies `/api` and WebSocket traffic to FastAPI on port 8000:
+
+```bash
+uv run uvicorn "epic.api.main:create_app" --factory --reload
+
+cd epic/gui
+npm ci
+npm run dev
 ```
 
 Open:

@@ -292,7 +292,7 @@ def test_register_deep_link_serves_spa(client):
     response = client.get("/register?token=whatever")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "epicApp" in response.text
+    assert 'id="auth-app"' in response.text
 
 
 # ── Organizer invitation management ───────────────────────────────────────────

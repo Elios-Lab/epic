@@ -150,7 +150,7 @@ def test_stop_monitor_hides_chart_panel(
         page.get_by_role("button", name="Stop", exact=True).click()
 
         # Chart panel should no longer be visible.
-        chart_panel = page.locator("div[x-show='monitor.monitoredContest']")
+        chart_panel = page.locator("canvas#monitorChartOrganizer").locator("..")
         expect(chart_panel).to_be_hidden(timeout=2000)
 
         # Monitor button label reverts to "Monitor".
