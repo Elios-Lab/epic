@@ -2,12 +2,13 @@
 
 EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a **real-time machine learning challenge**: participants connect to sensor streams, collect their own data, predict a hidden future window, and are scored automatically against ground truth that is recorded by the platform, but never shown to participants.
 
-| Resource      | URL                              |
-|---------------|----------------------------------|
-| Live platform | https://epic.elioslab.net        |
-| REST API      | https://epic.elioslab.net/api/v1 |
-| API live docs | https://epic.elioslab.net/docs   |
-| SDK           | `pip install epic-elios-client`  |
+| Resource         | URL                              |
+|------------------|----------------------------------|
+| Live platform    | https://epic.elioslab.net        |
+| REST API         | https://epic.elioslab.net/api/v1 |
+| API live docs    | https://epic.elioslab.net/docs     |
+| SDK              | `pip install epic-elios-client`    |
+| Jupyter notebook | https://epic.elioslab.net/notebooks |
 
 EPIC is built for classrooms, research benchmarks, and industrial experiments where static datasets are too simple. An **organizer** can choose a digital twin, configure sensors and faults, invite **participants**, run a **contest**, and get a live **leaderboard** without writing backend code.
 
