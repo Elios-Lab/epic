@@ -20,6 +20,13 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: epic/gui/package-lock.json
+
       - name: Install dependencies
         run: uv sync
 
@@ -39,19 +46,31 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to epic-server
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: epic/gui/package-lock.json
+
+      - name: Build web frontend
+        working-directory: epic/gui
+        run: npm ci && npm run build
+
+      - name: Prepare server application
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: epic.elioslab.net
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             cd /opt/epic
             git pull origin main
-            cd /opt/epic/epic/gui
-            npm ci
-            npm run build
-            cd /opt/epic
+            rm -rf epic/gui/dist
+            mkdir -p epic/gui/dist
             source .venv/bin/activate
             pip install -e . --quiet
             export $(grep -v '^#' .env | xargs)
@@ -75,5 +94,25 @@ jobs:
             EOF
             sudo systemctl daemon-reload
             sudo systemctl enable epic
+
+      - name: Upload frontend bundle
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: epic.elioslab.net
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: epic/gui/dist/*
+          target: /opt/epic/epic/gui/dist
+          strip_components: 3
+
+      - name: Restart server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: epic.elioslab.net
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            test -f /opt/epic/epic/gui/dist/index.html
             sudo systemctl restart epic
             echo "Deploy complete"
