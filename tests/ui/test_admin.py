@@ -39,6 +39,13 @@ def test_admin_overview_shows_stats(admin_page: Page):
     expect(admin_page.get_by_text("Registered users")).to_be_visible(timeout=5000)
 
 
+def test_admin_settings_tab_shows_environment_editor(admin_page: Page):
+    admin_page.get_by_role("button", name="Settings").click()
+    expect(admin_page.get_by_text("Environment Settings")).to_be_visible(timeout=5000)
+    expect(admin_page.get_by_text("DATABASE_URL")).to_be_visible(timeout=5000)
+    expect(admin_page.get_by_text("SECRET_KEY")).to_be_visible(timeout=5000)
+
+
 # ── Contests table ────────────────────────────────────────────────────────────
 
 def test_admin_contests_tab_shows_table(admin_page: Page):

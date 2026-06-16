@@ -16,11 +16,15 @@ const success = ref("");
 const loadingOverview = ref(false);
 const loadingUsers = ref(false);
 const loadingOrganizerRequests = ref(false);
+const loadingEnvironment = ref(false);
 const loadingParticipantsId = ref(null);
 const sendingInvites = ref(false);
+const savingEnvironment = ref(false);
 const contests = ref([]);
 const users = ref([]);
 const organizerRequests = ref([]);
+const environmentVariables = ref([]);
+const environmentFile = ref("");
 const totalUsers = ref(0);
 const expandedContestId = ref(null);
 const inviteEmails = ref("");
@@ -30,6 +34,7 @@ const userSearch = ref("");
 const showCreateUser = ref(false);
 const creatingUser = ref(false);
 const organizerRequestStatusFilter = ref("PENDING");
+const environmentForm = reactive({});
 
 const createUserForm = reactive({
   username: "",
@@ -72,6 +77,18 @@ const filteredUsers = computed(() => {
   return users.value.filter((account) =>
     `${account.username} ${account.email}`.toLowerCase().includes(query)
   );
+});
+
+const environmentCategories = computed(() => {
+  const groups = new Map();
+  for (const variable of environmentVariables.value) {
+    if (!groups.has(variable.category)) groups.set(variable.category, []);
+    groups.get(variable.category).push(variable);
+  }
+  return Array.from(groups.entries()).map(([category, variables]) => ({
+    category,
+    variables,
+  }));
 });
 
 function selectedContest() {
@@ -118,6 +135,7 @@ async function setTab(nextTab) {
   if (nextTab === "overview") await loadOverview();
   if (nextTab === "users") await loadUsers();
   if (nextTab === "organizerRequests") await loadOrganizerRequests();
+  if (nextTab === "environment") await loadEnvironment();
 }
 
 async function loadOverview() {
@@ -164,6 +182,53 @@ async function loadOrganizerRequests() {
     error.value = loadError.message || "Unable to load organizer requests.";
   } finally {
     loadingOrganizerRequests.value = false;
+  }
+}
+
+async function loadEnvironment() {
+  loadingEnvironment.value = true;
+  error.value = "";
+  try {
+    const response = await apiRequest("/api/v1/admin/environment");
+    environmentFile.value = response.env_file;
+    environmentVariables.value = response.variables || [];
+    for (const variable of environmentVariables.value) {
+      environmentForm[variable.key] = variable.is_secret ? "" : (variable.value ?? "");
+    }
+  } catch (loadError) {
+    error.value = loadError.message || "Unable to load environment settings.";
+  } finally {
+    loadingEnvironment.value = false;
+  }
+}
+
+async function saveEnvironment() {
+  savingEnvironment.value = true;
+  error.value = "";
+  success.value = "";
+  const values = {};
+  for (const variable of environmentVariables.value) {
+    const value = environmentForm[variable.key] ?? "";
+    if (variable.is_secret && value === "" && variable.is_set) {
+      continue;
+    }
+    values[variable.key] = value === "" ? null : value;
+  }
+  try {
+    const response = await apiRequest("/api/v1/admin/environment", {
+      method: "PUT",
+      body: JSON.stringify({ values }),
+    });
+    environmentFile.value = response.env_file;
+    environmentVariables.value = response.variables || [];
+    for (const variable of environmentVariables.value) {
+      environmentForm[variable.key] = variable.is_secret ? "" : (variable.value ?? "");
+    }
+    success.value = "Environment file updated. Restart the server to apply changes.";
+  } catch (saveError) {
+    error.value = saveError.message || "Unable to update environment settings.";
+  } finally {
+    savingEnvironment.value = false;
   }
 }
 
@@ -385,6 +450,9 @@ onMounted(() => {
               <button type="button" :class="tab === 'organizerRequests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'" class="rounded px-4 py-2 text-sm font-semibold transition" @click="setTab('organizerRequests')">
                 Organizer Requests
               </button>
+              <button type="button" :class="tab === 'environment' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'" class="rounded px-4 py-2 text-sm font-semibold transition" @click="setTab('environment')">
+                Settings
+              </button>
             </div>
           </div>
 
@@ -577,6 +645,54 @@ onMounted(() => {
                   <tr v-if="organizerRequests.length === 0"><td colspan="4" class="px-4 py-6 text-center text-slate-500">No organizer requests match the current filter.</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div v-if="tab === 'environment'" class="space-y-5">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-xl font-semibold text-slate-900">Environment Settings</h2>
+                <p class="mt-1 text-sm text-slate-600">
+                  Edit supported `.env` variables. Secret values are hidden; enter a new value only when replacing them.
+                </p>
+                <p v-if="environmentFile" class="mt-1 font-mono text-xs text-slate-500">{{ environmentFile }}</p>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="loadEnvironment">
+                  Refresh
+                </button>
+                <button type="button" :disabled="savingEnvironment" class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:opacity-60" @click="saveEnvironment">
+                  {{ savingEnvironment ? "Saving..." : "Save settings" }}
+                </button>
+              </div>
+            </div>
+
+            <p class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Changes are written to the environment file but are not applied to the running process until the server restarts.
+            </p>
+            <p v-if="loadingEnvironment" class="text-sm text-slate-500">Loading environment settings...</p>
+
+            <div v-for="group in environmentCategories" :key="group.category" class="rounded-md border border-slate-200 bg-white">
+              <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h3 class="text-sm font-semibold text-slate-900">{{ group.category }}</h3>
+              </div>
+              <div class="divide-y divide-slate-100">
+                <label v-for="variable in group.variables" :key="variable.key" class="grid gap-3 px-4 py-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
+                  <div>
+                    <div class="font-mono text-sm font-semibold text-slate-900">
+                      {{ variable.key }}<span v-if="variable.is_required" class="text-red-600">*</span>
+                    </div>
+                    <div class="mt-1 text-xs leading-5 text-slate-500">{{ variable.description }}</div>
+                    <div v-if="variable.is_secret && variable.is_set" class="mt-1 text-xs font-medium text-emerald-700">Secret is configured</div>
+                  </div>
+                  <input
+                    v-model="environmentForm[variable.key]"
+                    :type="variable.is_secret ? 'password' : 'text'"
+                    :placeholder="variable.is_secret && variable.is_set ? 'Leave blank to keep existing value' : ''"
+                    class="w-full rounded-md border border-slate-300 px-4 py-2 font-mono text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>

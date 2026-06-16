@@ -15,6 +15,7 @@ from epic.api import dependencies
 from epic.api.dependencies import build_notification_service
 from epic.api.errors import register_exception_handlers
 from epic.api.routers import (
+    admin_environment,
     auth,
     catalog,
     contests,
@@ -189,6 +190,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.dependency_overrides[dependencies.get_settings] = lambda: settings
 
     register_exception_handlers(app)
+    app.include_router(admin_environment.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(catalog.router, prefix="/api/v1")
     app.include_router(contests.router, prefix="/api/v1")
