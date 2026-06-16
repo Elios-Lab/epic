@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from epic.core.db.models import Contest, SensorObservation, SimulationSession, Task
+from epic_core.kernel.db.models import Contest, SensorObservation, SimulationSession, Task
 
 
 # Two-phase test contests use a very short eval window that is already in the past,

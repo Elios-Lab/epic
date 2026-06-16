@@ -1,0 +1,718 @@
+"""Contest lifecycle endpoints."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, delete, func, or_, select
+from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import epic_core.kernel.registry as registry_module
+from epic_core.api.dependencies import (
+    get_current_user,
+    get_engine,
+    get_notification_service,
+    get_session_task_registry,
+    require_admin,
+    require_organizer_or_admin,
+)
+from epic_core.api.schemas import ContestListResponse, ContestResponse
+from epic_core.api.utils import get_contest_or_raise
+from epic_core.kernel.db.models import (
+    Contest,
+    ContestRegistration,
+    Invitation,
+    LeaderboardEntry,
+    Score,
+    SensorObservation,
+    SimulationSession,
+    Submission,
+    Task,
+    User,
+)
+from epic_core.kernel.db.session import get_db, get_session_factory
+from epic_core.kernel.engine import SimulationEngine
+from epic_core.kernel.notifications import ContestCreated, NotificationService
+from epic_core.kernel.session_tasks import SessionTaskRegistry
+from epic_core.kernel.exceptions import (
+    ContestNotFoundError,
+    ContestStateError,
+    EPICValidationError,
+    InsufficientPermissionsError,
+)
+
+router = APIRouter(prefix="/contests", tags=["contests"])
+
+ALLOWED_TRANSITIONS = {
+    ("DRAFT", "SCHEDULED"),
+    ("DRAFT", "ACTIVE"),
+    ("SCHEDULED", "ACTIVE"),
+    ("ACTIVE", "CLOSED"),
+    ("PAUSED", "CLOSED"),   # close without resuming
+    ("CLOSED", "ARCHIVED"),
+}
+# Pause and resume are handled by dedicated PUT endpoints, not via PATCH.
+ALLOWED_VISIBILITIES = {"PUBLIC", "PRIVATE"}
+# Task types are not hardcoded: any task type with a registered TaskEvaluator
+# plugin is valid (see validate_task_type).
+
+
+class CreateContestRequest(BaseModel):
+    name: str
+    description: str | None = None
+    visibility: str = "PUBLIC"
+    task_type: str = "FORECASTING"
+    metric_ids: list[str] = Field(default_factory=lambda: ["mae"])
+    twin_id: str
+    sensor_configs: list[dict]
+    fault_schedule: list[dict] = Field(default_factory=list)
+    initial_conditions: dict | None = None
+    sampling_rate_hz: float
+    start_date: datetime
+    end_date: datetime
+    end_of_observation: datetime | None = None
+    prediction_horizon_seconds: float | None = None
+    score_against: str = "ground_truth"  # "ground_truth" | "sensors"
+    target_variables: list[str] | None = None
+
+
+class UpdateContestRequest(BaseModel):
+    status: str | None = None
+    end_date: datetime | None = None
+
+
+def task_response(task: Task) -> dict:
+    return {
+        "task_id": str(task.id),
+        "task_type": task.task_type,
+        "name": task.name,
+        "weight": task.weight,
+        "configuration": task.configuration,
+    }
+
+
+def contest_response(contest: Contest, tasks: list[Task] | None = None) -> dict:
+    return {
+        "contest_id": str(contest.id),
+        "name": contest.name,
+        "description": contest.description,
+        "status": contest.status,
+        "visibility": contest.visibility,
+        "twin_id": contest.twin_id,
+        "sensor_configs": contest.sensor_configs,
+        "fault_schedule": contest.fault_schedule,
+        "initial_conditions": contest.initial_conditions,
+        "sampling_rate_hz": contest.sampling_rate_hz,
+        "start_date": contest.start_date,
+        "end_date": contest.end_date,
+        "end_of_observation": contest.end_of_observation,
+        "prediction_horizon_seconds": contest.prediction_horizon_seconds,
+        "created_by": str(contest.created_by) if contest.created_by else None,
+        "created_at": contest.created_at,
+        "tasks": [task_response(task) for task in tasks or []],
+    }
+
+
+async def load_contest_tasks(db: AsyncSession, contest: Contest) -> list[Task]:
+    result = await db.execute(select(Task).where(Task.contest_id == contest.id))
+    return list(result.scalars())
+
+
+async def load_tasks_for_contests(
+    db: AsyncSession, contest_ids: list[UUID]
+) -> dict[UUID, list[Task]]:
+    if not contest_ids:
+        return {}
+    result = await db.execute(select(Task).where(Task.contest_id.in_(contest_ids)))
+    tasks_by_contest: dict[UUID, list[Task]] = {}
+    for task in result.scalars():
+        tasks_by_contest.setdefault(task.contest_id, []).append(task)
+    return tasks_by_contest
+
+
+def validate_twin_config(
+    twin_id: str,
+    sensor_configs: list[dict],
+    fault_schedule: list[dict],
+) -> None:
+    twin = registry_module.twin_registry.get(twin_id)
+    supported_quantities = twin.supported_quantities()
+    if not sensor_configs:
+        raise EPICValidationError("sensor_configs must contain at least one sensor")
+    for sensor_config in sensor_configs:
+        sensor_id = sensor_config.get("sensor_id")
+        if not sensor_id:
+            raise EPICValidationError("sensor config must include sensor_id")
+        sensor = registry_module.sensor_registry.get(sensor_id)
+        if sensor.measured_quantity not in supported_quantities:
+            raise EPICValidationError(
+                f"sensor '{sensor_id}' is not compatible with twin '{twin_id}'"
+            )
+
+    available_faults = {fault.fault_id for fault in twin.get_faults()}
+    for entry in fault_schedule:
+        fault_id = entry.get("fault_id")
+        if not fault_id:
+            raise EPICValidationError("fault schedule entry must include fault_id")
+        if fault_id not in available_faults:
+            raise EPICValidationError(
+                f"fault '{fault_id}' is not available for twin '{twin_id}'"
+            )
+
+
+def validate_target_variables(
+    target_variables: list[str] | None,
+    sensor_configs: list[dict],
+) -> list[str]:
+    configured_sensor_ids = [config["sensor_id"] for config in sensor_configs]
+    if target_variables is None:
+        return configured_sensor_ids
+    if not target_variables:
+        raise EPICValidationError("target_variables must contain at least one variable")
+    unknown = [
+        variable
+        for variable in target_variables
+        if variable not in configured_sensor_ids
+    ]
+    if unknown:
+        raise EPICValidationError(
+            "target_variables must be selected from configured sensor_ids"
+        )
+    return target_variables
+
+
+def validate_visibility(visibility: str) -> None:
+    if visibility not in ALLOWED_VISIBILITIES:
+        raise EPICValidationError(f"visibility '{visibility}' is not supported")
+
+
+def validate_task_type(task_type: str) -> None:
+    if not registry_module.task_evaluator_registry.contains(task_type):
+        raise EPICValidationError(f"task_type '{task_type}' is not supported")
+
+
+def as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def visible_contests_predicate(user: User):
+    """SQL predicate selecting the contests a user is allowed to see.
+
+    Administrators see everything. Everyone else sees published PUBLIC
+    contests, every contest they created, every contest they hold a
+    registration for, and every contest their email has been invited to
+    (so an invitee can find a restricted contest in order to join it).
+    DRAFT contests are visible only to their creator and administrators.
+    """
+    return or_(
+        and_(Contest.visibility == "PUBLIC", Contest.status != "DRAFT"),
+        Contest.created_by == user.id,
+        Contest.id.in_(
+            select(ContestRegistration.contest_id).where(
+                ContestRegistration.user_id == user.id
+            )
+        ),
+        and_(
+            Contest.status != "DRAFT",
+            Contest.id.in_(
+                select(Invitation.contest_id).where(Invitation.email == user.email)
+            ),
+        ),
+    )
+
+
+def user_can_see_contest(contest: Contest, user: User, *, registered: bool, invited: bool) -> bool:
+    if user.role == "ADMINISTRATOR" or contest.created_by == user.id:
+        return True
+    if registered:
+        return True
+    if contest.status == "DRAFT":
+        return False
+    if contest.visibility == "PUBLIC":
+        return True
+    return invited
+
+
+async def start_session_runner(
+    *,
+    contest_id: UUID,
+    session_id: UUID,
+    engine: SimulationEngine,
+    session_tasks: SessionTaskRegistry,
+) -> None:
+    task = asyncio.create_task(
+        engine.run_session(str(session_id), get_session_factory()),
+        name=f"epic-session-{session_id}",
+    )
+    try:
+        await session_tasks.attach(str(contest_id), task)
+    except Exception:
+        task.cancel()
+        raise
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=ContestResponse)
+async def create_contest(
+    request: CreateContestRequest,
+    current_user: User = Depends(require_organizer_or_admin),
+    db: AsyncSession = Depends(get_db),
+    notifications: NotificationService = Depends(get_notification_service),
+):
+    existing = await db.execute(select(Contest).where(Contest.name == request.name))
+    if existing.scalar_one_or_none() is not None:
+        raise EPICValidationError(f"A contest named '{request.name}' already exists.")
+
+    validate_twin_config(request.twin_id, request.sensor_configs, request.fault_schedule)
+    validate_visibility(request.visibility)
+    validate_task_type(request.task_type)
+    target_variables = validate_target_variables(
+        request.target_variables,
+        request.sensor_configs,
+    )
+    if request.end_date <= request.start_date:
+        raise EPICValidationError("end_date must be after start_date")
+
+    # Both end_of_observation and prediction_horizon_seconds are required
+    if request.end_of_observation is None or request.prediction_horizon_seconds is None:
+        raise EPICValidationError(
+            "end_of_observation and prediction_horizon_seconds are required"
+        )
+    if request.prediction_horizon_seconds <= 0:
+        raise EPICValidationError("prediction_horizon_seconds must be positive")
+    if as_utc(request.end_of_observation) <= as_utc(request.start_date):
+        raise EPICValidationError("end_of_observation must be after start_date")
+    from datetime import timedelta
+    end_of_evaluation = as_utc(request.end_of_observation) + timedelta(
+        seconds=request.prediction_horizon_seconds
+    )
+    if as_utc(request.end_date) <= end_of_evaluation:
+        raise EPICValidationError(
+            "end_date must be after end_of_observation + prediction_horizon_seconds "
+            "(leave time for participants to submit)"
+        )
+    if request.prediction_horizon_seconds * request.sampling_rate_hz < 1:
+        raise EPICValidationError(
+            "prediction_horizon_seconds is too short for the configured sampling_rate_hz"
+        )
+
+    # Validate metric_ids
+    if not request.metric_ids:
+        raise EPICValidationError("metric_ids must contain at least one metric")
+    for mid in request.metric_ids:
+        if not registry_module.metric_registry.contains(mid):
+            raise EPICValidationError(f"metric '{mid}' is not registered")
+
+    # Validate score_against
+    if request.score_against not in ("ground_truth", "sensors"):
+        raise EPICValidationError(
+            "score_against must be 'ground_truth' or 'sensors'"
+        )
+
+    contest = Contest(
+        name=request.name,
+        description=request.description,
+        status="DRAFT",
+        visibility=request.visibility,
+        twin_id=request.twin_id,
+        sensor_configs=request.sensor_configs,
+        fault_schedule=request.fault_schedule,
+        initial_conditions=request.initial_conditions,
+        sampling_rate_hz=request.sampling_rate_hz,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        end_of_observation=request.end_of_observation,
+        prediction_horizon_seconds=request.prediction_horizon_seconds,
+        created_by=current_user.id,
+    )
+    db.add(contest)
+    await db.flush()
+
+    task_config: dict = {
+        "prediction_horizon_seconds": request.prediction_horizon_seconds,
+        "eval_steps": round(request.prediction_horizon_seconds * request.sampling_rate_hz),
+        "score_against": request.score_against,
+        "target_variables": target_variables,
+    }
+    task = Task(
+        contest_id=contest.id,
+        task_type=request.task_type,
+        name=request.task_type,
+        metric_ids=request.metric_ids,
+        weight=1.0,
+        configuration=task_config,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(contest)
+    await db.refresh(task)
+
+    # Notify administrators (except the creator, if they are one).
+    admins_result = await db.execute(
+        select(User).where(User.role == "ADMINISTRATOR", User.status == "ACTIVE")
+    )
+    for admin in admins_result.scalars():
+        if admin.id == current_user.id:
+            continue
+        await notifications.notify(ContestCreated(
+            to_email=admin.email,
+            contest_name=contest.name,
+            organizer_username=current_user.username,
+        ))
+
+    return contest_response(contest, [task])
+
+
+@router.get("", response_model=ContestListResponse)
+async def list_contests(
+    status: str | None = Query(None),
+    visibility: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Contest)
+    count_query = select(func.count()).select_from(Contest)
+    if current_user.role != "ADMINISTRATOR":
+        predicate = visible_contests_predicate(current_user)
+        query = query.where(predicate)
+        count_query = count_query.where(predicate)
+    if status is not None:
+        query = query.where(Contest.status == status)
+        count_query = count_query.where(Contest.status == status)
+    if visibility is not None:
+        query = query.where(Contest.visibility == visibility)
+        count_query = count_query.where(Contest.visibility == visibility)
+
+    total_result = await db.execute(count_query)
+    result = await db.execute(query.offset(offset).limit(limit))
+    contests = list(result.scalars())
+    tasks_by_contest = await load_tasks_for_contests(db, [c.id for c in contests])
+    return {
+        "total": total_result.scalar_one(),
+        "contests": [
+            contest_response(contest, tasks_by_contest.get(contest.id, []))
+            for contest in contests
+        ],
+    }
+
+
+@router.get("/{contest_id}", response_model=ContestResponse)
+async def get_contest(
+    contest_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    contest = await get_contest_or_raise(db, contest_id)
+
+    registered = invited = False
+    if current_user.role != "ADMINISTRATOR" and contest.created_by != current_user.id:
+        reg_result = await db.execute(
+            select(ContestRegistration).where(
+                ContestRegistration.contest_id == contest.id,
+                ContestRegistration.user_id == current_user.id,
+            )
+        )
+        registered = reg_result.scalars().first() is not None
+        inv_result = await db.execute(
+            select(Invitation).where(
+                Invitation.contest_id == contest.id,
+                Invitation.email == current_user.email,
+            )
+        )
+        invited = inv_result.scalars().first() is not None
+
+    if not user_can_see_contest(
+        contest, current_user, registered=registered, invited=invited
+    ):
+        # 404, not 403: restricted contests must not leak their existence.
+        raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
+
+    return contest_response(contest, await load_contest_tasks(db, contest))
+
+
+@router.patch("/{contest_id}", response_model=ContestResponse)
+async def update_contest(
+    contest_id: str,
+    request: UpdateContestRequest,
+    current_user: User = Depends(require_organizer_or_admin),
+    db: AsyncSession = Depends(get_db),
+    engine: SimulationEngine = Depends(get_engine),
+    session_tasks: SessionTaskRegistry = Depends(get_session_task_registry),
+):
+    contest = await get_contest_or_raise(db, contest_id)
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
+        raise InsufficientPermissionsError(
+            "Organizers can only modify their own contests"
+        )
+
+    if request.status is None and request.end_date is None:
+        raise EPICValidationError("Request must include status or end_date")
+
+    target_status = request.status
+    if target_status is not None and (
+        contest.status,
+        target_status,
+    ) not in ALLOWED_TRANSITIONS:
+        raise ContestStateError(
+            f"Cannot transition contest from {contest.status} to {target_status}"
+        )
+
+    if request.end_date is not None:
+        deadline_status = target_status or contest.status
+        if deadline_status not in {"ACTIVE", "SCHEDULED", "PAUSED"}:
+            raise ContestStateError(
+                "Deadline can only be extended on ACTIVE, SCHEDULED, or PAUSED contests"
+            )
+        if as_utc(request.end_date) <= datetime.now(timezone.utc):
+            raise EPICValidationError("end_date must be in the future")
+        contest.end_date = request.end_date
+
+    reserved_session: SimulationSession | None = None
+
+    if target_status is not None:
+        if target_status == "ACTIVE":
+            validate_twin_config(
+                contest.twin_id,
+                contest.sensor_configs,
+                contest.fault_schedule,
+            )
+            session = SimulationSession(
+                contest_id=contest.id,
+                twin_id=contest.twin_id,
+                sampling_rate_hz=contest.sampling_rate_hz,
+            )
+            db.add(session)
+            await db.flush()
+            await session_tasks.reserve(str(contest.id), str(session.id))
+            reserved_session = session
+
+        if target_status == "CLOSED":
+            contest.end_date = datetime.now(timezone.utc)
+
+        contest.status = target_status
+
+    try:
+        await db.commit()
+    except Exception:
+        if reserved_session is not None:
+            await session_tasks.release(str(contest.id), str(reserved_session.id))
+        raise
+
+    if target_status == "ACTIVE":
+        try:
+            await start_session_runner(
+                contest_id=contest.id,
+                session_id=session.id,
+                engine=engine,
+                session_tasks=session_tasks,
+            )
+        except Exception:
+            await session_tasks.release(str(contest.id), str(session.id))
+            raise
+    # Respond with the state this handler just committed: re-reading here
+    # would race with the engine task scheduled above.
+    return contest_response(contest, await load_contest_tasks(db, contest))
+
+
+@router.delete("/{contest_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contest(
+    contest_id: str,
+    current_user: User = Depends(require_organizer_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Permanently delete a contest and all associated data:
+    sensor observations, scores, leaderboard entries, submissions,
+    registrations, simulation sessions, and tasks.
+
+    ADMINISTRATOR may delete any contest.
+    ORGANIZER may delete only their own contests.
+    ACTIVE contests cannot be deleted — close them first.
+    """
+    contest = await get_contest_or_raise(db, contest_id)
+
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
+        raise InsufficientPermissionsError(
+            "Organizers can only delete their own contests"
+        )
+
+    if contest.status == "ACTIVE":
+        raise ContestStateError(
+            "Cannot delete an ACTIVE contest — close it first "
+            "(PATCH status to CLOSED), then delete."
+        )
+
+    # ── Collect child IDs needed for grandchild deletion ──────────────
+    session_ids_result = await db.execute(
+        select(SimulationSession.id).where(SimulationSession.contest_id == contest.id)
+    )
+    session_ids = [row[0] for row in session_ids_result]
+
+    submission_ids_result = await db.execute(
+        select(Submission.id).where(Submission.contest_id == contest.id)
+    )
+    submission_ids = [row[0] for row in submission_ids_result]
+
+    # ── Delete in bottom-up dependency order ──────────────────────────
+    # 1. SensorObservation  (FK → simulation_sessions.id)
+    if session_ids:
+        await db.execute(
+            delete(SensorObservation).where(
+                SensorObservation.session_id.in_(session_ids)
+            )
+        )
+
+    # 2. Score  (FK → submissions.id)
+    if submission_ids:
+        await db.execute(
+            delete(Score).where(Score.submission_id.in_(submission_ids))
+        )
+
+    # 3. LeaderboardEntry  (FK → contests.id)
+    await db.execute(
+        delete(LeaderboardEntry).where(LeaderboardEntry.contest_id == contest.id)
+    )
+
+    # 4. Submission  (FK → contests.id)
+    await db.execute(
+        delete(Submission).where(Submission.contest_id == contest.id)
+    )
+
+    # 5. ContestRegistration  (FK → contests.id)
+    await db.execute(
+        delete(ContestRegistration).where(ContestRegistration.contest_id == contest.id)
+    )
+
+    # 6. SimulationSession  (FK → contests.id)
+    await db.execute(
+        delete(SimulationSession).where(SimulationSession.contest_id == contest.id)
+    )
+
+    # 7. Task  (FK → contests.id)
+    await db.execute(
+        delete(Task).where(Task.contest_id == contest.id)
+    )
+
+    # 8. Contest itself
+    await db.delete(contest)
+    await db.commit()
+
+
+@router.put("/{contest_id}/pause", status_code=status.HTTP_200_OK, response_model=ContestResponse)
+async def pause_contest(
+    contest_id: str,
+    current_user: User = Depends(require_organizer_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Pause a running contest.
+
+    Sets the contest status to PAUSED.  The simulation engine detects this
+    on its next periodic DB check (≤ commit_interval steps) and stops
+    gracefully, preserving all observations produced so far.
+
+    The contest can be resumed later via PUT /{contest_id}/resume.
+
+    ORGANIZER may pause their own contests.  ADMINISTRATOR may pause any.
+    Only ACTIVE contests may be paused.
+    """
+    contest = await get_contest_or_raise(db, contest_id)
+
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
+        raise InsufficientPermissionsError("Organizers can only pause their own contests")
+
+    if contest.status != "ACTIVE":
+        raise ContestStateError(
+            f"Cannot pause a contest in status '{contest.status}' — only ACTIVE contests can be paused"
+        )
+
+    contest.status = "PAUSED"
+    await db.commit()
+    return contest_response(contest, await load_contest_tasks(db, contest))
+
+
+@router.put("/{contest_id}/resume", status_code=status.HTTP_200_OK, response_model=ContestResponse)
+async def resume_contest(
+    contest_id: str,
+    current_user: User = Depends(require_organizer_or_admin),
+    db: AsyncSession = Depends(get_db),
+    engine: SimulationEngine = Depends(get_engine),
+    session_tasks: SessionTaskRegistry = Depends(get_session_task_registry),
+):
+    """
+    Resume a paused contest.
+
+    Sets the contest status back to ACTIVE and restarts the simulation engine
+    on the existing session.  The engine continues from the last committed
+    sequence_id, so participants receive a continuous observation stream
+    with no duplicate sequence numbers.  The twin is re-initialized from its
+    initial conditions (physics restarts), but observation history is preserved.
+
+    The contest end_date must still be in the future.  If it has passed, extend
+    it via PATCH /{contest_id} before resuming.
+
+    ORGANIZER may resume their own contests.  ADMINISTRATOR may resume any.
+    Only PAUSED contests may be resumed.
+    """
+    contest = await get_contest_or_raise(db, contest_id)
+
+    if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
+        raise InsufficientPermissionsError("Organizers can only resume their own contests")
+
+    if contest.status != "PAUSED":
+        raise ContestStateError(
+            f"Cannot resume a contest in status '{contest.status}' — only PAUSED contests can be resumed"
+        )
+
+    if contest.end_date and as_utc(contest.end_date) <= datetime.now(timezone.utc):
+        raise ContestStateError(
+            "Contest end_date has passed — extend the deadline "
+            "(PATCH end_date) before resuming"
+        )
+
+    result = await db.execute(
+        select(SimulationSession).where(SimulationSession.contest_id == contest.id)
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise ContestStateError("No simulation session found for this contest")
+
+    if not await session_tasks.wait_until_clear(str(contest.id), timeout=2.0):
+        raise ContestStateError(
+            "Previous simulation runner is still stopping; retry shortly"
+        )
+    await session_tasks.reserve(str(contest.id), str(session.id))
+
+    # Reactivate the existing session so the engine can attach to it.
+    session.status = "RUNNING"
+    session.started_at = datetime.now(timezone.utc)
+    session.ended_at = None
+
+    contest.status = "ACTIVE"
+    try:
+        await db.commit()
+    except Exception:
+        await session_tasks.release(str(contest.id), str(session.id))
+        raise
+
+    try:
+        await start_session_runner(
+            contest_id=contest.id,
+            session_id=session.id,
+            engine=engine,
+            session_tasks=session_tasks,
+        )
+    except Exception:
+        await session_tasks.release(str(contest.id), str(session.id))
+        raise
+
+    # Respond with the state this handler just committed. Re-reading here
+    # (db.refresh) would race with the engine tasks scheduled above on the
+    # shared test connection and can return a stale status.
+    return contest_response(contest, await load_contest_tasks(db, contest))

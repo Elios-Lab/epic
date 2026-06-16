@@ -1,11 +1,11 @@
-from epic.core.interfaces import FaultDescriptor
-from epic.core.quantities import PhysicalQuantity
-from epic.twins.mass_spring_damper.faults import (
+from epic_core.kernel.interfaces import FaultDescriptor
+from epic_core.kernel.quantities import PhysicalQuantity
+from epic_plugins.twins.mass_spring_damper.faults import (
     IncreasedDampingFault,
     IncreasedFrictionFault,
     ReducedStiffnessFault,
 )
-from epic.twins.mass_spring_damper.twin import MassSpringDamperState
+from epic_plugins.twins.mass_spring_damper.twin import MassSpringDamperState
 
 
 def _state() -> MassSpringDamperState:

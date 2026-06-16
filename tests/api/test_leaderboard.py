@@ -5,8 +5,8 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from epic.api.routers.submissions import _score_submission
-from epic.core.db.models import Contest, Invitation, SensorObservation, SimulationSession, Task, User
+from epic_core.api.routers.submissions import _score_submission
+from epic_core.kernel.db.models import Contest, Invitation, SensorObservation, SimulationSession, Task, User
 
 
 def create_user_and_headers(client, admin_headers, username: str, email: str, password: str):
@@ -329,8 +329,8 @@ def test_update_leaderboard_honours_maximize_direction(client, db_factory):
     rank 1 and a participant's lower new score must not replace their best."""
     import uuid
 
-    from epic.api.routers.submissions import _update_leaderboard
-    from epic.core.db.models import LeaderboardEntry
+    from epic_core.api.routers.submissions import _update_leaderboard
+    from epic_core.kernel.db.models import LeaderboardEntry
     from sqlalchemy import select
 
     contest_id = uuid.uuid4()
@@ -365,8 +365,8 @@ def test_update_leaderboard_honours_minimize_direction(client, db_factory):
     """With a minimize metric (e.g. MAE) the lowest score wins rank 1."""
     import uuid
 
-    from epic.api.routers.submissions import _update_leaderboard
-    from epic.core.db.models import LeaderboardEntry
+    from epic_core.api.routers.submissions import _update_leaderboard
+    from epic_core.kernel.db.models import LeaderboardEntry
     from sqlalchemy import select
 
     contest_id = uuid.uuid4()

@@ -54,9 +54,9 @@ def test_expired_token_is_rejected():
     """A token past its exp claim must be rejected by decode and by the API."""
     import pytest as _pytest
 
-    from epic.core.auth import create_access_token, decode_access_token
-    from epic.core.config import Settings
-    from epic.core.exceptions import InvalidCredentialsError
+    from epic_core.kernel.auth import create_access_token, decode_access_token
+    from epic_core.kernel.config import Settings
+    from epic_core.kernel.exceptions import InvalidCredentialsError
 
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
@@ -70,8 +70,8 @@ def test_expired_token_is_rejected():
 
 
 def test_expired_token_returns_401_from_api(client):
-    from epic.core.auth import create_access_token
-    from epic.core.config import Settings
+    from epic_core.kernel.auth import create_access_token
+    from epic_core.kernel.config import Settings
 
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",

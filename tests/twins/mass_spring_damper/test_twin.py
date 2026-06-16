@@ -1,11 +1,11 @@
 import pytest
 
-import epic.core.registry as registry_module
-from epic.core.interfaces import FaultDescriptor, SimulationState
-from epic.core.quantities import PhysicalQuantity
-from epic.core.testing import MockState, test_registry_context as registry_context
-from epic.twins.mass_spring_damper.plugin import register
-from epic.twins.mass_spring_damper.twin import MassSpringDamperState, MassSpringDamperTwin
+import epic_core.kernel.registry as registry_module
+from epic_core.kernel.interfaces import FaultDescriptor, SimulationState
+from epic_core.kernel.quantities import PhysicalQuantity
+from epic_core.kernel.testing import MockState, test_registry_context as registry_context
+from epic_plugins.twins.mass_spring_damper.plugin import register
+from epic_plugins.twins.mass_spring_damper.twin import MassSpringDamperState, MassSpringDamperTwin
 
 
 def test_configure_returns_state_with_initial_conditions():

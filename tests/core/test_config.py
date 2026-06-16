@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from epic.core.config import Settings, get_settings
+from epic_core.kernel.config import Settings, get_settings
 
 
 def test_settings_raise_validation_error_when_database_url_missing(monkeypatch):
@@ -37,8 +37,8 @@ def test_get_settings_constructs_settings(monkeypatch):
 
 def test_debug_error_content_includes_traceback_only_for_server_errors():
     """DEBUG=true adds a traceback to 5xx envelopes; 4xx and production stay clean."""
-    from epic.api.errors import error_content
-    from epic.core.exceptions import ContestNotFoundError, PluginExecutionError
+    from epic_core.api.errors import error_content
+    from epic_core.kernel.exceptions import ContestNotFoundError, PluginExecutionError
 
     try:
         raise PluginExecutionError("twin exploded")

@@ -7,9 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from epic.core.db.base import create_all_tables, create_engine
-from epic.core.db.models import Contest, SensorObservation, SimulationSession, User
-import epic.core.db.session as db_session_module
+from epic_core.kernel.db.base import create_all_tables, create_engine
+from epic_core.kernel.db.models import Contest, SensorObservation, SimulationSession, User
+import epic_core.kernel.db.session as db_session_module
 
 
 @pytest_asyncio.fixture(scope="session")

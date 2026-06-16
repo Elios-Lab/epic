@@ -2,8 +2,8 @@
 
 import asyncio
 from sqlalchemy import select
-from epic.core.db.models import Invitation
-from epic.core.db.session import get_session_factory
+from epic_core.kernel.db.models import Invitation
+from epic_core.kernel.db.session import get_session_factory
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ def test_accept_invitation_creates_contest_registration(
 ):
     """Accepting an invitation must register the participant for the contest,
     so they can stream and submit with no further steps (as documented)."""
-    from epic.core.db.models import ContestRegistration
+    from epic_core.kernel.db.models import ContestRegistration
 
     client.post(
         f"/api/v1/contests/{registered_contest['contest_id']}/invitations",

@@ -5,16 +5,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import close_all_sessions
 
-from epic.api.dependencies import get_notification_service
-from epic.api.main import create_app
-from epic.core.config import Settings
-from epic.core.db.base import create_all_tables
-from epic.core.db.models import User
-import epic.core.db.session as db_session_module
-from epic.core.db.session import get_engine
-from epic.core.db.session import get_session_factory
-from epic.core.notifications import CollectingNotificationService
-from epic.core.testing import test_registry_context
+from epic_core.api.dependencies import get_notification_service
+from epic_core.api.main import create_app
+from epic_core.kernel.config import Settings
+from epic_core.kernel.db.base import create_all_tables
+from epic_core.kernel.db.models import User
+import epic_core.kernel.db.session as db_session_module
+from epic_core.kernel.db.session import get_engine
+from epic_core.kernel.db.session import get_session_factory
+from epic_core.kernel.notifications import CollectingNotificationService
+from epic_core.kernel.testing import test_registry_context
 
 
 def _reset_db_state():

@@ -1,11 +1,11 @@
 import pytest
 
-import epic.core.registry as registry_module
-from epic.core.interfaces import FaultDescriptor, SimulationState
-from epic.core.quantities import PhysicalQuantity
-from epic.core.testing import test_registry_context as registry_context
-from epic.twins.industrial_pump.plugin import register
-from epic.twins.industrial_pump.twin import IndustrialPumpState, IndustrialPumpTwin
+import epic_core.kernel.registry as registry_module
+from epic_core.kernel.interfaces import FaultDescriptor, SimulationState
+from epic_core.kernel.quantities import PhysicalQuantity
+from epic_core.kernel.testing import test_registry_context as registry_context
+from epic_plugins.twins.industrial_pump.plugin import register
+from epic_plugins.twins.industrial_pump.twin import IndustrialPumpState, IndustrialPumpTwin
 
 
 def _schedule(fault_id: str, severity: float = 1.0, end_time=None) -> list[dict]:

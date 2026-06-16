@@ -7,10 +7,10 @@ from uuid import UUID
 import pytest
 from sqlalchemy import select
 
-from epic.api.main import _recover_after_restart
-from epic.core.notifications import NullNotificationService
-from epic.core.db.models import Contest, SimulationSession, Submission, Task
-from epic.core.db.session import get_session_factory
+from epic_core.api.main import _recover_after_restart
+from epic_core.kernel.notifications import NullNotificationService
+from epic_core.kernel.db.models import Contest, SimulationSession, Submission, Task
+from epic_core.kernel.db.session import get_session_factory
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ async def _create_active_contest_with_running_session(db_factory, name: str) -> 
 
 
 async def _get_any_user_id(db_factory):
-    from epic.core.db.models import User
+    from epic_core.kernel.db.models import User
     async with db_factory() as db:
         result = await db.execute(select(User).limit(1))
         return result.scalar_one().id
@@ -216,7 +216,7 @@ def test_pending_submission_requeued(client, db_factory):
         f.set_result(None)
         return f
 
-    with patch("epic.api.main.asyncio.create_task", side_effect=capture_create_task):
+    with patch("epic_core.api.main.asyncio.create_task", side_effect=capture_create_task):
         asyncio.run(_recover_after_restart(NullNotificationService()))
 
     assert len(created_coros) >= 1, "Expected at least one create_task call for the PENDING submission"

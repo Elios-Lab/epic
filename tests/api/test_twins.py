@@ -1,8 +1,8 @@
 import pytest
 
-import epic.core.registry as registry_module
-from epic.api.errors import error_to_code, error_to_status_code
-from epic.core.exceptions import (
+import epic_core.kernel.registry as registry_module
+from epic_core.api.errors import error_to_code, error_to_status_code
+from epic_core.kernel.exceptions import (
     ContestNotFoundError,
     ContestStateError,
     EPICError,
@@ -17,9 +17,9 @@ from epic.core.exceptions import (
     SessionStateError,
     SubmissionError,
 )
-from epic.core.testing import test_registry_context as registry_context
-from epic.sensors.plugin import register as register_sensors
-from epic.twins.mass_spring_damper.plugin import register
+from epic_core.kernel.testing import test_registry_context as registry_context
+from epic_plugins.sensors.plugin import register as register_sensors
+from epic_plugins.twins.mass_spring_damper.plugin import register
 
 
 def test_list_twins_returns_registered_twin_metadata(client):

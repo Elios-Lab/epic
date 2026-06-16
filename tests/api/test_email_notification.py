@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from epic.api.email_service import EmailNotificationService
-from epic.api.dependencies import get_notification_service
-from epic.core.config import Settings
-from epic.core.notifications import (
+from epic_core.api.email_service import EmailNotificationService
+from epic_core.api.dependencies import get_notification_service
+from epic_core.kernel.config import Settings
+from epic_core.kernel.notifications import (
     ContestCreated,
     NullNotificationService,
     OrganizerApproved,
@@ -48,7 +48,7 @@ def _smtp_patch():
     smtp_instance = AsyncMock()
     smtp_instance.__aenter__ = AsyncMock(return_value=smtp_instance)
     smtp_instance.__aexit__ = AsyncMock(return_value=False)
-    return patch("epic.api.email_service.aiosmtplib.SMTP", return_value=smtp_instance), smtp_instance
+    return patch("epic_core.api.email_service.aiosmtplib.SMTP", return_value=smtp_instance), smtp_instance
 
 
 # ── Dependency auto-selection ─────────────────────────────────────────────────
@@ -202,7 +202,7 @@ async def test_participant_invitation_body_contains_link_and_contest():
 @pytest.mark.asyncio
 async def test_smtp_connection_error_is_swallowed():
     """Delivery failures must never propagate — fire and forget."""
-    with patch("epic.api.email_service.aiosmtplib.SMTP") as mock_smtp_cls:
+    with patch("epic_core.api.email_service.aiosmtplib.SMTP") as mock_smtp_cls:
         mock_smtp_cls.side_effect = Exception("Connection refused")
         service = EmailNotificationService(_make_settings())
         # Must not raise
@@ -298,7 +298,7 @@ async def test_session_failed_email_contains_error():
 @pytest.mark.asyncio
 async def test_unknown_event_type_is_ignored():
     """An event without a template must be logged and skipped, never raise."""
-    from epic.core.notifications import NotificationEvent
+    from epic_core.kernel.notifications import NotificationEvent
 
     class FutureEvent(NotificationEvent):
         # Plain subclass shadowing event_type; inherits the dataclass __init__.
@@ -318,7 +318,7 @@ def test_contest_creation_notifies_admin(
     client, registered_contest, collecting_notifications
 ):
     """Creating a contest as an organizer must notify the administrator(s)."""
-    from epic.core.notifications import ContestCreated as ContestCreatedEvent
+    from epic_core.kernel.notifications import ContestCreated as ContestCreatedEvent
 
     events = collecting_notifications.of_type(ContestCreatedEvent)
     assert len(events) == 1
@@ -331,7 +331,7 @@ def test_registration_notifies_contest_owner(
     client, registered_contest, organizer_headers, auth_headers, collecting_notifications
 ):
     """A participant registering must notify the contest's organizer."""
-    from epic.core.notifications import ParticipantRegistered as RegisteredEvent
+    from epic_core.kernel.notifications import ParticipantRegistered as RegisteredEvent
 
     # Registration requires a published contest; the fixture leaves it in DRAFT.
     publish = client.patch(
@@ -361,9 +361,9 @@ def test_invitation_acceptance_notifies_inviter(
     """Accepting an invitation must notify the organizer who sent it."""
     from sqlalchemy import select as sa_select
 
-    from epic.core.db.models import Invitation
-    from epic.core.db.session import get_session_factory
-    from epic.core.notifications import InvitationAccepted as AcceptedEvent
+    from epic_core.kernel.db.models import Invitation
+    from epic_core.kernel.db.session import get_session_factory
+    from epic_core.kernel.notifications import InvitationAccepted as AcceptedEvent
 
     client.post(
         f"/api/v1/contests/{registered_contest['contest_id']}/invitations",

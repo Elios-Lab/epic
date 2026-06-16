@@ -4,8 +4,8 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 
-from epic.core.db.models import SensorObservation, SimulationSession, User
-from epic.core.db.session import get_session_factory
+from epic_core.kernel.db.models import SensorObservation, SimulationSession, User
+from epic_core.kernel.db.session import get_session_factory
 
 
 def contest_payload(**overrides):
@@ -105,7 +105,7 @@ def submit_for_contest(client, headers, contest_id: str):
 
 def force_contest_status(db_factory, contest_id: str, status: str) -> None:
     """Set contest status directly in the DB without starting the engine."""
-    from epic.core.db.models import Contest as ContestModel
+    from epic_core.kernel.db.models import Contest as ContestModel
     async def _set():
         async with db_factory() as db:
             result = await db.execute(
@@ -660,12 +660,12 @@ def test_delete_contest_removes_all_associated_data(
     scores, leaderboard entries, simulation session, and sensor observations."""
     import asyncio, time
     from sqlalchemy import select
-    from epic.core.db.models import (
+    from epic_core.kernel.db.models import (
         Task, ContestRegistration, Submission, Score,
         LeaderboardEntry, SimulationSession, SensorObservation,
     )
     from uuid import UUID
-    from epic.api.routers.submissions import _score_submission
+    from epic_core.api.routers.submissions import _score_submission
 
     # Create and activate contest
     contest = create_contest(

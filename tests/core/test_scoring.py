@@ -1,4 +1,4 @@
-from epic.core.scoring import F1Score, MAE
+from epic_core.kernel.scoring import F1Score, MAE
 
 
 def test_mae_empty_lists_return_zero():

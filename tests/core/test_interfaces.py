@@ -2,15 +2,15 @@ import inspect
 
 import pytest
 
-from epic.core.interfaces import (
+from epic_core.kernel.interfaces import (
     DigitalTwin,
     FaultDescriptor,
     ScoringMetric,
     Sensor,
     SimulationState,
 )
-from epic.core.quantities import PhysicalQuantity
-from epic.core.testing import MockFaultDescriptor, MockSensor, MockState, MockTwin
+from epic_core.kernel.quantities import PhysicalQuantity
+from epic_core.kernel.testing import MockFaultDescriptor, MockSensor, MockState, MockTwin
 
 
 def test_interfaces_are_abstract():
@@ -167,7 +167,7 @@ def test_sensor_configure_injects_rng_only_when_declared():
     )
     assert configured.observe(MockState(value=0.0)) == 2.0
 
-    from epic.sensors.position import PositionSensor
+    from epic_plugins.sensors.position import PositionSensor
 
     sensor_a = PositionSensor().configure({"noise_std": 0.5}, rng=random.Random(3))
     sensor_b = PositionSensor().configure({"noise_std": 0.5}, rng=random.Random(3))

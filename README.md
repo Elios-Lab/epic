@@ -1,6 +1,6 @@
 # EPIC - ELIOS Predictive Intelligence Challenge
 
-EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a **real-time machine learning challenge**: participants connect to sensor streams, collect their own data, predict a hidden future window, and are scored automatically against ground truth that is recorded by the platform, but never shown to participants.
+EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a real-time machine learning challenge: participants connect to a sensor stream, collect data, predict a hidden future window, and are scored automatically — all without ever seeing the ground truth.
 
 | Resource         | URL                                 |
 |------------------|-------------------------------------|
@@ -9,13 +9,17 @@ EPIC is a **competition platform** for predictive intelligence on **live digital
 | API live docs    | https://epic.elioslab.net/docs      |
 | SDK              | `pip install epic-elios-client`     |
 
-EPIC is built for classrooms, research benchmarks, and industrial experiments where static datasets are too simple. An **organizer** can choose a digital twin, configure sensors and faults, invite **participants**, run a **contest**, and get a live **leaderboard** without writing backend code.
-
 ---
 
 ## Concept
 
-Most machine learning competitions start with a file. EPIC starts with a system. That system is a **digital twin**: a compact simulation of a physical asset such as a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following **its internal physics** (e.g. Newton's laws, fluid dynamics, thermodynamics, etc.), **faults** can be scheduled inside the twin and alter the latent physics (e.g. the spring gets weaker, the pump cavitates, the motor overheats). **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements. Participants only receive the sensor stream. They do not receive the clean state, fault labels, or future observations. EPIC stores those private signals for scoring and keeps the competition honest by closing the stream before the evaluation window is generated. **Participants must forecast the future from what they have observed**. The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
+Most machine learning competitions start with a file. EPIC starts with a system.
+
+That system is a **digital twin**: a compact simulation of a physical asset — a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following its internal physics (Newton's laws, fluid dynamics, thermodynamics, etc.). **Faults** can be scheduled inside the twin and alter the latent physics: the spring gets weaker, the pump cavitates, the motor overheats. **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements.
+
+Participants only receive the sensor stream. They never see the clean state, fault labels, or future observations. The platform stores those private signals and closes the stream before the evaluation window begins. **Participants must forecast the future from what they have observed.**
+
+The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
 
 ---
 
@@ -25,12 +29,11 @@ EPIC separates competition infrastructure from simulated domains:
 
 ![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
-At runtime, EPIC is a layered RESTfull API application. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The plugin registries keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
+At runtime, EPIC is a layered RESTful API application. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The plugin registries keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
 
 ---
 
-
-## How a Contest Works
+## Contests
 
 An EPIC contest moves through a lifecycle:
 
@@ -49,31 +52,9 @@ The active phase is split into three time windows:
 | Evaluation  | end_of_observation for prediction_horizon_seconds | The simulation continues, the stream is closed, and private ground truth is recorded.   |
 | Submission  | after evaluation until end_date                   | Participants submit forecasts for the hidden evaluation window.                         |
 
-For forecasting contests, EPIC computes:
+### Creating a Contest
 
-```text
-eval_steps = round(prediction_horizon_seconds * sampling_rate_hz)
-```
-
-Each forecast must contain exactly eval_steps values. Organizers choose the required **target variables**, a non-empty subset of configured sensors. Other sensors can still be streamed as explanatory features, but they do not affect the score.
-
----
-
-## Roles
-
-EPIC has three roles with different permissions:
-
-| Role          | Scope                                                                                            |
-|---------------|--------------------------------------------------------------------------------------------------|
-| PARTICIPANT   | Join contests, stream data, submit forecasts, get scores.                                        |
-| ORGANIZER     | Create and manage contests, invite participants, inspect submissions, pause and resume sessions. |
-| ADMINISTRATOR | Manage users, organizer requests, all contests, and platform operations.                         |
-
-Account creation is intentionally **controlled**. Prospective organizers must first submit a **registration request**, which is reviewed and either approved or rejected by an administrator. Once approved, organizers can create contests and **invite participants**, who may then choose whether to accept or decline the invitation. Participants cannot independently request access to EPIC, register as users, or apply to join contests. Instead, they are always admitted through an organizer or an administrator. Organizers can invite participants to specific contests, while administrators can create user accounts directly and grant access to EPIC when appropriate. Participants may also join contests that have been designated as public, but they must still possess a valid EPIC account that has been created or approved by an administrator. This workflow is designed for educational and research environments, where organizers are typically teachers or researchers managing contests for a predefined group of participants, rather than for open public competitions.To simplify initial deployment, a bootstrap administrator account can be automatically created at startup using the ADMIN_USERNAME and ADMIN_PASSWORD environment variables.
-
-### Organizer
-
-Organizers turn a digital twin into a challenge. After requesting organizer access and receiving administrator approval, they can create a contest from a template or define one from scratch. The key choices are the simulated system, the sensors participants will see, the target variables they must predict, the initial conditions and optional fault schedule, the scoring metric, and the contest timeline. Once the contest is configured, the organizer can schedule it or activate it. Activation starts the simulation session: participants collect data during the observation window, the platform records the hidden evaluation window, and submissions are scored automatically when the submission window opens. During the contest, organizers can invite participants, monitor registrations and submissions, inspect the leaderboard, extend deadlines, pause or resume a running session, and close or archive the contest when it is finished. Contest creation is fully configuration-driven. A representative request:
+Contest creation is fully configuration-driven. Organizers choose the simulated system, the sensors participants will see, the target variables they must predict, the initial conditions and optional fault schedule, the scoring metric, and the contest timeline. Several templates are available to quickly launch contests with pre-configured twins, sensors, and tasks. A representative request:
 
 ```json
 {
@@ -112,11 +93,15 @@ Organizers turn a digital twin into a challenge. After requesting organizer acce
 }
 ```
 
-Several templates are available to quickly launch contests with pre-configured twins, sensors, and tasks.
+### Forecasting Task
 
-The implemented task evaluator is `FORECASTING`.
+The implemented task evaluator is `FORECASTING`. EPIC computes the number of steps participants must predict:
 
-A submission payload contains one list per required target variable:
+```text
+eval_steps = round(prediction_horizon_seconds * sampling_rate_hz)
+```
+
+Target variables are a non-empty subset of configured sensors. Other sensors can be streamed as explanatory features but do not affect the score. Each submission must contain one list of exactly `eval_steps` values per target variable:
 
 ```json
 {
@@ -134,7 +119,7 @@ Validation rules:
 - values must be numeric;
 - extra forecast keys are accepted but ignored for scoring.
 
-Task configuration:
+Task configuration fields:
 
 | Field | Meaning |
 |---|---|
@@ -143,9 +128,7 @@ Task configuration:
 | `score_against` | `ground_truth` or `sensors`. |
 | `metric_ids` | Registered metrics to compute. |
 
-`ground_truth` compares against clean latent values recorded before sensor
-corruption. `sensors` compares against noisy sensor readings when the contest is
-about predicting the measured signal itself.
+`ground_truth` compares against clean latent values recorded before sensor corruption. `sensors` compares against noisy sensor readings when the contest is about predicting the measured signal itself.
 
 Built-in metrics:
 
@@ -154,10 +137,25 @@ Built-in metrics:
 | `mae` | minimize | Mean absolute error for forecasting. |
 | `f1` | maximize | Binary F1 score for anomaly-detection style tasks. |
 
-Leaderboards keep each participant's best evaluated submission, respecting the
-metric direction.
+Leaderboards keep each participant's best evaluated submission, respecting the metric direction.
 
 ---
+
+## Roles
+
+EPIC has three roles:
+
+| Role          | Scope                                                                                            |
+|---------------|--------------------------------------------------------------------------------------------------|
+| PARTICIPANT   | Join contests, stream data, submit forecasts, get scores.                                        |
+| ORGANIZER     | Create and manage contests, invite participants, inspect submissions, pause and resume sessions. |
+| ADMINISTRATOR | Manage users, organizer requests, all contests, and platform operations.                         |
+
+Access is intentionally **controlled**. Participants cannot self-register or apply to join contests — they are always admitted through an organizer or an administrator. This workflow is designed for educational and research environments where organizers are typically teachers or researchers managing contests for a predefined group.
+
+### Organizer
+
+Prospective organizers submit a **registration request**, which an administrator reviews and approves or rejects. Once approved, they can create a contest from a template or define one from scratch (see [Creating a Contest](#creating-a-contest)). Once configured, a contest can be scheduled or activated immediately. During the contest, organizers can invite participants, monitor registrations and submissions, inspect the leaderboard, extend deadlines, and pause, resume, or close the session.
 
 ### Participant
 
@@ -165,13 +163,11 @@ The maintained participant walkthrough is the quickstart notebook:
 
 [**notebooks/quickstart.ipynb**](https://github.com/Elios-Lab/epic/blob/main/notebooks/quickstart.ipynb)
 
-It covers the complete participant workflow: installing the SDK, logging in, finding an active contest, registering, collecting live sensor data, building a simple persistence forecast, submitting it, and reading scores and leaderboard
-results. You can run it locally with Jupyter or open it directly in Colab using the badge at the top of the notebook.
+It covers the complete workflow: installing the SDK, logging in, finding an active contest, registering, collecting live sensor data, building a forecast, submitting it, and reading scores and leaderboard results. It can be run locally with Jupyter or opened directly in Colab using the badge at the top of the notebook.
 
 ### Administrator
 
-Administrators keep the platform usable and accountable across all organizers, participants, and contests. Their first responsibility is account governance: they review organizer access requests, create participant or staff accounts when needed, promote users to organizer or administrator roles, and suspend or restore accounts that should no longer have access. Administrators also have full contest oversight. They can inspect every contest
-regardless of owner, review registrations and submissions, follow leaderboard state, and intervene in contest lifecycle operations such as pausing, resuming, closing, archiving, or deleting contests. This makes the administrator role the fallback owner for operational issues that an individual organizer cannot solve. For support and operations, administrators can impersonate active users to reproduce access or workflow problems, inspect session status and scores, and configure deployment-level settings such as the bootstrap administrator account and SMTP notification delivery.
+Administrators keep the platform usable and accountable. They review organizer access requests, create accounts when needed, promote users to organizer or administrator roles, and suspend or restore access. They have full contest oversight — they can inspect every contest regardless of owner, intervene in lifecycle operations, and impersonate active users to reproduce workflow problems. To simplify initial deployment, a bootstrap administrator account can be created at startup using the `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables.
 
 ---
 
@@ -209,12 +205,9 @@ Business-rule failures use a stable error envelope:
 }
 ```
 
-Common error codes include `INVALID_CREDENTIALS`, `FORBIDDEN`,
-`CONTEST_NOT_FOUND`, `CONTEST_STATE_ERROR`, `REGISTRATION_ERROR`,
-`SUBMISSION_ERROR`, `VALIDATION_ERROR`, `PLUGIN_NOT_FOUND`, and
-`PLUGIN_EXECUTION_ERROR`.
+Common error codes include `INVALID_CREDENTIALS`, `FORBIDDEN`, `CONTEST_NOT_FOUND`, `CONTEST_STATE_ERROR`, `REGISTRATION_ERROR`, `SUBMISSION_ERROR`, `VALIDATION_ERROR`, `PLUGIN_NOT_FOUND`, and `PLUGIN_EXECUTION_ERROR`.
 
-### WebSocket Messages
+### WebSocket Stream
 
 Participants connect with the token in the query string:
 
@@ -222,7 +215,7 @@ Participants connect with the token in the query string:
 wss://<host>/api/v1/ws/contests/{contest_id}?token=<JWT>
 ```
 
-Observation messages:
+Each observation message carries a sensor snapshot:
 
 ```json
 {
@@ -237,11 +230,9 @@ Observation messages:
 }
 ```
 
-`sequence_id` increments every simulation step. `committed_through` is the
-highest sequence safely flushed to the database. The stream never includes
-ground truth, labels, or the twin's internal state.
+`sequence_id` increments every simulation step. `committed_through` is the highest sequence safely flushed to the database. The stream never includes ground truth, labels, or the twin's internal state.
 
-When the observation phase ends, the server sends:
+When the observation phase ends, the server signals the transition and closes the stream:
 
 ```json
 {
@@ -251,7 +242,7 @@ When the observation phase ends, the server sends:
 }
 ```
 
-Then it closes the stream. If a contest is closed early, the server sends:
+If a contest is closed early, participants receive:
 
 ```json
 { "event": "contest_closed" }
@@ -298,7 +289,7 @@ uv run alembic upgrade head
 Build the web interface before using FastAPI as the frontend host:
 
 ```bash
-cd epic/gui
+cd epic_core/gui
 npm ci
 npm run build
 cd ../..
@@ -307,16 +298,15 @@ cd ../..
 Start the server:
 
 ```bash
-uv run uvicorn "epic.api.main:create_app" --factory --reload
+uv run uvicorn "epic_core.api.main:create_app" --factory --reload
 ```
 
-For frontend development, run the API and Vite dev server separately. Vite
-proxies `/api` and WebSocket traffic to FastAPI on port 8000:
+For frontend development, run the API and Vite dev server separately. Vite proxies `/api` and WebSocket traffic to FastAPI on port 8000:
 
 ```bash
-uv run uvicorn "epic.api.main:create_app" --factory --reload
+uv run uvicorn "epic_core.api.main:create_app" --factory --reload
 
-cd epic/gui
+cd epic_core/gui
 npm ci
 npm run dev
 ```
@@ -364,15 +354,13 @@ The Playwright UI suite is excluded from the default run:
 uv run pytest tests/ui
 ```
 
-API tests use a per-test SQLite database, fresh plugin registries, FastAPI
-`TestClient`, and a collecting notification service. They must not use
-production settings or production registries.
+API tests use a per-test SQLite database, fresh plugin registries, FastAPI `TestClient`, and a collecting notification service. They must not use production settings or production registries.
 
 ---
 
 ## Extending EPIC
 
-See [`epic/twins/README.md`](epic/twins/README.md) for the extension guide, including how to add digital twins, sensors, metrics, and task evaluators.
+See [`epic_plugins/twins/README.md`](epic_plugins/twins/README.md) for the extension guide, including how to add digital twins, sensors, metrics, and task evaluators.
 
 ## Roadmap
 
@@ -380,8 +368,7 @@ Implemented:
 
 - domain-independent interfaces and plugin registries;
 - FastAPI backend with JWT authentication;
-- organizer requests, participant invitations, admin user management, and
-  impersonation;
+- organizer requests, participant invitations, admin user management, and impersonation;
 - two-phase forecasting contests with WebSocket observation streams;
 - pause, resume, close, restart recovery, and session isolation;
 - configurable sensors and fault schedules;
@@ -392,8 +379,7 @@ Implemented:
 
 Planned:
 
-- anomaly detection, fault classification, and remaining-useful-life task
-  evaluators;
+- anomaly detection, fault classification, and remaining-useful-life task evaluators;
 - runtime plugin governance;
 - larger-scale distributed simulation;
 - more digital twin domain packs.

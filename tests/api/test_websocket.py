@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
-from epic.core.db.models import Contest
+from epic_core.kernel.db.models import Contest
 
 
 async def _create_contest(
@@ -133,7 +133,7 @@ def test_websocket_delivers_broadcast_message(client, auth_headers, db_factory):
 
 def _make_organizer(client, admin_headers, db_factory, username: str):
     """Create a user, promote to ORGANIZER, and return (user_id, headers)."""
-    from epic.core.db.models import User
+    from epic_core.kernel.db.models import User
     from sqlalchemy import select as sa_select
 
     response = client.post(

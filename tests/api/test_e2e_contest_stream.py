@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
-from epic.core.db.models import SensorObservation, SimulationSession
+from epic_core.kernel.db.models import SensorObservation, SimulationSession
 
 
 def _token(headers: dict) -> str:

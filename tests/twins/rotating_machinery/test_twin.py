@@ -1,11 +1,11 @@
 import pytest
 
-import epic.core.registry as registry_module
-from epic.core.interfaces import FaultDescriptor, SimulationState
-from epic.core.quantities import PhysicalQuantity
-from epic.core.testing import test_registry_context as registry_context
-from epic.twins.rotating_machinery.plugin import register
-from epic.twins.rotating_machinery.twin import (
+import epic_core.kernel.registry as registry_module
+from epic_core.kernel.interfaces import FaultDescriptor, SimulationState
+from epic_core.kernel.quantities import PhysicalQuantity
+from epic_core.kernel.testing import test_registry_context as registry_context
+from epic_plugins.twins.rotating_machinery.plugin import register
+from epic_plugins.twins.rotating_machinery.twin import (
     RotatingMachineryState,
     RotatingMachineryTwin,
 )
