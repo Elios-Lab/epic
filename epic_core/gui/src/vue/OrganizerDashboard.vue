@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import Chart from "chart.js/auto";
 import { api } from "../api.js";
 import { auth } from "../auth.js";
 import { formatters } from "../formatters.js";
@@ -33,6 +34,7 @@ const sendingInvites = ref(false);
 const invitations = ref({});
 const registrations = ref({});
 const leaderboards = ref({});
+const contestDetailsMap = ref({});
 const deleteModal = reactive({ open: false, contest: null });
 
 const monitor = reactive({
@@ -221,6 +223,14 @@ async function toggleContestDetails(contest) {
   expandedContestId.value = id;
   inviteEmails.value = "";
   await loadParticipants(contest);
+  if (!contestDetailsMap.value[id]) {
+    try {
+      const full = await apiRequest(`/api/v1/contests/${id}`);
+      contestDetailsMap.value = { ...contestDetailsMap.value, [id]: full };
+    } catch (_) {
+      contestDetailsMap.value = { ...contestDetailsMap.value, [id]: contest };
+    }
+  }
   if (!leaderboards.value[id]) {
     loadingLeaderboardId.value = id;
     try {
@@ -527,7 +537,7 @@ function appendMonitorObservation(observation) {
 
 function createMonitorChart() {
   const canvas = monitorChartCanvas.value;
-  if (!canvas || typeof Chart === "undefined") return;
+  if (!canvas) return;
   if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
     setTimeout(createMonitorChart, 50);
     return;
@@ -733,26 +743,85 @@ onBeforeUnmount(() => {
                   <div><dt class="font-medium text-slate-500">End</dt><dd>{{ formatDate(contest.end_date) }}</dd></div>
                 </dl>
 
-                <div v-if="expandedContestId === contestId(contest)" class="mt-5 rounded-md border border-slate-200 bg-white p-4" @click.stop>
-                  <div class="mb-3 flex items-center justify-between">
-                    <h4 class="font-semibold text-slate-900">Leaderboard</h4>
-                    <span v-if="loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
-                  </div>
-                  <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Rank</th><th class="py-2 pr-4 font-semibold">Username</th><th class="py-2 pr-4 font-semibold">Score</th></tr></thead>
-                      <tbody class="divide-y divide-slate-200">
-                        <tr v-for="entry in leaderboards[contestId(contest)] || []" :key="entry.user_id">
-                          <td class="py-3 pr-4">{{ entry.rank }}</td>
-                          <td class="py-3 pr-4">{{ entry.username }}</td>
-                          <td class="py-3 pr-4">{{ formatScore(entry.score) }}</td>
-                        </tr>
-                        <tr v-if="(leaderboards[contestId(contest)] || []).length === 0"><td colspan="3" class="py-4 text-slate-500">No leaderboard entries yet.</td></tr>
-                      </tbody>
-                    </table>
+                <div v-if="expandedContestId === contestId(contest)" class="mt-5 space-y-5" @click.stop>
+                  <!-- Contest description & configuration -->
+                  <div class="rounded-md border border-slate-200 bg-white p-4">
+                    <h4 class="mb-3 font-semibold text-slate-900">Contest Details</h4>
+                    <template v-if="contestDetailsMap[contestId(contest)]">
+                      <p v-if="contestDetailsMap[contestId(contest)].description" class="mb-3 text-sm text-slate-600">
+                        {{ contestDetailsMap[contestId(contest)].description }}
+                      </p>
+
+                      <!-- Twin initial conditions -->
+                      <template v-if="(contestDetailsMap[contestId(contest)].initial_conditions && Object.keys(contestDetailsMap[contestId(contest)].initial_conditions).length > 0)">
+                        <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Twin Configuration</p>
+                        <dl class="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 sm:grid-cols-3">
+                          <div v-for="(val, key) in contestDetailsMap[contestId(contest)].initial_conditions" :key="key">
+                            <dt class="font-medium text-slate-500">{{ key }}</dt>
+                            <dd>{{ val }}</dd>
+                          </div>
+                        </dl>
+                      </template>
+
+                      <!-- Fault schedule -->
+                      <template v-if="(contestDetailsMap[contestId(contest)].fault_schedule || []).length > 0">
+                        <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Fault Schedule</p>
+                        <ul class="mb-3 space-y-1 text-sm text-slate-700">
+                          <li v-for="(fault, fi) in contestDetailsMap[contestId(contest)].fault_schedule" :key="fi" class="flex flex-wrap gap-3">
+                            <span class="font-medium">{{ fault.fault_id }}</span>
+                            <span class="text-slate-500">start {{ fault.start_time }}s</span>
+                            <span v-if="fault.end_time != null" class="text-slate-500">→ {{ fault.end_time }}s</span>
+                            <span v-else class="text-slate-400">permanent</span>
+                            <span class="text-slate-500">severity {{ fault.severity }}</span>
+                          </li>
+                        </ul>
+                      </template>
+
+                      <!-- Sensors -->
+                      <template v-if="(contestDetailsMap[contestId(contest)].sensor_configs || []).length > 0">
+                        <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Sensors</p>
+                        <div class="overflow-x-auto">
+                          <table class="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-semibold">Sensor</th><th class="py-1 pr-4 font-semibold">Noise std</th><th class="py-1 pr-4 font-semibold">Gain</th><th class="py-1 pr-4 font-semibold">Bias</th><th class="py-1 pr-4 font-semibold">Quantization</th></tr></thead>
+                            <tbody class="divide-y divide-slate-100">
+                              <tr v-for="sc in contestDetailsMap[contestId(contest)].sensor_configs" :key="sc.sensor_id">
+                                <td class="py-1 pr-4 font-medium">{{ sc.sensor_id }}</td>
+                                <td class="py-1 pr-4">{{ sc.noise_std ?? 0 }}</td>
+                                <td class="py-1 pr-4">{{ sc.gain ?? 1 }}</td>
+                                <td class="py-1 pr-4">{{ sc.bias ?? 0 }}</td>
+                                <td class="py-1 pr-4">{{ sc.quantization ?? 0 }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
+                    </template>
+                    <p v-else class="text-sm text-slate-400">Loading details...</p>
                   </div>
 
-                  <div class="mt-6 border-t border-slate-200 pt-4">
+                  <!-- Leaderboard -->
+                  <div class="rounded-md border border-slate-200 bg-white p-4">
+                    <div class="mb-3 flex items-center justify-between">
+                      <h4 class="font-semibold text-slate-900">Leaderboard</h4>
+                      <span v-if="loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                      <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Rank</th><th class="py-2 pr-4 font-semibold">Username</th><th class="py-2 pr-4 font-semibold">Score</th></tr></thead>
+                        <tbody class="divide-y divide-slate-200">
+                          <tr v-for="entry in leaderboards[contestId(contest)] || []" :key="entry.user_id">
+                            <td class="py-3 pr-4">{{ entry.rank }}</td>
+                            <td class="py-3 pr-4">{{ entry.username }}</td>
+                            <td class="py-3 pr-4">{{ formatScore(entry.score) }}</td>
+                          </tr>
+                          <tr v-if="(leaderboards[contestId(contest)] || []).length === 0"><td colspan="3" class="py-4 text-slate-500">No leaderboard entries yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Participants -->
+                  <div class="rounded-md border border-slate-200 bg-white p-4">
                     <div class="mb-3 flex items-center justify-between">
                       <h4 class="font-semibold text-slate-900">Participants</h4>
                       <span v-if="loadingParticipantsId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
@@ -900,6 +969,80 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
+              <!-- Twin Configuration (initial conditions) -->
+              <div v-if="icSchema.length > 0" class="rounded-md border border-slate-200 bg-white p-5 space-y-4">
+                <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Twin Configuration</h3>
+                <div v-if="icState.length > 0" class="space-y-2">
+                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Initial state</p>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label v-for="field in icState" :key="field.key" class="block">
+                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
+                      <input
+                        type="number"
+                        step="any"
+                        :value="icValue(field)"
+                        :placeholder="String(field.default)"
+                        @input="setIcValue(field, $event.target.value)"
+                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div v-if="icParams.length > 0" class="space-y-2">
+                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Physical parameters</p>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label v-for="field in icParams" :key="field.key" class="block">
+                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
+                      <input
+                        type="number"
+                        step="any"
+                        :value="icValue(field)"
+                        :placeholder="String(field.default)"
+                        @input="setIcValue(field, $event.target.value)"
+                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fault schedule -->
+              <div class="rounded-md border border-slate-200 bg-white p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Fault Schedule</h3>
+                  <button type="button" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="addFault">
+                    + Add fault
+                  </button>
+                </div>
+                <p v-if="form.fault_entries.length === 0" class="text-sm text-slate-400">No faults scheduled. The twin will run with default physics.</p>
+                <div v-for="(fault, index) in form.fault_entries" :key="index" class="rounded-md border border-amber-200 bg-amber-50/40 p-4">
+                  <div class="grid gap-3 md:grid-cols-4">
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Fault</span>
+                      <select v-model="fault.fault_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100">
+                        <option v-for="f in (catalogProfile?.faults || [])" :key="f.fault_id" :value="f.fault_id">{{ f.name }}</option>
+                      </select>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Start time (s)</span>
+                      <input v-model.number="fault.start_time" type="number" min="0" step="1" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">End time (s, blank = permanent)</span>
+                      <input v-model="fault.end_time" type="number" min="0" step="1" placeholder="permanent" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Severity (0–1)</span>
+                      <div class="mt-1 flex items-center gap-2">
+                        <input v-model.number="fault.severity" type="range" min="0" max="1" step="0.01" class="flex-1" />
+                        <span class="w-10 text-right text-xs font-mono text-slate-700">{{ fault.severity.toFixed(2) }}</span>
+                        <button type="button" class="rounded px-2 py-1 text-xs text-red-500 hover:text-red-700" @click="removeFault(index)">✕</button>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <!-- Sensors -->
               <div class="rounded-md border border-slate-200 bg-white p-5 space-y-3">
                 <div class="flex items-center justify-between">
@@ -964,80 +1107,6 @@ onBeforeUnmount(() => {
                     <label class="block mt-3">
                       <span class="text-xs font-medium text-slate-600">Max value</span>
                       <input v-model.number="sensor.max_value" type="number" step="any" placeholder="none" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Fault schedule -->
-              <div class="rounded-md border border-slate-200 bg-white p-5 space-y-3">
-                <div class="flex items-center justify-between">
-                  <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Fault Schedule</h3>
-                  <button type="button" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="addFault">
-                    + Add fault
-                  </button>
-                </div>
-                <p v-if="form.fault_entries.length === 0" class="text-sm text-slate-400">No faults scheduled. The twin will run with default physics.</p>
-                <div v-for="(fault, index) in form.fault_entries" :key="index" class="rounded-md border border-amber-200 bg-amber-50/40 p-4">
-                  <div class="grid gap-3 md:grid-cols-4">
-                    <label class="block">
-                      <span class="text-xs font-medium text-slate-600">Fault</span>
-                      <select v-model="fault.fault_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100">
-                        <option v-for="f in (catalogProfile?.faults || [])" :key="f.fault_id" :value="f.fault_id">{{ f.name }}</option>
-                      </select>
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-slate-600">Start time (s)</span>
-                      <input v-model.number="fault.start_time" type="number" min="0" step="1" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-slate-600">End time (s, blank = permanent)</span>
-                      <input v-model="fault.end_time" type="number" min="0" step="1" placeholder="permanent" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-slate-600">Severity (0–1)</span>
-                      <div class="mt-1 flex items-center gap-2">
-                        <input v-model.number="fault.severity" type="range" min="0" max="1" step="0.01" class="flex-1" />
-                        <span class="w-10 text-right text-xs font-mono text-slate-700">{{ fault.severity.toFixed(2) }}</span>
-                        <button type="button" class="rounded px-2 py-1 text-xs text-red-500 hover:text-red-700" @click="removeFault(index)">✕</button>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Initial conditions -->
-              <div v-if="icSchema.length > 0" class="rounded-md border border-slate-200 bg-white p-5 space-y-4">
-                <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Twin Configuration</h3>
-                <div v-if="icState.length > 0" class="space-y-2">
-                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Initial state</p>
-                  <div class="grid gap-3 md:grid-cols-3">
-                    <label v-for="field in icState" :key="field.key" class="block">
-                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
-                      <input
-                        type="number"
-                        step="any"
-                        :value="icValue(field)"
-                        :placeholder="String(field.default)"
-                        @input="setIcValue(field, $event.target.value)"
-                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
-                      />
-                    </label>
-                  </div>
-                </div>
-                <div v-if="icParams.length > 0" class="space-y-2">
-                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Physical parameters</p>
-                  <div class="grid gap-3 md:grid-cols-3">
-                    <label v-for="field in icParams" :key="field.key" class="block">
-                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
-                      <input
-                        type="number"
-                        step="any"
-                        :value="icValue(field)"
-                        :placeholder="String(field.default)"
-                        @input="setIcValue(field, $event.target.value)"
-                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
-                      />
                     </label>
                   </div>
                 </div>

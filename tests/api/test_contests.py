@@ -366,7 +366,7 @@ def test_two_active_contests_produce_observations_concurrently(
         )
         assert counts[contest_a["contest_id"]] > 0
         assert counts[contest_b["contest_id"]] > 0
-        assert client.app.state.session_tasks.active_count() == 2
+        assert asyncio.run(client.app.state.session_tasks.active_count()) == 2
     finally:
         for contest in (contest_a, contest_b):
             client.patch(

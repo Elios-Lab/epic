@@ -35,19 +35,24 @@ async def contest_stream(
     broadcaster: ContestBroadcaster = Depends(get_broadcaster),
     settings: Settings = Depends(get_settings),
 ):
+    await websocket.accept()
+
+    async def reject(code: int = 1008) -> None:
+        await websocket.close(code=code)
+
     try:
         token_payload = decode_access_token(token, settings)
         contest_uuid = UUID(contest_id)
         user_id = UUID(token_payload["sub"])
         role = token_payload.get("role")
     except (InvalidCredentialsError, ValueError, KeyError, TypeError):
-        await websocket.close(code=1008)
+        await reject()
         return
 
     result = await db.execute(select(Contest).where(Contest.id == contest_uuid))
     contest = result.scalar_one_or_none()
     if contest is None or contest.status != "ACTIVE":
-        await websocket.close(code=1008)
+        await reject()
         return
 
     # Authorization: administrators may monitor any contest; organizers only
@@ -56,7 +61,7 @@ async def contest_stream(
         pass
     elif role == "ORGANIZER":
         if contest.created_by != user_id:
-            await websocket.close(code=1008)
+            await reject()
             return
     else:
         registration_result = await db.execute(
@@ -67,7 +72,7 @@ async def contest_stream(
             )
         )
         if registration_result.scalar_one_or_none() is None:
-            await websocket.close(code=1008)
+            await reject()
             return
 
     # In two-phase mode, reject connections once the evaluation phase has started.
@@ -76,10 +81,8 @@ async def contest_stream(
         contest.end_of_observation is not None
         and datetime.now(timezone.utc) >= _as_utc(contest.end_of_observation)
     ):
-        await websocket.close(code=1008)
+        await reject()
         return
-
-    await websocket.accept()
     queue = broadcaster.subscribe(contest_id)
     try:
         while True:

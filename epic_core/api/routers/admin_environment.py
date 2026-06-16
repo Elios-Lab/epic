@@ -103,7 +103,7 @@ def parse_env_assignments(path: Path) -> dict[str, str]:
 def unquote_env_value(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         value = value[1:-1]
-    return value.replace("\\n", "\n")
+    return value.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
 
 
 def quote_env_value(value: str) -> str:

@@ -35,3 +35,37 @@ def test_catalog_profile_for_unknown_twin_returns_404(client):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "PLUGIN_NOT_FOUND"
+
+
+def test_catalog_profile_includes_initial_conditions_schema(client):
+    response = client.get("/api/v1/catalog/mass_spring_damper")
+
+    assert response.status_code == 200
+    profile = response.json()
+    schema = profile["initial_conditions_schema"]
+    assert isinstance(schema, list)
+    assert len(schema) > 0
+    required_fields = {"key", "default", "unit", "kind"}
+    for field in schema:
+        assert required_fields <= field.keys(), f"field missing keys: {field}"
+        assert field["kind"] in ("state", "parameter")
+        assert isinstance(field["default"], (int, float))
+
+
+def test_initial_conditions_schema_covers_states_and_parameters(client):
+    response = client.get("/api/v1/catalog/mass_spring_damper")
+
+    schema = response.json()["initial_conditions_schema"]
+    kinds = {entry["kind"] for entry in schema}
+    assert "state" in kinds
+    assert "parameter" in kinds
+
+
+def test_all_twins_expose_initial_conditions_schema(client):
+    twins_response = client.get("/api/v1/catalog")
+    twin_ids = [t["twin_id"] for t in twins_response.json()["twins"]]
+
+    for twin_id in twin_ids:
+        profile = client.get(f"/api/v1/catalog/{twin_id}").json()
+        assert "initial_conditions_schema" in profile, f"missing schema for {twin_id}"
+        assert isinstance(profile["initial_conditions_schema"], list)

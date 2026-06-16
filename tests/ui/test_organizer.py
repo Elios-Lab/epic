@@ -213,6 +213,108 @@ def test_create_contest_form_submits_successfully(
             break
 
 
+# ── Contest creation form section order ──────────────────────────────────────
+
+def _open_creation_form(page: Page):
+    _open_organizer_dashboard(page)
+    _open_new_contest_tab(page)
+    page.locator("button").filter(has_text="mass_spring_damper").first.click()
+    page.wait_for_selector("text=Create Contest", timeout=5000)
+
+
+def test_twin_configuration_section_present_in_form(page: Page):
+    """The Twin Configuration section should appear in the creation form."""
+    _open_creation_form(page)
+    expect(page.get_by_text("Twin Configuration")).to_be_visible(timeout=5000)
+
+
+def test_fault_schedule_section_present_in_form(page: Page):
+    """The Fault Schedule section should appear in the creation form."""
+    _open_creation_form(page)
+    expect(page.get_by_text("Fault Schedule")).to_be_visible(timeout=5000)
+
+
+def test_form_section_order_twin_before_fault_before_sensors(page: Page):
+    """Twin Configuration must come before Fault Schedule, which must come before Sensors."""
+    _open_creation_form(page)
+    sections = page.locator(
+        "h3.uppercase"
+    ).all_text_contents()
+    # Filter to the three sections we care about
+    relevant = [s.strip() for s in sections if s.strip() in ("Twin Configuration", "Fault Schedule", "Sensors")]
+    assert relevant.index("Twin Configuration") < relevant.index("Fault Schedule"), (
+        f"Twin Configuration should precede Fault Schedule, got order: {relevant}"
+    )
+    assert relevant.index("Fault Schedule") < relevant.index("Sensors"), (
+        f"Fault Schedule should precede Sensors, got order: {relevant}"
+    )
+
+
+# ── Contest detail panel ──────────────────────────────────────────────────────
+
+def test_clicking_contest_card_shows_detail_panel(
+    page: Page, live_server: str, organizer_token: str
+):
+    """Clicking a contest card should reveal the detail panel."""
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+        expect(card.get_by_text("Contest Details")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+def test_contest_detail_panel_shows_description(
+    page: Page, live_server: str, organizer_token: str
+):
+    """The detail panel should show the contest description."""
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+        expect(card.get_by_text("Created by UI test suite")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+def test_contest_detail_panel_shows_twin_configuration(
+    page: Page, live_server: str, organizer_token: str
+):
+    """The detail panel should show the twin's initial conditions."""
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+        expect(card.get_by_text("Twin Configuration")).to_be_visible(timeout=5000)
+        # position and velocity are the initial conditions set in create_active_contest
+        expect(card.get_by_text("position")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
+def test_contest_detail_panel_shows_sensor_table(
+    page: Page, live_server: str, organizer_token: str
+):
+    """The detail panel should list configured sensors."""
+    contest = create_active_contest(live_server, organizer_token)
+    try:
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        card = page.locator("article").filter(has_text=contest["name"])
+        card.get_by_text(contest["name"]).click()
+        expect(card.get_by_text("Sensors")).to_be_visible(timeout=5000)
+        expect(card.get_by_text("position")).to_be_visible(timeout=5000)
+    finally:
+        close_contest(live_server, organizer_token, contest["contest_id"])
+
+
 # ── Participant management ───────────────────────────────────────────────────
 
 def test_organizer_can_send_participant_invitation(

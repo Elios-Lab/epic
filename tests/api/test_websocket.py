@@ -46,8 +46,8 @@ def test_websocket_rejects_invalid_token(client, db_factory):
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect(
             f"/api/v1/ws/contests/{contest.id}?token=invalid-token"
-        ):
-            pass
+        ) as ws:
+            ws.receive_json()
 
     assert exc_info.value.code == 1008
 
@@ -57,8 +57,8 @@ def test_websocket_rejects_nonexistent_contest(client, auth_headers):
         with client.websocket_connect(
             "/api/v1/ws/contests/00000000-0000-0000-0000-000000000001"
             f"?token={_token(auth_headers)}"
-        ):
-            pass
+        ) as ws:
+            ws.receive_json()
 
     assert exc_info.value.code == 1008
 
@@ -71,8 +71,8 @@ def test_websocket_rejects_non_active_contest(client, auth_headers, db_factory):
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect(
             f"/api/v1/ws/contests/{contest.id}?token={_token(auth_headers)}"
-        ):
-            pass
+        ) as ws:
+            ws.receive_json()
 
     assert exc_info.value.code == 1008
 
@@ -93,8 +93,8 @@ def test_websocket_rejects_unregistered_participant(client, auth_headers, db_fac
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect(
             f"/api/v1/ws/contests/{contest.id}?token={_token(auth_headers)}"
-        ):
-            pass
+        ) as ws:
+            ws.receive_json()
 
     assert exc_info.value.code == 1008
 
@@ -211,7 +211,7 @@ def test_websocket_rejects_organizer_for_other_contest(client, admin_headers, db
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect(
             f"/api/v1/ws/contests/{contest.id}?token={_token(other_headers)}"
-        ):
-            pass
+        ) as ws:
+            ws.receive_json()
 
     assert exc_info.value.code == 1008

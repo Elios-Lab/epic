@@ -97,9 +97,10 @@ class SessionTaskRegistry:
         async with self._lock:
             self._entries.clear()
 
-    def active_count(self) -> int:
-        self._prune_done_locked()
-        return len(self._entries)
+    async def active_count(self) -> int:
+        async with self._lock:
+            self._prune_done_locked()
+            return len(self._entries)
 
     def _drop_completed(self, contest_id: str, completed: asyncio.Task) -> None:
         if not completed.cancelled():

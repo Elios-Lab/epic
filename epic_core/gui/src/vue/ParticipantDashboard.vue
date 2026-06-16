@@ -17,7 +17,6 @@ const error = ref("");
 const success = ref("");
 const loadingContests = ref(false);
 const loadingActivity = ref(false);
-const submitting = ref(false);
 const activeContests = ref([]);
 const registrations = ref([]);
 const registeredContestIds = ref(new Set());
@@ -27,9 +26,6 @@ const sensorChart = ref(null);
 const streamSocket = ref(null);
 const activity = ref([]);
 const latestObservation = reactive({ sequence_id: null, timestamp: "" });
-const submissionPayload = ref(
-  JSON.stringify({ forecast: { sensor_id: [] } }, null, 2)
-);
 
 async function apiRequest(path, options = {}) {
   return api.request(props.token, path, options);
@@ -124,15 +120,20 @@ async function registerContest(contest) {
 
 function createSensorChart() {
   const canvas = sensorChartCanvas.value;
-  if (!canvas) {
+  if (!canvas) return;
+  if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+    setTimeout(createSensorChart, 50);
     return;
   }
+  Chart.getChart(canvas)?.destroy();
+  canvas.width = canvas.parentElement.clientWidth || 600;
+  canvas.height = canvas.parentElement.clientHeight || 320;
   sensorChart.value = new Chart(canvas, {
     type: "line",
     data: { labels: [], datasets: [] },
     options: {
       animation: false,
-      responsive: true,
+      responsive: false,
       maintainAspectRatio: false,
       interaction: { intersect: false, mode: "nearest" },
       scales: {
@@ -176,7 +177,14 @@ function appendObservation(observation) {
   if (sensorChart.value.data.labels.length > 100) {
     sensorChart.value.data.labels.shift();
   }
-  sensorChart.value.update("none");
+  const chart = sensorChart.value;
+  if (!chart._rafPending) {
+    chart._rafPending = true;
+    requestAnimationFrame(() => {
+      chart._rafPending = false;
+      if (chart.canvas?.isConnected) chart.update("none");
+    });
+  }
 }
 
 function openStream(contest) {
@@ -218,7 +226,6 @@ async function connectContest(contest) {
   connectedContest.value = contest;
   latestObservation.sequence_id = null;
   latestObservation.timestamp = "";
-  submissionPayload.value = JSON.stringify({ forecast: { sensor_id: [] } }, null, 2);
   await nextTick();
   createSensorChart();
   openStream(contest);
@@ -227,25 +234,6 @@ async function connectContest(contest) {
 function disconnectContest() {
   stopStream();
   connectedContest.value = null;
-}
-
-async function submitPrediction() {
-  submitting.value = true;
-  error.value = "";
-  success.value = "";
-  try {
-    const payload = JSON.parse(submissionPayload.value);
-    const id = contestId(connectedContest.value);
-    const response = await apiRequest(`/api/v1/contests/${id}/submissions`, {
-      method: "POST",
-      body: JSON.stringify({ task_id: "forecasting", payload }),
-    });
-    success.value = `Submission ${response.submission_id} received.`;
-  } catch (submitError) {
-    error.value = submitError.message || "Submission failed.";
-  } finally {
-    submitting.value = false;
-  }
 }
 
 async function loadMyActivity() {
@@ -343,7 +331,7 @@ onBeforeUnmount(() => {
                 Participant Dashboard
               </h1>
               <p class="mt-2 text-slate-600">
-                Join active contests, watch live sensor streams, and submit predictions.
+                Join active contests and watch live sensor streams.
               </p>
             </div>
             <div class="flex flex-col items-start gap-3 sm:items-end">
@@ -501,27 +489,6 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <form class="rounded-md border border-slate-200 bg-slate-50 p-5" @submit.prevent="submitPrediction">
-                <h3 class="text-lg font-semibold text-slate-900">Submit Prediction</h3>
-                <p class="mt-1 text-sm text-slate-500">
-                  Provide one list of predicted values per required target variable.
-                </p>
-                <label class="mt-4 block">
-                  <span class="text-sm font-medium text-slate-700">Forecast payload JSON</span>
-                  <textarea
-                    v-model="submissionPayload"
-                    rows="8"
-                    class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"
-                  ></textarea>
-                </label>
-                <button
-                  type="submit"
-                  :disabled="submitting"
-                  class="mt-5 rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {{ submitting ? "Submitting..." : "Submit" }}
-                </button>
-              </form>
             </div>
           </div>
 

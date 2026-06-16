@@ -123,7 +123,7 @@ def test_unknown_target_raises_submission_error():
     evaluator = ForecastingEvaluator()
     observations = make_observations([0.1, 0.2])
 
-    with pytest.raises(SubmissionError, match="not available"):
+    with pytest.raises(SubmissionError, match="nonexistent"):
         evaluator.evaluate(
             {"forecast": {"nonexistent": [0.1, 0.2]}},
             {"eval_steps": 2, "target_variables": ["nonexistent"]},
@@ -170,3 +170,45 @@ def test_observation_limit_follows_eval_steps():
     evaluator = ForecastingEvaluator()
     assert evaluator.observation_limit({"eval_steps": 50}) == 50
     assert evaluator.observation_limit({}) is None
+
+
+def test_eval_steps_as_string_is_accepted():
+    """eval_steps coming from a JSON column may be a str — must not TypeError."""
+    evaluator = ForecastingEvaluator()
+    observations = make_observations([0.1, 0.2])
+
+    result = evaluator.evaluate(
+        {"forecast": {"position": [0.1, 0.2]}},
+        {"eval_steps": "2"},
+        observations,
+        [MAE()],
+    )
+
+    assert result.scores[0].value == pytest.approx(0.0)
+
+
+def test_sensor_missing_in_later_observation_raises_submission_error():
+    """A sensor key absent in observations[1+] must raise SubmissionError, not KeyError."""
+    evaluator = ForecastingEvaluator()
+    observations = [
+        {
+            "sequence_id": 1,
+            "sensors": {"position": 0.1},
+            "ground_truth": {"position": 0.1},
+            "labels": None,
+        },
+        {
+            "sequence_id": 2,
+            "sensors": {},
+            "ground_truth": {},
+            "labels": None,
+        },
+    ]
+
+    with pytest.raises(SubmissionError, match="position"):
+        evaluator.evaluate(
+            {"forecast": {"position": [0.1, 0.2]}},
+            {"eval_steps": 2},
+            observations,
+            [MAE()],
+        )

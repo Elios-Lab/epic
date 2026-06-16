@@ -80,11 +80,8 @@ class SimulationEngine:
             ) from exc
 
         # Per-session RNG: injected into sensors that accept it, so that
-        # concurrent sessions never share random state. The global seeding
-        # is kept as a fallback for plugins using module-level RNG functions.
+        # concurrent sessions never share random state.
         if session.seed is not None:
-            random.seed(session.seed)
-            np.random.seed(session.seed)
             session_rng = random.Random(session.seed)
         else:
             session_rng = random.Random()

@@ -51,6 +51,7 @@ class ForecastingEvaluator(TaskEvaluator):
         eval_steps = configuration.get("eval_steps")
         if not eval_steps:
             raise SubmissionError("Task configuration missing eval_steps")
+        eval_steps = int(eval_steps)
 
         if len(observations) < eval_steps:
             raise EvaluationPendingError(
@@ -81,6 +82,18 @@ class ForecastingEvaluator(TaskEvaluator):
         )
         reference_key = "ground_truth" if use_ground_truth else "sensors"
         reference = observations[0].get(reference_key) or {}
+
+        # Validate that sensor_id is present across all observations up-front
+        # so the y_true loop below never raises a bare KeyError.
+        all_sensor_ids = set(target_variables)
+        for i, obs in enumerate(observations):
+            obs_ref = obs.get(reference_key) or {}
+            missing = all_sensor_ids - obs_ref.keys()
+            if missing:
+                raise SubmissionError(
+                    f"target variable(s) {', '.join(sorted(missing))} missing "
+                    f"from {reference_key} at observation index {i}"
+                )
 
         scores: list[MetricScore] = []
         per_metric_values: dict[str, list[float]] = {}

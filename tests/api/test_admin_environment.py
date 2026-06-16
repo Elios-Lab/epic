@@ -97,3 +97,43 @@ def test_admin_environment_rejects_invalid_typed_values(client, admin_headers, t
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_quote_unquote_roundtrip_preserves_special_characters():
+    from epic_core.api.routers.admin_environment import quote_env_value, unquote_env_value
+
+    cases = [
+        "simple",
+        "has spaces",
+        'has "quotes"',
+        "has\\backslash",
+        "has\nnewline",
+        'complex: "path\\to\\file"\nand newline',
+        "",
+    ]
+    for original in cases:
+        assert unquote_env_value(quote_env_value(original)) == original, (
+            f"roundtrip failed for: {original!r}"
+        )
+
+
+def test_env_write_read_roundtrip_via_api(client, admin_headers, tmp_path):
+    """A value with backslashes and quotes survives a write→read cycle through the API."""
+    env_path = tmp_path / ".env"
+    env_path.write_text("", encoding="utf-8")
+    client.app.state.env_file_path = env_path
+
+    tricky_value = 'has "quotes" and \\backslash'
+
+    put_response = client.put(
+        "/api/v1/admin/environment",
+        json={"values": {"BASE_URL": tricky_value}},
+        headers=admin_headers,
+    )
+    assert put_response.status_code == 200, put_response.json()
+
+    get_response = client.get("/api/v1/admin/environment", headers=admin_headers)
+    assert get_response.status_code == 200
+    variables = {item["key"]: item for item in get_response.json()["variables"]}
+    # BASE_URL is not a secret so its value is returned in plain text
+    assert variables["BASE_URL"]["value"] == tricky_value
