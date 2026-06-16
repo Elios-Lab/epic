@@ -1,4 +1,5 @@
-from epic_core.kernel.scoring import F1Score, MAE
+from epic_plugins.metrics.mae import MAE
+from epic_plugins.metrics.f1 import F1Score
 
 
 def test_mae_empty_lists_return_zero():

@@ -4,7 +4,8 @@ import pytest
 
 from epic_core.kernel.evaluators import ForecastingEvaluator
 from epic_core.kernel.exceptions import EvaluationPendingError, SubmissionError
-from epic_core.kernel.scoring import F1Score, MAE
+from epic_plugins.metrics.mae import MAE
+from epic_plugins.metrics.f1 import F1Score
 
 
 def make_observations(values: list[float], with_ground_truth: bool = True):

@@ -1,6 +1,6 @@
 # EPIC - ELIOS Predictive Intelligence Challenge
 
-EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a real-time machine learning challenge: participants connect to a sensor stream, collect data, predict a hidden future window, and are scored automatically — all without ever seeing the ground truth.
+EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a real-time machine learning challenge: participants connect to a sensor stream, collect data, predict a hidden future window, and are scored automatically, all without ever seeing the ground truth.
 
 | Resource         | URL                                 |
 |------------------|-------------------------------------|
@@ -15,9 +15,9 @@ EPIC is a **competition platform** for predictive intelligence on **live digital
 
 Most machine learning competitions start with a file. EPIC starts with a system.
 
-That system is a **digital twin**: a compact simulation of a physical asset — a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following its internal physics (Newton's laws, fluid dynamics, thermodynamics, etc.). **Faults** can be scheduled inside the twin and alter the latent physics: the spring gets weaker, the pump cavitates, the motor overheats. **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements.
+That system is a **digital twin**: a compact simulation of a physical asset, a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following its internal physics (Newton's laws, fluid dynamics, thermodynamics, etc.). **Faults** can be scheduled inside the twin and alter the latent physics: the spring gets weaker, the pump cavitates, the motor overheats. **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements.
 
-Participants only receive the sensor stream. They never see the clean state, fault labels, or future observations. The platform stores those private signals and closes the stream before the evaluation window begins. **Participants must forecast the future from what they have observed.**
+Participants only receive the sensor stream. They never see the clean state, fault labels, or future observations. The platform stores those private signals and closes the stream before the evaluation window begins. **Participants must forecast the future from what they have observed**.
 
 The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
 
@@ -29,7 +29,7 @@ EPIC separates competition infrastructure from simulated domains:
 
 ![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
-At runtime, EPIC is a layered RESTful API application. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The plugin registries keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
+At runtime, EPIC is a layered **RESTful API application**. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The **plugin registries** keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
 
 ---
 

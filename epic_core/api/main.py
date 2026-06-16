@@ -41,7 +41,7 @@ from epic_core.kernel.engine import SimulationEngine
 from epic_core.kernel.evaluators import ForecastingEvaluator
 from epic_core.kernel.session_tasks import SessionTaskRegistry
 import epic_core.kernel.registry as registry_module
-from epic_core.kernel.scoring import F1Score, MAE
+from epic_plugins.metrics.plugin import register as register_metrics
 from epic_plugins.sensors.plugin import register as register_sensors
 from epic_plugins.twins.electric_motor.plugin import register as register_electric_motor
 from epic_plugins.twins.industrial_pump.plugin import register as register_industrial_pump
@@ -148,15 +148,12 @@ async def lifespan(app: FastAPI):
     async with get_session_factory()() as db:
         await seed_admin(settings, db)
     register_sensors()
+    register_metrics()
     register_mass_spring_damper()
     register_industrial_pump()
     register_electric_motor()
     register_smart_building()
     register_rotating_machinery()
-    if not registry_module.metric_registry.contains("mae"):
-        registry_module.metric_registry.register(MAE())
-    if not registry_module.metric_registry.contains("f1"):
-        registry_module.metric_registry.register(F1Score())
     if not registry_module.task_evaluator_registry.contains("FORECASTING"):
         registry_module.task_evaluator_registry.register(ForecastingEvaluator())
     await _recover_after_restart(notification_service)

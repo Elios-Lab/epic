@@ -1,6 +1,6 @@
 # EPIC Participant SDK
 
-`epic-elios-client` is the official Python SDK for the EPIC platform. It gives you everything you need to participate in a contest: authentication, contest discovery, real-time data streaming, forecast submission, and results inspection — all from a few lines of Python, in scripts and Jupyter notebooks alike.
+The EPIC client is the official Python SDK for the EPIC platform. It gives everything you need to participate in a contest: authentication, contest discovery, real-time data streaming, forecast submission, and results inspection; all from a few lines of Python, in scripts and Jupyter notebooks alike.
 
 ---
 
@@ -16,7 +16,7 @@ For the Jupyter quickstart notebook, install the optional extras (adds `pandas` 
 pip install "epic-elios-client[notebook]"
 ```
 
-The SDK requires **Python 3.11 or later**.
+The SDK requires Python 3.11 or later.
 
 ---
 
