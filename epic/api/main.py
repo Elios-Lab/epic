@@ -38,6 +38,7 @@ from epic.core.db.session import get_session_factory
 from epic.core.db.session import init_db
 from epic.core.engine import SimulationEngine
 from epic.core.evaluators import ForecastingEvaluator
+from epic.core.session_tasks import SessionTaskRegistry
 import epic.core.registry as registry_module
 from epic.core.scoring import F1Score, MAE
 from epic.sensors.plugin import register as register_sensors
@@ -49,6 +50,7 @@ from epic.twins.smart_building.plugin import register as register_smart_building
 
 GUI_DIR = Path(__file__).resolve().parent.parent / "gui"
 GUI_DIST_DIR = GUI_DIR / "dist"
+NOTEBOOKS_DIR = Path(__file__).resolve().parent.parent.parent / "notebooks"
 
 
 def get_gui_dir() -> Path:
@@ -135,6 +137,7 @@ async def lifespan(app: FastAPI):
     app.state.broadcaster = ContestBroadcaster(
         queue_capacity=settings.session_queue_capacity
     )
+    app.state.session_tasks = SessionTaskRegistry(settings.max_concurrent_sessions)
     notification_service = build_notification_service(settings)
     app.state.engine = SimulationEngine(
         broadcaster=app.state.broadcaster,
@@ -160,6 +163,7 @@ async def lifespan(app: FastAPI):
     # Graceful shutdown: cancel background simulation and scoring tasks so
     # their database sessions close cleanly instead of being killed with
     # checked-out connections (which leaks and warns at garbage collection).
+    await app.state.session_tasks.cancel_all()
     background = [
         task
         for task in asyncio.all_tasks()
@@ -205,6 +209,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/register", include_in_schema=False)
     async def spa_register():
         return FileResponse(get_gui_dir() / "index.html")
+
+    @app.get("/notebooks/quickstart.ipynb", include_in_schema=False)
+    async def quickstart_notebook():
+        return FileResponse(
+            NOTEBOOKS_DIR / "quickstart.ipynb",
+            media_type="application/x-ipynb+json",
+        )
 
     app.mount("/", StaticFiles(directory=get_gui_dir(), html=True), name="gui")
     return app

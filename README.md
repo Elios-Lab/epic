@@ -2,23 +2,18 @@
 
 EPIC is a **competition platform** for predictive intelligence on **live digital twins**. It turns a simulated physical system into a **real-time machine learning challenge**: participants connect to sensor streams, collect their own data, predict a hidden future window, and are scored automatically against ground truth that is recorded by the platform, but never shown to participants.
 
-| Resource         | URL                              |
-|------------------|----------------------------------|
-| Live platform    | https://epic.elioslab.net        |
-| REST API         | https://epic.elioslab.net/api/v1 |
-| API live docs    | https://epic.elioslab.net/docs     |
-| SDK              | `pip install epic-elios-client`    |
-| Jupyter notebook | https://epic.elioslab.net/notebooks |
+| Resource         | URL                                 |
+|------------------|-------------------------------------|
+| Live platform    | https://epic.elioslab.net           |
+| REST API         | https://epic.elioslab.net/api/v1    |
+| API live docs    | https://epic.elioslab.net/docs      |
+| SDK              | `pip install epic-elios-client`     |
 
 EPIC is built for classrooms, research benchmarks, and industrial experiments where static datasets are too simple. An **organizer** can choose a digital twin, configure sensors and faults, invite **participants**, run a **contest**, and get a live **leaderboard** without writing backend code.
 
 ## Concept
 
-Most machine learning competitions start with a file. EPIC starts with a system. That system is a **digital twin**: a compact simulation of a physical asset such as a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following **its internal physics** (e.g. differential equations), **faults** can be scheduled inside the twin and alter the latent physics (e.g. the spring gets weaker, the pump cavitates, the motor overheats). **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements.
-
-Participants only receive the sensor stream. They do not receive the clean state, fault labels, or future observations. EPIC stores those private signals for scoring and keeps the competition honest by closing the stream before the evaluation window is generated. **Participants must forecast the future from what they have observed**.
-
-The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
+Most machine learning competitions start with a file. EPIC starts with a system. That system is a **digital twin**: a compact simulation of a physical asset such as a mass-spring-damper, a centrifugal pump, an electric motor, a gearbox, a smart building, or any other physical system. The twin evolves in real time on the server following **its internal physics** (e.g. Newton's laws, fluid dynamics, thermodynamics, etc.), **faults** can be scheduled inside the twin and alter the latent physics (e.g. the spring gets weaker, the pump cavitates, the motor overheats). **Sensors** observe the twin's internal state and produce noisy, biased, drifting, delayed, quantized, saturated, and sometimes false or outlying measurements. Participants only receive the sensor stream. They do not receive the clean state, fault labels, or future observations. EPIC stores those private signals for scoring and keeps the competition honest by closing the stream before the evaluation window is generated. **Participants must forecast the future from what they have observed**. The result is a richer contest format than a static benchmark. Students and researchers practice the whole **predictive-intelligence loop**: instrumentation, data collection, temporal reasoning, modelling, submission integrity, and live leaderboard feedback.
 
 ## Architecture
 
@@ -27,6 +22,13 @@ EPIC separates competition infrastructure from simulated domains:
 ![EPIC architecture](assets/diagrams/epic-architecture.svg)
 
 At runtime, EPIC is a layered RESTfull API application. The API layer handles authentication, contest management, registrations, submissions, leaderboards, invitations, and streams. The database layer stores users, contests, tasks, sessions, observations, submissions, scores, and leaderboard entries. The plugin registries keep digital twins, sensors, scoring metrics, and evaluators decoupled from the platform core, so new simulated systems can be added without rewriting the API. When a contest becomes active, the simulation engine instantiates the selected twin and sensors, runs the live session, streams observations to registered participants, stores hidden evaluation data, and triggers scoring after submissions. The web interface and the client SDK both sit on top of the same REST and WebSocket contract.
+
+Active contests run concurrently inside the API process: each active or resumed
+contest owns one background simulation task, bounded by `MAX_CONCURRENT_SESSIONS`.
+This scheduler is intentionally in-memory and single-process. Do not run the API
+with multiple Uvicorn workers for live simulations until EPIC has a persistent or
+distributed scheduler; otherwise different workers will not share runner and
+WebSocket state.
 
 ## Roles and Account Flow
 
@@ -38,7 +40,7 @@ EPIC has three roles with different permissions:
 | ORGANIZER     | Create and manage contests, invite participants, inspect submissions, pause and resume sessions. |
 | ADMINISTRATOR | Manage users, organizer requests, all contests, and platform operations.                         |
 
-Account creation is intentionally **controlled**. Prospective organizers must first submit a request, which is then reviewed and either approved or rejected by an administrator. Once approved, organizers can create contests and invite participants, who may choose to accept or decline the invitation. This workflow is designed for educational and research settings, where organizers are typically teachers or researchers running contests for a predefined group of participants, rather than for open public competitions. Participants may also join public contests without receiving an invitation; however, they must still have an account created or approved by an administrator Administrators can create user accounts directly. To simplify initial deployment, a bootstrap administrator account can be automatically created at startup using the ADMIN_USERNAME and ADMIN_PASSWORD environment variables.
+Account creation is intentionally **controlled**. Prospective organizers must first submit a **registration request**, which is reviewed and either approved or rejected by an administrator. Once approved, organizers can create contests and **invite participants**, who may then choose whether to accept or decline the invitation. Participants cannot independently request access to EPIC, register as users, or apply to join contests. Instead, they are always admitted through an organizer or an administrator. Organizers can invite participants to specific contests, while administrators can create user accounts directly and grant access to EPIC when appropriate. Participants may also join contests that have been designated as public, but they must still possess a valid EPIC account that has been created or approved by an administrator. This workflow is designed for educational and research environments, where organizers are typically teachers or researchers managing contests for a predefined group of participants, rather than for open public competitions.To simplify initial deployment, a bootstrap administrator account can be automatically created at startup using the ADMIN_USERNAME and ADMIN_PASSWORD environment variables.
 
 ## How a Contest Works
 
@@ -51,7 +53,7 @@ DRAFT -> SCHEDULED -> ACTIVE -> CLOSED -> ARCHIVED
                         PAUSED -> ACTIVE
 ```
 
-The active phase is split into three time windows.
+The active phase is split into three time windows:
 
 | Window      | Time Range                                        | What Happens                                                                            |
 |-------------|---------------------------------------------------|-----------------------------------------------------------------------------------------|
@@ -489,6 +491,7 @@ Useful optional settings:
 | Variable | Default | Purpose |
 |---|---|---|
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT lifetime |
+| `MAX_CONCURRENT_SESSIONS` | `50` | Maximum active simulation runners in this API process |
 | `SESSION_QUEUE_CAPACITY` | `1000` | Per-client WebSocket queue |
 | `BASE_URL` | `http://localhost:8000` | Invitation link base URL |
 | `SMTP_HOST` | unset | Enables email notifications when configured |
@@ -588,7 +591,7 @@ Implemented:
 - target-variable forecasting with automatic scoring and leaderboards;
 - contest templates and twin catalog API;
 - static role-based GUI;
-- PyPI-ready participant SDK and notebooks.
+- PyPI-ready participant SDK.
 
 Planned:
 

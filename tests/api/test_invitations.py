@@ -295,6 +295,13 @@ def test_register_deep_link_serves_spa(client):
     assert 'id="auth-app"' in response.text
 
 
+def test_quickstart_notebook_is_served(client):
+    response = client.get("/notebooks/quickstart.ipynb")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ipynb+json")
+    assert b"EPIC" in response.content
+
+
 # ── Organizer invitation management ───────────────────────────────────────────
 
 def test_owner_lists_contest_invitations(client, organizer_headers, registered_contest):

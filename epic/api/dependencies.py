@@ -35,6 +35,10 @@ def get_broadcaster(connection: HTTPConnection):
     return connection.app.state.broadcaster
 
 
+def get_session_task_registry(connection: HTTPConnection):
+    return connection.app.state.session_tasks
+
+
 async def _extract_bearer_token(request: Request) -> str:
     """
     Read the Bearer token from the Authorization header and raise

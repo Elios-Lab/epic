@@ -375,18 +375,22 @@ onBeforeUnmount(() => {
           <div v-if="tab === 'contests'" class="space-y-6">
             <details class="rounded-md border border-cyan-200 bg-cyan-50">
               <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-epic-navy select-none">
-                Getting started - how to prepare a solution
+                Getting started - quickstart notebook
               </summary>
               <div class="space-y-3 px-5 pb-5 pt-2 text-sm leading-6 text-slate-700">
                 <p>
-                  Every contest runs in two phases. During observation, collect live sensor data
-                  and build your model. After evaluation closes, submit a forecast for the hidden window.
+                  Use the quickstart notebook to follow the participant workflow:
+                  register for a contest, collect live sensor data, build a baseline
+                  forecast, submit it, and inspect the score.
                 </p>
-                <ol class="list-inside list-decimal space-y-1">
-                  <li>Install the SDK: <code class="rounded border border-slate-200 bg-white px-1 py-0.5">pip install "epic-elios-client[notebook]"</code></li>
-                  <li>Register for a contest and stream observations with <code class="rounded border border-slate-200 bg-white px-1 py-0.5">client.collect()</code>.</li>
-                  <li>Submit with <code class="rounded border border-slate-200 bg-white px-1 py-0.5">client.submit()</code> once submissions open.</li>
-                </ol>
+                <a
+                  href="/notebooks/quickstart.ipynb"
+                  class="inline-flex rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open quickstart notebook
+                </a>
               </div>
             </details>
 

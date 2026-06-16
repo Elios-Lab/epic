@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from epic.core.db.models import SensorObservation, SimulationSession, User
 from epic.core.db.session import get_session_factory
@@ -115,6 +115,27 @@ def force_contest_status(db_factory, contest_id: str, status: str) -> None:
             contest.status = status
             await db.commit()
     asyncio.run(_set())
+
+
+async def wait_for_observations(db_factory, contest_ids: list[str]) -> dict[str, int]:
+    deadline = asyncio.get_running_loop().time() + 6.0
+    while asyncio.get_running_loop().time() < deadline:
+        counts = {}
+        async with db_factory() as db:
+            for contest_id in contest_ids:
+                count_result = await db.execute(
+                    select(func.count(SensorObservation.id))
+                    .join(
+                        SimulationSession,
+                        SensorObservation.session_id == SimulationSession.id,
+                    )
+                    .where(SimulationSession.contest_id == UUID(contest_id))
+                )
+                counts[contest_id] = count_result.scalar_one()
+        if all(count > 0 for count in counts.values()):
+            return counts
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for observations: {counts}")
 
 
 def add_observation_for_contest(db_factory, contest_id: str) -> None:
@@ -305,6 +326,116 @@ def test_patch_draft_to_active_creates_session(client, admin_headers, db_factory
 
     session = asyncio.run(load_session())
     assert session is not None
+
+
+def test_two_active_contests_produce_observations_concurrently(
+    client, admin_headers, db_factory
+):
+    now = datetime.now(timezone.utc)
+    contest_a = create_contest(
+        client,
+        admin_headers,
+        name="Concurrent contest A",
+        end_of_observation=(now - timedelta(milliseconds=100)).isoformat(),
+        prediction_horizon_seconds=5.0,
+        end_date=(now + timedelta(seconds=30)).isoformat(),
+    )
+    contest_b = create_contest(
+        client,
+        admin_headers,
+        name="Concurrent contest B",
+        end_of_observation=(now - timedelta(milliseconds=100)).isoformat(),
+        prediction_horizon_seconds=5.0,
+        end_date=(now + timedelta(seconds=30)).isoformat(),
+    )
+
+    try:
+        for contest in (contest_a, contest_b):
+            response = client.patch(
+                f"/api/v1/contests/{contest['contest_id']}",
+                json={"status": "ACTIVE"},
+                headers=admin_headers,
+            )
+            assert response.status_code == 200, response.json()
+
+        counts = asyncio.run(
+            wait_for_observations(
+                db_factory,
+                [contest_a["contest_id"], contest_b["contest_id"]],
+            )
+        )
+        assert counts[contest_a["contest_id"]] > 0
+        assert counts[contest_b["contest_id"]] > 0
+        assert client.app.state.session_tasks.active_count() == 2
+    finally:
+        for contest in (contest_a, contest_b):
+            client.patch(
+                f"/api/v1/contests/{contest['contest_id']}",
+                json={"status": "CLOSED"},
+                headers=admin_headers,
+            )
+
+
+def test_max_concurrent_sessions_is_enforced(client, admin_headers):
+    client.app.state.session_tasks.max_sessions = 1
+    now = datetime.now(timezone.utc)
+    first = create_contest(
+        client,
+        admin_headers,
+        name="First bounded contest",
+        end_of_observation=(now - timedelta(milliseconds=100)).isoformat(),
+        prediction_horizon_seconds=10.0,
+        end_date=(now + timedelta(seconds=30)).isoformat(),
+    )
+    second = create_contest(
+        client,
+        admin_headers,
+        name="Second bounded contest",
+        end_of_observation=(now - timedelta(milliseconds=100)).isoformat(),
+        prediction_horizon_seconds=10.0,
+        end_date=(now + timedelta(seconds=30)).isoformat(),
+    )
+
+    try:
+        response = client.patch(
+            f"/api/v1/contests/{first['contest_id']}",
+            json={"status": "ACTIVE"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.json()
+
+        response = client.patch(
+            f"/api/v1/contests/{second['contest_id']}",
+            json={"status": "ACTIVE"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+    finally:
+        client.patch(
+            f"/api/v1/contests/{first['contest_id']}",
+            json={"status": "CLOSED"},
+            headers=admin_headers,
+        )
+
+
+def test_duplicate_session_runner_for_same_contest_is_rejected(client, admin_headers):
+    contest = create_contest(client, admin_headers, name="Duplicate runner contest")
+    contest_id = contest["contest_id"]
+    asyncio.run(
+        client.app.state.session_tasks.reserve(contest_id, "already-running-session")
+    )
+
+    try:
+        response = client.patch(
+            f"/api/v1/contests/{contest_id}",
+            json={"status": "ACTIVE"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
+    finally:
+        asyncio.run(client.app.state.session_tasks.release(contest_id))
 
 
 def test_patch_contest_by_creator_organizer_returns_200(client, organizer_headers):

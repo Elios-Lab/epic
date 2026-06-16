@@ -15,6 +15,7 @@ from epic.api.dependencies import (
     get_current_user,
     get_engine,
     get_notification_service,
+    get_session_task_registry,
     require_admin,
     require_organizer_or_admin,
 )
@@ -35,6 +36,7 @@ from epic.core.db.models import (
 from epic.core.db.session import get_db, get_session_factory
 from epic.core.engine import SimulationEngine
 from epic.core.notifications import ContestCreated, NotificationService
+from epic.core.session_tasks import SessionTaskRegistry
 from epic.core.exceptions import (
     ContestNotFoundError,
     ContestStateError,
@@ -236,6 +238,24 @@ def user_can_see_contest(contest: Contest, user: User, *, registered: bool, invi
     return invited
 
 
+async def start_session_runner(
+    *,
+    contest_id: UUID,
+    session_id: UUID,
+    engine: SimulationEngine,
+    session_tasks: SessionTaskRegistry,
+) -> None:
+    task = asyncio.create_task(
+        engine.run_session(str(session_id), get_session_factory()),
+        name=f"epic-session-{session_id}",
+    )
+    try:
+        await session_tasks.attach(str(contest_id), task)
+    except Exception:
+        task.cancel()
+        raise
+
+
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ContestResponse)
 async def create_contest(
     request: CreateContestRequest,
@@ -423,6 +443,7 @@ async def update_contest(
     current_user: User = Depends(require_organizer_or_admin),
     db: AsyncSession = Depends(get_db),
     engine: SimulationEngine = Depends(get_engine),
+    session_tasks: SessionTaskRegistry = Depends(get_session_task_registry),
 ):
     contest = await get_contest_or_raise(db, contest_id)
     if current_user.role == "ORGANIZER" and contest.created_by != current_user.id:
@@ -452,6 +473,8 @@ async def update_contest(
             raise EPICValidationError("end_date must be in the future")
         contest.end_date = request.end_date
 
+    reserved_session: SimulationSession | None = None
+
     if target_status is not None:
         if target_status == "ACTIVE":
             validate_twin_config(
@@ -465,19 +488,33 @@ async def update_contest(
                 sampling_rate_hz=contest.sampling_rate_hz,
             )
             db.add(session)
+            await db.flush()
+            await session_tasks.reserve(str(contest.id), str(session.id))
+            reserved_session = session
 
         if target_status == "CLOSED":
             contest.end_date = datetime.now(timezone.utc)
 
         contest.status = target_status
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        if reserved_session is not None:
+            await session_tasks.release(str(contest.id), str(reserved_session.id))
+        raise
 
     if target_status == "ACTIVE":
-        asyncio.create_task(
-            engine.run_session(str(session.id), get_session_factory()),
-            name=f"epic-session-{session.id}",
-        )
+        try:
+            await start_session_runner(
+                contest_id=contest.id,
+                session_id=session.id,
+                engine=engine,
+                session_tasks=session_tasks,
+            )
+        except Exception:
+            await session_tasks.release(str(contest.id), str(session.id))
+            raise
     # Respond with the state this handler just committed: re-reading here
     # would race with the engine task scheduled above.
     return contest_response(contest, await load_contest_tasks(db, contest))
@@ -606,6 +643,7 @@ async def resume_contest(
     current_user: User = Depends(require_organizer_or_admin),
     db: AsyncSession = Depends(get_db),
     engine: SimulationEngine = Depends(get_engine),
+    session_tasks: SessionTaskRegistry = Depends(get_session_task_registry),
 ):
     """
     Resume a paused contest.
@@ -645,18 +683,34 @@ async def resume_contest(
     if session is None:
         raise ContestStateError("No simulation session found for this contest")
 
+    if not await session_tasks.wait_until_clear(str(contest.id), timeout=2.0):
+        raise ContestStateError(
+            "Previous simulation runner is still stopping; retry shortly"
+        )
+    await session_tasks.reserve(str(contest.id), str(session.id))
+
     # Reactivate the existing session so the engine can attach to it.
     session.status = "RUNNING"
     session.started_at = datetime.now(timezone.utc)
     session.ended_at = None
 
     contest.status = "ACTIVE"
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await session_tasks.release(str(contest.id), str(session.id))
+        raise
 
-    asyncio.create_task(
-        engine.run_session(str(session.id), get_session_factory()),
-        name=f"epic-session-{session.id}",
-    )
+    try:
+        await start_session_runner(
+            contest_id=contest.id,
+            session_id=session.id,
+            engine=engine,
+            session_tasks=session_tasks,
+        )
+    except Exception:
+        await session_tasks.release(str(contest.id), str(session.id))
+        raise
 
     # Respond with the state this handler just committed. Re-reading here
     # (db.refresh) would race with the engine tasks scheduled above on the
