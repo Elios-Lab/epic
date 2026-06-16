@@ -1,5 +1,6 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import Chart from "chart.js/auto";
 import { api } from "../api.js";
 import { auth } from "../auth.js";
 import { formatters } from "../formatters.js";
@@ -123,7 +124,7 @@ async function registerContest(contest) {
 
 function createSensorChart() {
   const canvas = sensorChartCanvas.value;
-  if (!canvas || typeof Chart === "undefined") {
+  if (!canvas) {
     return;
   }
   sensorChart.value = new Chart(canvas, {
@@ -345,7 +346,17 @@ onBeforeUnmount(() => {
                 Join active contests, watch live sensor streams, and submit predictions.
               </p>
             </div>
-            <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+            <div class="flex flex-col items-start gap-3 sm:items-end">
+              <a
+                href="https://colab.research.google.com/github/Elios-Lab/epic/blob/main/notebooks/quickstart.ipynb"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open template notebook in Colab
+              </a>
+              <div class="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
                 :class="tab === 'contests' ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-600 hover:text-epic-navy'"
@@ -363,6 +374,7 @@ onBeforeUnmount(() => {
                 My Activity
               </button>
             </div>
+            </div>
           </div>
 
           <p v-if="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -373,26 +385,6 @@ onBeforeUnmount(() => {
           </p>
 
           <div v-if="tab === 'contests'" class="space-y-6">
-            <details class="rounded-md border border-cyan-200 bg-cyan-50">
-              <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-epic-navy select-none">
-                Getting started - quickstart notebook
-              </summary>
-              <div class="space-y-3 px-5 pb-5 pt-2 text-sm leading-6 text-slate-700">
-                <p>
-                  Use the quickstart notebook to follow the participant workflow:
-                  register for a contest, collect live sensor data, build a baseline
-                  forecast, submit it, and inspect the score.
-                </p>
-                <a
-                  href="/notebooks/quickstart.ipynb"
-                  class="inline-flex rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open quickstart notebook
-                </a>
-              </div>
-            </details>
 
             <div v-if="!connectedContest" class="space-y-5">
               <div class="flex items-center justify-between gap-4">

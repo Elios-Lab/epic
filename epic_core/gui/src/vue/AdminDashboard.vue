@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import Chart from "chart.js/auto";
 import { api } from "../api.js";
 import { formatters } from "../formatters.js";
 
@@ -20,6 +21,12 @@ const loadingEnvironment = ref(false);
 const loadingParticipantsId = ref(null);
 const sendingInvites = ref(false);
 const savingEnvironment = ref(false);
+const restartingServer = ref(false);
+const monitoredContest = ref(null);
+const adminChartCanvas = ref(null);
+const adminChart = ref(null);
+const adminSocket = ref(null);
+const adminLatest = reactive({ sequence_id: null, timestamp: "" });
 const contests = ref([]);
 const users = ref([]);
 const organizerRequests = ref([]);
@@ -232,6 +239,94 @@ async function saveEnvironment() {
   }
 }
 
+async function restartServer() {
+  if (!confirm("Restart the server now? It will be briefly unavailable while it restarts.")) return;
+  restartingServer.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    await apiRequest("/api/v1/admin/environment/restart", { method: "POST" });
+    success.value = "Restart signal sent. The server will be back in a few seconds.";
+  } catch {
+    error.value = "Failed to send restart signal.";
+  } finally {
+    restartingServer.value = false;
+  }
+}
+
+function createAdminChart() {
+  const canvas = adminChartCanvas.value;
+  if (!canvas) return;
+  adminChart.value = new Chart(canvas, {
+    type: "line",
+    data: { labels: [], datasets: [] },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: "nearest" },
+      scales: {
+        x: { ticks: { color: "#475569", maxTicksLimit: 10 }, grid: { color: "#e2e8f0" } },
+        y: { ticks: { color: "#475569" }, grid: { color: "#e2e8f0" } },
+      },
+      plugins: { legend: { labels: { color: "#0f172a" } } },
+    },
+  });
+}
+
+function appendAdminObservation(observation) {
+  if (!adminChart.value) return;
+  const sensors = observation.sensors || {};
+  const colors = ["#0d3b6e", "#0096c7", "#14b8a6", "#6366f1", "#f97316", "#64748b"];
+  for (const sensorId of Object.keys(sensors)) {
+    if (!adminChart.value.data.datasets.some((d) => d.label === sensorId)) {
+      const color = colors[adminChart.value.data.datasets.length % colors.length];
+      adminChart.value.data.datasets.push({
+        label: sensorId, data: [], borderColor: color, backgroundColor: color,
+        borderWidth: 2, pointRadius: 0, tension: 0.25,
+      });
+    }
+  }
+  adminChart.value.data.labels.push(observation.sequence_id);
+  for (const dataset of adminChart.value.data.datasets) {
+    dataset.data.push(sensors[dataset.label] ?? null);
+    if (dataset.data.length > 100) dataset.data.shift();
+  }
+  if (adminChart.value.data.labels.length > 100) adminChart.value.data.labels.shift();
+  adminChart.value.update("none");
+}
+
+function closeAdminMonitor() {
+  if (adminSocket.value) { adminSocket.value.close(); adminSocket.value = null; }
+  if (adminChart.value) { adminChart.value.destroy(); adminChart.value = null; }
+  monitoredContest.value = null;
+}
+
+async function openAdminMonitor(contest) {
+  closeAdminMonitor();
+  monitoredContest.value = contest;
+  adminLatest.sequence_id = null;
+  adminLatest.timestamp = "";
+  await nextTick();
+  createAdminChart();
+  const id = contestId(contest);
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const url = `${protocol}://${window.location.host}/api/v1/ws/contests/${id}?token=${encodeURIComponent(props.token)}`;
+  adminSocket.value = new WebSocket(url);
+  adminSocket.value.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.sensors) {
+      adminLatest.sequence_id = msg.sequence_id;
+      adminLatest.timestamp = msg.timestamp;
+      appendAdminObservation(msg);
+    }
+  };
+  adminSocket.value.onerror = () => { error.value = "Monitor stream connection failed."; };
+  adminSocket.value.onclose = () => {
+    if (monitoredContest.value) error.value = "Monitor stream disconnected.";
+  };
+}
+
 async function transitionContest(contest, status) {
   if (!status) return;
   error.value = "";
@@ -413,6 +508,10 @@ async function impersonate(account) {
 onMounted(() => {
   loadOverview();
 });
+
+onBeforeUnmount(() => {
+  closeAdminMonitor();
+});
 </script>
 
 <template>
@@ -513,13 +612,38 @@ onMounted(() => {
                       </button>
                     </td>
                     <td class="px-4 py-3">
-                      <button v-if="contest.status === 'ACTIVE'" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy">
-                        Monitor
+                      <button v-if="contest.status === 'ACTIVE'" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="monitoredContest && contestId(monitoredContest) === contestId(contest) ? closeAdminMonitor() : openAdminMonitor(contest)">
+                        {{ monitoredContest && contestId(monitoredContest) === contestId(contest) ? "Close" : "Monitor" }}
                       </button>
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div v-if="monitoredContest" class="rounded-md border border-slate-200 bg-white p-5 space-y-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h3 class="text-base font-semibold text-slate-900">Live monitor — {{ monitoredContest.name }}</h3>
+                  <p class="text-sm text-slate-500">Real-time sensor stream from {{ monitoredContest.twin_id }}.</p>
+                </div>
+                <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="closeAdminMonitor">Close</button>
+              </div>
+              <div class="rounded-md border border-slate-200 bg-slate-50 p-4">
+                <div class="h-64">
+                  <canvas ref="adminChartCanvas" class="h-full w-full"></canvas>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="rounded-md bg-slate-50 p-4">
+                  <div class="text-sm font-medium text-slate-500">Latest sequence</div>
+                  <div class="mt-1 text-2xl font-semibold text-epic-deep">{{ adminLatest.sequence_id ?? "—" }}</div>
+                </div>
+                <div class="rounded-md bg-slate-50 p-4">
+                  <div class="text-sm font-medium text-slate-500">Latest timestamp</div>
+                  <div class="mt-1 text-lg font-semibold text-epic-deep">{{ adminLatest.timestamp || "—" }}</div>
+                </div>
+              </div>
             </div>
 
             <div v-if="expandedContestId && selectedContest()" data-testid="admin-participants-panel" class="rounded-md border border-slate-200 bg-white p-5">
@@ -663,6 +787,9 @@ onMounted(() => {
                 </button>
                 <button type="button" :disabled="savingEnvironment" class="rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:opacity-60" @click="saveEnvironment">
                   {{ savingEnvironment ? "Saving..." : "Save settings" }}
+                </button>
+                <button type="button" :disabled="restartingServer" class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60" @click="restartServer">
+                  {{ restartingServer ? "Restarting..." : "Restart server" }}
                 </button>
               </div>
             </div>

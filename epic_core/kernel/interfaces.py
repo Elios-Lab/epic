@@ -109,6 +109,22 @@ class DigitalTwin(ABC):
         """
         pass
 
+    def initial_conditions_schema(self) -> list[dict]:
+        """
+        Return a schema for every configurable field accepted by configure().
+
+        Each entry must include:
+            key     – the dict key passed in initial_conditions
+            default – the value used when the key is absent
+            unit    – physical unit string (use "" if dimensionless)
+            kind    – "state" for variables that evolve during simulation,
+                      "parameter" for physical constants of the system
+
+        Twins that do not override this return an empty list, which means the
+        UI falls back to the raw JSON textarea.
+        """
+        return []
+
 
 class Sensor(ABC):
     @property

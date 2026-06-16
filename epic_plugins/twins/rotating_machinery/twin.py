@@ -159,3 +159,12 @@ class RotatingMachineryTwin(DigitalTwin):
             "version": self._version,
             "description": "Simple rotating shaft and gearbox model",
         }
+
+    def initial_conditions_schema(self) -> list[dict]:
+        return [
+            {"key": "speed",            "default": 1800.0, "unit": "RPM", "kind": "state"},
+            {"key": "vibration",        "default": 1.2,    "unit": "mm/s","kind": "state"},
+            {"key": "temperature",      "default": 45.0,   "unit": "°C",  "kind": "state"},
+            {"key": "power",            "default": 75000.0,"unit": "W",   "kind": "state"},
+            {"key": "shaft_deflection", "default": 0.05,   "unit": "mm",  "kind": "parameter"},
+        ]

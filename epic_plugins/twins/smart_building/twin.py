@@ -169,3 +169,14 @@ class SmartBuildingTwin(DigitalTwin):
             "version": self._version,
             "description": "Simple smart building HVAC floor model",
         }
+
+    def initial_conditions_schema(self) -> list[dict]:
+        return [
+            {"key": "temperature",       "default": 22.0,  "unit": "°C",  "kind": "state"},
+            {"key": "humidity",          "default": 45.0,  "unit": "%RH", "kind": "state"},
+            {"key": "co2",               "default": 650.0, "unit": "ppm", "kind": "state"},
+            {"key": "occupancy",         "default": 20,    "unit": "ppl", "kind": "state"},
+            {"key": "hvac_power",        "default": 3500.0,"unit": "W",   "kind": "parameter"},
+            {"key": "target_temperature","default": 22.0,  "unit": "°C",  "kind": "parameter"},
+            {"key": "outdoor_temperature","default": 30.0, "unit": "°C",  "kind": "parameter"},
+        ]

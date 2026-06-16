@@ -164,3 +164,12 @@ class ElectricMotorTwin(DigitalTwin):
             "version": self._version,
             "description": "Simple three-phase induction motor model",
         }
+
+    def initial_conditions_schema(self) -> list[dict]:
+        return [
+            {"key": "current",     "default": 12.0,   "unit": "A",   "kind": "state"},
+            {"key": "voltage",     "default": 400.0,  "unit": "V",   "kind": "state"},
+            {"key": "speed",       "default": 1450.0, "unit": "RPM", "kind": "state"},
+            {"key": "temperature", "default": 40.0,   "unit": "°C",  "kind": "state"},
+            {"key": "torque",      "default": 80.0,   "unit": "N·m", "kind": "parameter"},
+        ]

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+import signal
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ValidationError
 
 from epic_core.api.dependencies import require_admin
@@ -223,3 +225,17 @@ async def update_environment(
     validate_settings_values(merged)
     write_env_file(path, merged)
     return environment_response(path, settings)
+
+
+@router.post("/restart", status_code=202)
+async def restart_server(
+    current_user: User = Depends(require_admin),
+):
+    del current_user
+
+    async def _shutdown():
+        await asyncio.sleep(0.3)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    asyncio.create_task(_shutdown(), name="epic-admin-restart")
+    return Response(status_code=202)

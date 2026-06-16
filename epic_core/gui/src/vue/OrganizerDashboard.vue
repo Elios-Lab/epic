@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { api } from "../api.js";
 import { auth } from "../auth.js";
 import { formatters } from "../formatters.js";
@@ -387,6 +387,31 @@ async function loadCatalogProfile(twinId, template) {
   }
 }
 
+const icSchema = computed(() => catalogProfile.value?.initial_conditions_schema || []);
+const icState = computed(() => icSchema.value.filter((f) => f.kind === "state"));
+const icParams = computed(() => icSchema.value.filter((f) => f.kind === "parameter"));
+
+function icValue(field) {
+  if (!form.initial_conditions) form.initial_conditions = {};
+  if (!(field.key in form.initial_conditions)) form.initial_conditions[field.key] = field.default;
+  return form.initial_conditions[field.key];
+}
+
+function setIcValue(field, value) {
+  if (!form.initial_conditions) form.initial_conditions = {};
+  form.initial_conditions[field.key] = value === "" ? field.default : Number(value);
+}
+
+function addFault() {
+  const available = catalogProfile.value?.faults || [];
+  if (available.length === 0) return;
+  form.fault_entries.push({ fault_id: available[0].fault_id, start_time: 0, end_time: null, severity: 0.5 });
+}
+
+function removeFault(index) {
+  form.fault_entries.splice(index, 1);
+}
+
 async function createContest() {
   const sensorConfigs = form.sensor_selections
     .filter((sensor) => sensor.enabled)
@@ -396,6 +421,12 @@ async function createContest() {
       if (sensor.gain !== 1) config.gain = sensor.gain;
       if (sensor.bias) config.bias = sensor.bias;
       if (sensor.drift_rate) config.drift_rate = sensor.drift_rate;
+      if (sensor.quantization) config.quantization = sensor.quantization;
+      if (sensor.latency_steps) config.latency_steps = sensor.latency_steps;
+      if (sensor.p_false_reading) config.p_false_reading = sensor.p_false_reading;
+      if (sensor.p_outlier) config.p_outlier = sensor.p_outlier;
+      if (sensor.min_value !== null && sensor.min_value !== "") config.min_value = sensor.min_value;
+      if (sensor.max_value !== null && sensor.max_value !== "") config.max_value = sensor.max_value;
       return config;
     });
   const targetVariables = form.sensor_selections
@@ -809,7 +840,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <form v-if="newStep === 2" class="space-y-5" @submit.prevent="createContest">
+            <form v-if="newStep === 2" class="space-y-6" @submit.prevent="createContest">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <h2 class="text-xl font-semibold text-slate-900">Create Contest</h2>
@@ -819,48 +850,71 @@ onBeforeUnmount(() => {
                   Back
                 </button>
               </div>
-              <div class="grid gap-4 md:grid-cols-2">
-                <label class="block">
-                  <span class="text-sm font-medium text-slate-700">Contest name</span>
-                  <input v-model="form.name" type="text" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
-                </label>
-                <label class="block">
-                  <span class="text-sm font-medium text-slate-700">Visibility</span>
-                  <select v-model="form.visibility" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
-                    <option value="PUBLIC">PUBLIC</option>
-                    <option value="PRIVATE">PRIVATE</option>
-                  </select>
-                </label>
-                <label class="block">
-                  <span class="text-sm font-medium text-slate-700">Start date</span>
-                  <input v-model="form.start_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
-                </label>
-                <label class="block">
-                  <span class="text-sm font-medium text-slate-700">End date</span>
-                  <input v-model="form.end_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
-                </label>
-                <label class="block">
-                  <span class="text-sm font-medium text-slate-700">Sampling rate (Hz)</span>
-                  <input v-model.number="form.sampling_rate_hz" type="number" min="0.1" step="0.1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
-                </label>
-                <label class="block md:col-span-2">
-                  <span class="text-sm font-medium text-slate-700">Description</span>
-                  <textarea v-model="form.description" rows="3" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
-                </label>
+
+              <!-- Basic info -->
+              <div class="rounded-md border border-slate-200 bg-white p-5 space-y-4">
+                <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Contest</h3>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Name</span>
+                    <input v-model="form.name" type="text" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Visibility</span>
+                    <select v-model="form.visibility" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                      <option value="PUBLIC">PUBLIC</option>
+                      <option value="PRIVATE">PRIVATE</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Start date</span>
+                    <input v-model="form.start_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">End date</span>
+                    <input v-model="form.end_date" type="datetime-local" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Observation window (days)</span>
+                    <input v-model.number="form.observation_horizon_days" type="number" min="0.01" step="0.01" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Prediction horizon (seconds)</span>
+                    <input v-model.number="form.prediction_horizon_seconds" type="number" min="1" step="1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Sampling rate (Hz)</span>
+                    <input v-model.number="form.sampling_rate_hz" type="number" min="0.1" step="0.1" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
+                  </label>
+                  <label class="block">
+                    <span class="text-sm font-medium text-slate-700">Score against</span>
+                    <select v-model="form.score_against" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100">
+                      <option value="ground_truth">ground_truth — clean latent values</option>
+                      <option value="sensors">sensors — noisy measurements</option>
+                    </select>
+                  </label>
+                  <label class="block md:col-span-2">
+                    <span class="text-sm font-medium text-slate-700">Description</span>
+                    <textarea v-model="form.description" rows="2" class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                  </label>
+                </div>
               </div>
-              <div class="space-y-2">
+
+              <!-- Sensors -->
+              <div class="rounded-md border border-slate-200 bg-white p-5 space-y-3">
                 <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium text-slate-700">Sensors</span>
-                  <span class="text-xs text-slate-400">Select sensors and forecast targets.</span>
+                  <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Sensors</h3>
+                  <span class="text-xs text-slate-400">Enable sensors, set noise parameters, and mark forecast targets.</span>
                 </div>
                 <p v-if="loadingCatalog" class="text-sm text-slate-400">Loading sensors...</p>
                 <div
                   v-for="sensor in form.sensor_selections"
                   :key="sensor.sensor_id"
-                  class="rounded-md border bg-white p-3 transition"
-                  :class="sensor.enabled ? 'border-cyan-300' : 'border-slate-200'"
+                  class="rounded-md border transition"
+                  :class="sensor.enabled ? 'border-cyan-300 bg-cyan-50/30' : 'border-slate-200 bg-white'"
                 >
-                  <div class="flex items-center gap-3">
+                  <!-- Sensor header row -->
+                  <div class="flex items-center gap-3 px-4 py-3">
                     <input v-model="sensor.enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-epic-cyan focus:ring-cyan-200" />
                     <span class="font-medium text-slate-800">{{ sensor.name }}</span>
                     <span class="text-xs text-slate-400">{{ sensor.unit }}</span>
@@ -869,10 +923,128 @@ onBeforeUnmount(() => {
                       Forecast target
                     </label>
                   </div>
+                  <!-- Sensor parameters (only when enabled) -->
+                  <div v-if="sensor.enabled" class="grid gap-3 px-4 pb-4 md:grid-cols-3 lg:grid-cols-5 border-t border-cyan-100">
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Noise std</span>
+                      <input v-model.number="sensor.noise_std" type="number" min="0" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Gain</span>
+                      <input v-model.number="sensor.gain" type="number" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Bias</span>
+                      <input v-model.number="sensor.bias" type="number" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Drift rate</span>
+                      <input v-model.number="sensor.drift_rate" type="number" step="0.0001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Quantization</span>
+                      <input v-model.number="sensor.quantization" type="number" min="0" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Latency steps</span>
+                      <input v-model.number="sensor.latency_steps" type="number" min="0" step="1" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">P(false reading)</span>
+                      <input v-model.number="sensor.p_false_reading" type="number" min="0" max="1" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">P(outlier)</span>
+                      <input v-model.number="sensor.p_outlier" type="number" min="0" max="1" step="0.001" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Min value</span>
+                      <input v-model.number="sensor.min_value" type="number" step="any" placeholder="none" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block mt-3">
+                      <span class="text-xs font-medium text-slate-600">Max value</span>
+                      <input v-model.number="sensor.max_value" type="number" step="any" placeholder="none" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                  </div>
                 </div>
               </div>
+
+              <!-- Fault schedule -->
+              <div class="rounded-md border border-slate-200 bg-white p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Fault Schedule</h3>
+                  <button type="button" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="addFault">
+                    + Add fault
+                  </button>
+                </div>
+                <p v-if="form.fault_entries.length === 0" class="text-sm text-slate-400">No faults scheduled. The twin will run with default physics.</p>
+                <div v-for="(fault, index) in form.fault_entries" :key="index" class="rounded-md border border-amber-200 bg-amber-50/40 p-4">
+                  <div class="grid gap-3 md:grid-cols-4">
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Fault</span>
+                      <select v-model="fault.fault_id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100">
+                        <option v-for="f in (catalogProfile?.faults || [])" :key="f.fault_id" :value="f.fault_id">{{ f.name }}</option>
+                      </select>
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Start time (s)</span>
+                      <input v-model.number="fault.start_time" type="number" min="0" step="1" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">End time (s, blank = permanent)</span>
+                      <input v-model="fault.end_time" type="number" min="0" step="1" placeholder="permanent" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100" />
+                    </label>
+                    <label class="block">
+                      <span class="text-xs font-medium text-slate-600">Severity (0–1)</span>
+                      <div class="mt-1 flex items-center gap-2">
+                        <input v-model.number="fault.severity" type="range" min="0" max="1" step="0.01" class="flex-1" />
+                        <span class="w-10 text-right text-xs font-mono text-slate-700">{{ fault.severity.toFixed(2) }}</span>
+                        <button type="button" class="rounded px-2 py-1 text-xs text-red-500 hover:text-red-700" @click="removeFault(index)">✕</button>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Initial conditions -->
+              <div v-if="icSchema.length > 0" class="rounded-md border border-slate-200 bg-white p-5 space-y-4">
+                <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Twin Configuration</h3>
+                <div v-if="icState.length > 0" class="space-y-2">
+                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Initial state</p>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label v-for="field in icState" :key="field.key" class="block">
+                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
+                      <input
+                        type="number"
+                        step="any"
+                        :value="icValue(field)"
+                        :placeholder="String(field.default)"
+                        @input="setIcValue(field, $event.target.value)"
+                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div v-if="icParams.length > 0" class="space-y-2">
+                  <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Physical parameters</p>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <label v-for="field in icParams" :key="field.key" class="block">
+                      <span class="text-xs font-medium text-slate-700">{{ field.key }}<span v-if="field.unit" class="ml-1 font-normal text-slate-400">({{ field.unit }})</span></span>
+                      <input
+                        type="number"
+                        step="any"
+                        :value="icValue(field)"
+                        :placeholder="String(field.default)"
+                        @input="setIcValue(field, $event.target.value)"
+                        class="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-epic-cyan focus:ring-2 focus:ring-cyan-100"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <button type="submit" :disabled="creating" class="rounded-md bg-epic-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-epic-deep focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:opacity-60">
-                {{ creating ? "Creating..." : "Create" }}
+                {{ creating ? "Creating..." : "Create contest" }}
               </button>
             </form>
           </div>

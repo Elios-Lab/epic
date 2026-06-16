@@ -154,3 +154,12 @@ class IndustrialPumpTwin(DigitalTwin):
             "version": self._version,
             "description": "Simple industrial centrifugal pump model",
         }
+
+    def initial_conditions_schema(self) -> list[dict]:
+        return [
+            {"key": "flow_rate",    "default": 120.0, "unit": "m³/h", "kind": "state"},
+            {"key": "pressure",     "default": 4.0,   "unit": "bar",  "kind": "state"},
+            {"key": "temperature",  "default": 35.0,  "unit": "°C",   "kind": "state"},
+            {"key": "vibration",    "default": 1.0,   "unit": "mm/s", "kind": "state"},
+            {"key": "wear",         "default": 0.05,  "unit": "",     "kind": "parameter"},
+        ]

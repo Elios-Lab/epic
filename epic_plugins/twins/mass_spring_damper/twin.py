@@ -179,6 +179,16 @@ class MassSpringDamperTwin(DigitalTwin):
             "description": "Simple mechanical system (mass-spring-damper)",
         }
 
+    def initial_conditions_schema(self) -> list[dict]:
+        return [
+            {"key": "position",    "default": 0.1,  "unit": "m",     "kind": "state"},
+            {"key": "velocity",    "default": 0.0,  "unit": "m/s",   "kind": "state"},
+            {"key": "temperature", "default": 20.0, "unit": "°C",    "kind": "state"},
+            {"key": "mass",        "default": 1.0,  "unit": "kg",    "kind": "parameter"},
+            {"key": "stiffness",   "default": 10.0, "unit": "N/m",   "kind": "parameter"},
+            {"key": "damping",     "default": 0.5,  "unit": "N·s/m", "kind": "parameter"},
+        ]
+
     def _acceleration(
         self,
         position: float,

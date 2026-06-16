@@ -315,12 +315,20 @@ class TemplateDetail(TemplateSummary):
     initial_conditions: dict[str, Any] | None = None
 
 
+class InitialConditionField(BaseModel):
+    key: str
+    default: float | int
+    unit: str
+    kind: str  # "state" | "parameter"
+
+
 class CatalogProfileResponse(BaseModel):
     metadata: TwinMetadata
     supported_quantities: list[str]
     faults: list[FaultMetadata]
     sensors: list[SensorMetadata]
     templates: list[TemplateSummary]
+    initial_conditions_schema: list[InitialConditionField] = []
 
 
 class TemplateListResponse(BaseModel):

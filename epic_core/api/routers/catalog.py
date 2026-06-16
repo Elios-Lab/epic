@@ -51,4 +51,5 @@ def get_catalog_profile(twin_id: str):
             for template in TEMPLATES
             if template["twin_id"] == twin_id
         ],
+        "initial_conditions_schema": twin.initial_conditions_schema(),
     }
