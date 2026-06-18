@@ -108,7 +108,7 @@ def test_websocket_allows_admin_without_registration(client, admin_headers, db_f
         f"/api/v1/ws/contests/{contest.id}?token={_token(admin_headers)}"
     ) as websocket:
         broadcaster = client.app.state.broadcaster
-        asyncio.run(broadcaster.broadcast(str(contest.id), payload))
+        broadcaster.broadcast_sync(str(contest.id), payload)
 
         assert websocket.receive_json() == payload
 
@@ -126,7 +126,7 @@ def test_websocket_delivers_broadcast_message(client, auth_headers, db_factory):
         f"/api/v1/ws/contests/{contest.id}?token={_token(auth_headers)}"
     ) as websocket:
         broadcaster = client.app.state.broadcaster
-        asyncio.run(broadcaster.broadcast(str(contest.id), payload))
+        broadcaster.broadcast_sync(str(contest.id), payload)
 
         assert websocket.receive_json() == payload
 
@@ -186,7 +186,7 @@ def test_websocket_allows_organizer_for_own_contest(client, admin_headers, db_fa
         f"/api/v1/ws/contests/{contest.id}?token={_token(owner_headers)}"
     ) as websocket:
         broadcaster = client.app.state.broadcaster
-        asyncio.run(broadcaster.broadcast(str(contest.id), payload))
+        broadcaster.broadcast_sync(str(contest.id), payload)
 
         assert websocket.receive_json() == payload
 

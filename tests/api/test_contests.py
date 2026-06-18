@@ -4,7 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 
-from epic_core.kernel.db.models import SensorObservation, SimulationSession, User
+from sqlalchemy import update
+
+from epic_core.kernel.db.models import Contest, SensorObservation, SimulationSession, User
 from epic_core.kernel.db.session import get_session_factory
 
 
@@ -937,19 +939,29 @@ def test_resume_non_paused_contest_returns_409(client, admin_headers):
     assert response.json()["error"]["code"] == "CONTEST_STATE_ERROR"
 
 
-def test_resume_expired_contest_returns_409(client, admin_headers):
+def test_resume_expired_contest_returns_409(client, admin_headers, db_factory):
     """A paused contest whose end_date has passed cannot be resumed without extending."""
-    import time
     contest = create_contest(
         client, admin_headers,
         name="Resume expired contest",
-        end_date=(datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat(),
+        end_date=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
     )
     contest_id = contest["contest_id"]
     client.patch(f"/api/v1/contests/{contest_id}",
         json={"status": "ACTIVE"}, headers=admin_headers)
     client.put(f"/api/v1/contests/{contest_id}/pause", headers=admin_headers)
-    time.sleep(3)  # let the end_date expire
+
+    # Force end_date into the past directly rather than sleeping
+    async def expire_contest():
+        async with db_factory() as db:
+            await db.execute(
+                update(Contest)
+                .where(Contest.id == UUID(contest_id))
+                .values(end_date=datetime.now(timezone.utc) - timedelta(seconds=1))
+            )
+            await db.commit()
+
+    asyncio.run(expire_contest())
 
     response = client.put(
         f"/api/v1/contests/{contest_id}/resume", headers=admin_headers

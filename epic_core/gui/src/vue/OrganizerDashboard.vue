@@ -925,7 +925,7 @@ onBeforeUnmount(() => {
                 <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Contest</h3>
                 <div class="grid gap-4 md:grid-cols-2">
                   <label class="block">
-                    <span class="text-sm font-medium text-slate-700">Name</span>
+                    <span class="text-sm font-medium text-slate-700">Contest name</span>
                     <input v-model="form.name" type="text" required class="mt-2 w-full rounded-md border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100" />
                   </label>
                   <label class="block">

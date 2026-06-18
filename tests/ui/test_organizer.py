@@ -182,7 +182,7 @@ def test_sensor_checkboxes_loaded_from_catalog(page: Page):
     _open_organizer_dashboard(page)
     _open_new_contest_tab(page)
     page.locator("button").filter(has_text="mass_spring_damper").first.click()
-    page.wait_for_selector("text=Sensors", timeout=5000)
+    expect(page.locator("h3").filter(has_text="Sensors")).to_be_visible(timeout=5000)
     # At least one sensor checkbox should appear.
     expect(page.locator("input[type='checkbox']").first).to_be_visible(timeout=5000)
 
@@ -237,16 +237,23 @@ def test_fault_schedule_section_present_in_form(page: Page):
 def test_form_section_order_twin_before_fault_before_sensors(page: Page):
     """Twin Configuration must come before Fault Schedule, which must come before Sensors."""
     _open_creation_form(page)
-    sections = page.locator(
-        "h3.uppercase"
-    ).all_text_contents()
-    # Filter to the three sections we care about
-    relevant = [s.strip() for s in sections if s.strip() in ("Twin Configuration", "Fault Schedule", "Sensors")]
-    assert relevant.index("Twin Configuration") < relevant.index("Fault Schedule"), (
-        f"Twin Configuration should precede Fault Schedule, got order: {relevant}"
+    twin_heading = page.get_by_text("Twin Configuration", exact=True).first
+    fault_heading = page.get_by_text("Fault Schedule", exact=True).first
+    sensors_heading = page.get_by_text("Sensors", exact=True).first
+    expect(twin_heading).to_be_visible(timeout=5000)
+    expect(fault_heading).to_be_visible(timeout=5000)
+    expect(sensors_heading).to_be_visible(timeout=5000)
+
+    twin_y = twin_heading.bounding_box()["y"]
+    fault_y = fault_heading.bounding_box()["y"]
+    sensors_y = sensors_heading.bounding_box()["y"]
+    assert twin_y < fault_y, (
+        "Twin Configuration should precede Fault Schedule, "
+        f"got y positions: twin={twin_y}, fault={fault_y}, sensors={sensors_y}"
     )
-    assert relevant.index("Fault Schedule") < relevant.index("Sensors"), (
-        f"Fault Schedule should precede Sensors, got order: {relevant}"
+    assert fault_y < sensors_y, (
+        "Fault Schedule should precede Sensors, "
+        f"got y positions: twin={twin_y}, fault={fault_y}, sensors={sensors_y}"
     )
 
 
@@ -294,7 +301,7 @@ def test_contest_detail_panel_shows_twin_configuration(
         card.get_by_text(contest["name"]).click()
         expect(card.get_by_text("Twin Configuration")).to_be_visible(timeout=5000)
         # position and velocity are the initial conditions set in create_active_contest
-        expect(card.get_by_text("position")).to_be_visible(timeout=5000)
+        expect(card.get_by_role("term").filter(has_text="position")).to_be_visible(timeout=5000)
     finally:
         close_contest(live_server, organizer_token, contest["contest_id"])
 
@@ -310,7 +317,7 @@ def test_contest_detail_panel_shows_sensor_table(
         card = page.locator("article").filter(has_text=contest["name"])
         card.get_by_text(contest["name"]).click()
         expect(card.get_by_text("Sensors")).to_be_visible(timeout=5000)
-        expect(card.get_by_text("position")).to_be_visible(timeout=5000)
+        expect(card.get_by_role("cell", name="position")).to_be_visible(timeout=5000)
     finally:
         close_contest(live_server, organizer_token, contest["contest_id"])
 

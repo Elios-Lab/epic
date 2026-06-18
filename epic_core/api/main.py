@@ -138,6 +138,7 @@ async def lifespan(app: FastAPI):
     app.state.broadcaster = ContestBroadcaster(
         queue_capacity=settings.session_queue_capacity
     )
+    app.state.broadcaster.set_loop(asyncio.get_running_loop())
     app.state.session_tasks = SessionTaskRegistry(settings.max_concurrent_sessions)
     notification_service = build_notification_service(settings)
     _log = logging.getLogger(__name__)
