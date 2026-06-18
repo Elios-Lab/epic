@@ -1,4 +1,5 @@
 import asyncio
+import random
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -23,12 +24,23 @@ class FailingTwin(MockTwin):
 
 
 class NoisyMockSensor(MockSensor):
-    def __init__(self, sensor_id: str = "mock_sensor", noise_std: float = 1.0) -> None:
+    def __init__(
+        self,
+        sensor_id: str = "mock_sensor",
+        noise_std: float = 1.0,
+        rng: "random.Random | None" = None,
+    ) -> None:
         super().__init__(sensor_id=sensor_id, constant_value=5.0)
         self.noise_std = noise_std
+        self._rng = rng
 
     def observe(self, state, dt: float = 0.0) -> float:
-        return float(self._constant_value + np.random.normal(0.0, self.noise_std))
+        noise = (
+            self._rng.gauss(0.0, self.noise_std)
+            if self._rng is not None
+            else np.random.normal(0.0, self.noise_std)
+        )
+        return float(self._constant_value + noise)
 
 
 class ConfigurableNoisyMockSensor(NoisyMockSensor):
