@@ -165,16 +165,22 @@ class EPICClient:
             )
 
         configuration = task.get("configuration") or {}
+        raw_sensors = contest.get("sensor_configs", [])
         spec = {
             **task,
             "contest_id": contest["contest_id"],
             "configuration": configuration,
             "sampling_rate_hz": contest.get("sampling_rate_hz"),
             "sensor_ids": [
-                sensor["sensor_id"]
-                for sensor in contest.get("sensor_configs", [])
-                if "sensor_id" in sensor
+                s["sensor_id"] for s in raw_sensors if "sensor_id" in s
             ],
+            # Full sensor config (sensor_id, unit, noise_std, gain, bias, …)
+            # so participants can characterise measurement noise in their model.
+            "sensors": raw_sensors,
+            # Twin initial conditions for this contest instance (position,
+            # velocity, mass, stiffness, …) so participants can write
+            # physics-informed models.
+            "initial_conditions": contest.get("initial_conditions") or {},
         }
         for key in (
             "eval_steps",

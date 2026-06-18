@@ -212,12 +212,15 @@ def test_get_contest_normalises_id_field():
     mock_req.assert_called_once_with("GET", "/api/v1/contests/c1")
 
 
-def test_get_task_spec_extracts_forecasting_configuration():
-    client = authenticated_client()
-    contest = {
+def _forecasting_contest():
+    return {
         "contest_id": "c1",
         "sampling_rate_hz": 10.0,
-        "sensor_configs": [{"sensor_id": "position"}, {"sensor_id": "velocity"}],
+        "sensor_configs": [
+            {"sensor_id": "position", "noise_std": 0.01, "gain": 1.0},
+            {"sensor_id": "velocity", "noise_std": 0.05, "gain": 1.0},
+        ],
+        "initial_conditions": {"position": 0.1, "velocity": 0.0, "mass": 1.0},
         "tasks": [
             {
                 "task_id": "t1",
@@ -233,7 +236,11 @@ def test_get_task_spec_extracts_forecasting_configuration():
             }
         ],
     }
-    with patch.object(client, "get_contest", return_value=contest):
+
+
+def test_get_task_spec_extracts_forecasting_configuration():
+    client = authenticated_client()
+    with patch.object(client, "get_contest", return_value=_forecasting_contest()):
         result = client.get_task_spec("c1")
 
     assert result["task_id"] == "t1"
@@ -241,6 +248,26 @@ def test_get_task_spec_extracts_forecasting_configuration():
     assert result["target_variables"] == ["position"]
     assert result["sensor_ids"] == ["position", "velocity"]
     assert result["sampling_rate_hz"] == 10.0
+
+
+def test_get_task_spec_includes_sensors_and_initial_conditions():
+    client = authenticated_client()
+    with patch.object(client, "get_contest", return_value=_forecasting_contest()):
+        result = client.get_task_spec("c1")
+
+    assert result["sensors"] == _forecasting_contest()["sensor_configs"]
+    assert result["initial_conditions"] == {"position": 0.1, "velocity": 0.0, "mass": 1.0}
+
+
+def test_get_task_spec_initial_conditions_defaults_to_empty_dict():
+    """A contest with no initial_conditions should return {} not None."""
+    client = authenticated_client()
+    contest = _forecasting_contest()
+    contest.pop("initial_conditions")
+    with patch.object(client, "get_contest", return_value=contest):
+        result = client.get_task_spec("c1")
+
+    assert result["initial_conditions"] == {}
 
 
 def test_get_task_spec_returns_error_when_missing():

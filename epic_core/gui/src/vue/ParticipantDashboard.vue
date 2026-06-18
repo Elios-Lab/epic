@@ -400,11 +400,12 @@ onBeforeUnmount(() => {
                   :key="contestId(contest)"
                   class="rounded-md border border-slate-200 bg-slate-50 p-5"
                 >
-                  <div class="flex min-h-28 flex-col justify-between gap-4">
+                  <div class="flex flex-col gap-4">
                     <div>
                       <h3 class="text-lg font-semibold text-epic-deep">
                         {{ contest.name }}
                       </h3>
+                      <p v-if="contest.description" class="mt-1 text-sm text-slate-500">{{ contest.description }}</p>
                       <dl class="mt-3 space-y-2 text-sm text-slate-600">
                         <div class="flex justify-between gap-4">
                           <dt class="font-medium text-slate-500">Twin</dt>
@@ -432,6 +433,38 @@ onBeforeUnmount(() => {
                         </div>
                       </dl>
                     </div>
+
+                    <!-- System details: initial conditions + sensors -->
+                    <details class="rounded-md border border-slate-200 bg-white">
+                      <summary class="cursor-pointer select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-epic-navy">
+                        System details
+                      </summary>
+                      <div class="space-y-3 px-4 pb-4 pt-2">
+                        <template v-if="contest.initial_conditions && Object.keys(contest.initial_conditions).length > 0">
+                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Initial conditions</p>
+                          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                            <div v-for="(val, key) in contest.initial_conditions" :key="key" class="flex justify-between gap-2">
+                              <dt class="font-medium text-slate-600">{{ key }}</dt>
+                              <dd class="font-mono text-slate-800">{{ val }}</dd>
+                            </div>
+                          </dl>
+                        </template>
+                        <template v-if="(contest.sensor_configs || []).length > 0">
+                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Sensors</p>
+                          <table class="w-full text-sm">
+                            <thead><tr class="text-left text-slate-400"><th class="pb-1 pr-4 font-medium">ID</th><th class="pb-1 pr-4 font-medium">Noise std</th><th class="pb-1 font-medium">Gain</th></tr></thead>
+                            <tbody class="divide-y divide-slate-100">
+                              <tr v-for="sc in contest.sensor_configs" :key="sc.sensor_id">
+                                <td class="py-1 pr-4 font-medium text-slate-700">{{ sc.sensor_id }}</td>
+                                <td class="py-1 pr-4 font-mono text-slate-600">{{ sc.noise_std ?? 0 }}</td>
+                                <td class="py-1 font-mono text-slate-600">{{ sc.gain ?? 1 }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </template>
+                      </div>
+                    </details>
+
                     <div class="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -489,6 +522,37 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
+
+              <!-- System details panel while connected -->
+              <details class="rounded-md border border-slate-200 bg-white">
+                <summary class="cursor-pointer select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-epic-navy">
+                  System details
+                </summary>
+                <div class="space-y-3 px-4 pb-4 pt-2">
+                  <template v-if="connectedContest.initial_conditions && Object.keys(connectedContest.initial_conditions).length > 0">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Initial conditions</p>
+                    <dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+                      <div v-for="(val, key) in connectedContest.initial_conditions" :key="key" class="flex justify-between gap-2">
+                        <dt class="font-medium text-slate-600">{{ key }}</dt>
+                        <dd class="font-mono text-slate-800">{{ val }}</dd>
+                      </div>
+                    </dl>
+                  </template>
+                  <template v-if="(connectedContest.sensor_configs || []).length > 0">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Sensors</p>
+                    <table class="w-full text-sm">
+                      <thead><tr class="text-left text-slate-400"><th class="pb-1 pr-4 font-medium">ID</th><th class="pb-1 pr-4 font-medium">Noise std</th><th class="pb-1 font-medium">Gain</th></tr></thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <tr v-for="sc in connectedContest.sensor_configs" :key="sc.sensor_id">
+                          <td class="py-1 pr-4 font-medium text-slate-700">{{ sc.sensor_id }}</td>
+                          <td class="py-1 pr-4 font-mono text-slate-600">{{ sc.noise_std ?? 0 }}</td>
+                          <td class="py-1 font-mono text-slate-600">{{ sc.gain ?? 1 }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </template>
+                </div>
+              </details>
             </div>
           </div>
 

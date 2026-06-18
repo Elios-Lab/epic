@@ -227,6 +227,45 @@ async def update_environment(
     return environment_response(path, settings)
 
 
+@router.post("/test-email", status_code=200)
+async def test_email(
+    request: Request,
+    current_user: User = Depends(require_admin),
+):
+    """Send a test email to the current admin to verify SMTP configuration."""
+    settings: Settings = request.app.state.settings
+    if not settings.smtp_host:
+        return {
+            "ok": False,
+            "detail": "SMTP not configured — smtp_host is unset in the environment.",
+        }
+
+    from epic_core.api.email_service import EmailNotificationService
+    from email.message import EmailMessage
+    import aiosmtplib
+
+    sender = settings.smtp_sender or settings.admin_email or "noreply@epic.local"
+    msg = EmailMessage()
+    msg["From"] = sender
+    msg["To"] = current_user.email
+    msg["Subject"] = "EPIC — SMTP test"
+    msg.set_content(
+        "This is a test message sent by EPIC to verify that your SMTP configuration is working correctly."
+    )
+    try:
+        async with aiosmtplib.SMTP(
+            hostname=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            start_tls=settings.smtp_tls,
+        ) as smtp:
+            await smtp.sendmail(sender, [current_user.email], msg.as_string())
+        return {"ok": True, "detail": f"Test email sent to {current_user.email}."}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)}
+
+
 @router.post("/restart", status_code=202)
 async def restart_server(
     current_user: User = Depends(require_admin),

@@ -140,6 +140,16 @@ async def lifespan(app: FastAPI):
     )
     app.state.session_tasks = SessionTaskRegistry(settings.max_concurrent_sessions)
     notification_service = build_notification_service(settings)
+    _log = logging.getLogger(__name__)
+    if settings.smtp_host:
+        _log.info(
+            "Email notifications enabled — host=%s port=%s sender=%s",
+            settings.smtp_host,
+            settings.smtp_port,
+            settings.smtp_sender or settings.admin_email or "noreply@epic.local",
+        )
+    else:
+        _log.warning("SMTP not configured (smtp_host unset) — email notifications disabled")
     app.state.engine = SimulationEngine(
         broadcaster=app.state.broadcaster,
         notification_service=notification_service,
