@@ -94,7 +94,12 @@ def task_response(task: Task) -> dict:
     }
 
 
-def contest_response(contest: Contest, tasks: list[Task] | None = None) -> dict:
+def contest_response(
+    contest: Contest,
+    tasks: list[Task] | None = None,
+    *,
+    hide_faults: bool = False,
+) -> dict:
     return {
         "contest_id": str(contest.id),
         "name": contest.name,
@@ -103,7 +108,7 @@ def contest_response(contest: Contest, tasks: list[Task] | None = None) -> dict:
         "visibility": contest.visibility,
         "twin_id": contest.twin_id,
         "sensor_configs": contest.sensor_configs,
-        "fault_schedule": contest.fault_schedule,
+        "fault_schedule": [] if hide_faults else contest.fault_schedule,
         "initial_conditions": contest.initial_conditions,
         "sampling_rate_hz": contest.sampling_rate_hz,
         "start_date": contest.start_date,
@@ -224,6 +229,10 @@ def visible_contests_predicate(user: User):
             ),
         ),
     )
+
+
+def user_can_see_faults(contest: Contest, user: User) -> bool:
+    return user.role == "ADMINISTRATOR" or contest.created_by == user.id
 
 
 def user_can_see_contest(contest: Contest, user: User, *, registered: bool, invited: bool) -> bool:
@@ -396,7 +405,11 @@ async def list_contests(
     return {
         "total": total_result.scalar_one(),
         "contests": [
-            contest_response(contest, tasks_by_contest.get(contest.id, []))
+            contest_response(
+                contest,
+                tasks_by_contest.get(contest.id, []),
+                hide_faults=not user_can_see_faults(contest, current_user),
+            )
             for contest in contests
         ],
     }
@@ -433,7 +446,11 @@ async def get_contest(
         # 404, not 403: restricted contests must not leak their existence.
         raise ContestNotFoundError(f"Contest '{contest_id}' does not exist")
 
-    return contest_response(contest, await load_contest_tasks(db, contest))
+    return contest_response(
+        contest,
+        await load_contest_tasks(db, contest),
+        hide_faults=not user_can_see_faults(contest, current_user),
+    )
 
 
 @router.patch("/{contest_id}", response_model=ContestResponse)

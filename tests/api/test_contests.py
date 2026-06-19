@@ -1285,3 +1285,58 @@ def test_admin_sees_everything(client, admin_headers, organizer_headers):
     visible_ids = {c["contest_id"] for c in listing.json()["contests"]}
     assert draft["contest_id"] in visible_ids
     assert private["contest_id"] in visible_ids
+
+
+# ── Fault schedule visibility ─────────────────────────────────────────────────
+
+def test_participant_cannot_see_fault_schedule(client, admin_headers, auth_headers):
+    """Participants must receive an empty fault_schedule in both list and detail responses."""
+    fault = {
+        "fault_id": "increased_damping",
+        "start_time": 0.0,
+        "end_time": None,
+        "severity": 0.5,
+    }
+    contest = create_contest(
+        client, admin_headers,
+        name="Fault-hidden contest",
+        fault_schedule=[fault],
+    )
+    contest_id = contest["contest_id"]
+    client.patch(
+        f"/api/v1/contests/{contest_id}",
+        json={"status": "SCHEDULED"},
+        headers=admin_headers,
+    )
+
+    detail = client.get(f"/api/v1/contests/{contest_id}", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["fault_schedule"] == []
+
+    listing = client.get("/api/v1/contests", headers=auth_headers)
+    match = next(c for c in listing.json()["contests"] if c["contest_id"] == contest_id)
+    assert match["fault_schedule"] == []
+
+
+def test_admin_sees_fault_schedule(client, admin_headers):
+    """Administrators must receive the full fault_schedule."""
+    fault = {
+        "fault_id": "increased_damping",
+        "start_time": 0.0,
+        "end_time": None,
+        "severity": 0.5,
+    }
+    contest = create_contest(
+        client, admin_headers,
+        name="Fault-visible contest",
+        fault_schedule=[fault],
+    )
+    contest_id = contest["contest_id"]
+
+    detail = client.get(f"/api/v1/contests/{contest_id}", headers=admin_headers)
+    assert detail.status_code == 200
+    assert len(detail.json()["fault_schedule"]) == 1
+
+    listing = client.get("/api/v1/contests", headers=admin_headers)
+    match = next(c for c in listing.json()["contests"] if c["contest_id"] == contest_id)
+    assert len(match["fault_schedule"]) == 1

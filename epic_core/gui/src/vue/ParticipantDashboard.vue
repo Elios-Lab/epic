@@ -26,6 +26,7 @@ const sensorChart = ref(null);
 const streamSocket = ref(null);
 const activity = ref([]);
 const latestObservation = reactive({ sequence_id: null, timestamp: "" });
+const catalogProfiles = ref({});
 
 async function apiRequest(path, options = {}) {
   return api.request(props.token, path, options);
@@ -75,6 +76,31 @@ async function loadRegistrations() {
   );
 }
 
+async function loadCatalogProfile(twinId) {
+  if (catalogProfiles.value[twinId]) return;
+  try {
+    const profile = await apiRequest(`/api/v1/catalog/${twinId}`);
+    catalogProfiles.value = { ...catalogProfiles.value, [twinId]: profile };
+  } catch {
+    // non-fatal: units will just be omitted
+  }
+}
+
+function sensorUnit(twinId, sensorId) {
+  const sensors = catalogProfiles.value[twinId]?.sensors || [];
+  return sensors.find((s) => s.sensor_id === sensorId)?.unit || "";
+}
+
+function sensorName(twinId, sensorId) {
+  const sensors = catalogProfiles.value[twinId]?.sensors || [];
+  return sensors.find((s) => s.sensor_id === sensorId)?.name || sensorId;
+}
+
+function icUnit(twinId, key) {
+  const schema = catalogProfiles.value[twinId]?.initial_conditions_schema || [];
+  return schema.find((s) => s.key === key)?.unit || "";
+}
+
 async function loadActiveContests() {
   loadingContests.value = true;
   error.value = "";
@@ -83,6 +109,9 @@ async function loadActiveContests() {
     await loadRegistrations();
     const response = await apiRequest("/api/v1/contests?status=ACTIVE");
     activeContests.value = response.contests || [];
+    await Promise.all(
+      [...new Set(activeContests.value.map((c) => c.twin_id))].map(loadCatalogProfile)
+    );
   } catch (loadError) {
     error.value = loadError.message || "Unable to load active contests.";
   } finally {
@@ -435,32 +464,50 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- System details: initial conditions + sensors -->
-                    <details class="rounded-md border border-slate-200 bg-white">
-                      <summary class="cursor-pointer select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-epic-navy">
+                    <details class="group rounded-lg border border-slate-200 bg-white">
+                      <summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-epic-navy">
+                        <svg class="h-3 w-3 transition-transform group-open:rotate-90" viewBox="0 0 6 10" fill="currentColor"><path d="M1 1l4 4-4 4"/></svg>
                         System details
                       </summary>
-                      <div class="space-y-3 px-4 pb-4 pt-2">
+                      <div class="divide-y divide-slate-100 border-t border-slate-100">
                         <template v-if="contest.initial_conditions && Object.keys(contest.initial_conditions).length > 0">
-                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Initial conditions</p>
-                          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                            <div v-for="(val, key) in contest.initial_conditions" :key="key" class="flex justify-between gap-2">
-                              <dt class="font-medium text-slate-600">{{ key }}</dt>
-                              <dd class="font-mono text-slate-800">{{ val }}</dd>
+                          <div class="px-4 py-3">
+                            <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Initial conditions</p>
+                            <div class="grid grid-cols-2 gap-2">
+                              <div
+                                v-for="(val, key) in contest.initial_conditions"
+                                :key="key"
+                                class="flex items-baseline justify-between rounded-md bg-slate-50 px-3 py-1.5"
+                              >
+                                <span class="text-xs font-medium text-slate-500">{{ key }}</span>
+                                <span class="ml-2 font-mono text-sm font-semibold text-slate-800">
+                                  {{ val }}<span v-if="icUnit(contest.twin_id, key)" class="ml-1 text-xs font-normal text-slate-400">{{ icUnit(contest.twin_id, key) }}</span>
+                                </span>
+                              </div>
                             </div>
-                          </dl>
+                          </div>
                         </template>
                         <template v-if="(contest.sensor_configs || []).length > 0">
-                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Sensors</p>
-                          <table class="w-full text-sm">
-                            <thead><tr class="text-left text-slate-400"><th class="pb-1 pr-4 font-medium">ID</th><th class="pb-1 pr-4 font-medium">Noise std</th><th class="pb-1 font-medium">Gain</th></tr></thead>
-                            <tbody class="divide-y divide-slate-100">
-                              <tr v-for="sc in contest.sensor_configs" :key="sc.sensor_id">
-                                <td class="py-1 pr-4 font-medium text-slate-700">{{ sc.sensor_id }}</td>
-                                <td class="py-1 pr-4 font-mono text-slate-600">{{ sc.noise_std ?? 0 }}</td>
-                                <td class="py-1 font-mono text-slate-600">{{ sc.gain ?? 1 }}</td>
-                              </tr>
-                            </tbody>
-                          </table>
+                          <div class="px-4 py-3">
+                            <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Sensors</p>
+                            <div class="space-y-2">
+                              <div
+                                v-for="sc in contest.sensor_configs"
+                                :key="sc.sensor_id"
+                                class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
+                              >
+                                <div>
+                                  <span class="text-sm font-semibold text-slate-700">{{ sensorName(contest.twin_id, sc.sensor_id) }}</span>
+                                  <span class="ml-2 rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">{{ sc.sensor_id }}</span>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs text-slate-500">
+                                  <span v-if="sensorUnit(contest.twin_id, sc.sensor_id)" class="rounded bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">{{ sensorUnit(contest.twin_id, sc.sensor_id) }}</span>
+                                  <span v-if="sc.noise_std != null" class="font-mono">σ&nbsp;{{ sc.noise_std }}</span>
+                                  <span v-if="sc.gain != null && sc.gain !== 1" class="font-mono">×{{ sc.gain }}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </template>
                       </div>
                     </details>
@@ -524,32 +571,50 @@ onBeforeUnmount(() => {
               </div>
 
               <!-- System details panel while connected -->
-              <details class="rounded-md border border-slate-200 bg-white">
-                <summary class="cursor-pointer select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-epic-navy">
+              <details class="group rounded-lg border border-slate-200 bg-white">
+                <summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-epic-navy">
+                  <svg class="h-3 w-3 transition-transform group-open:rotate-90" viewBox="0 0 6 10" fill="currentColor"><path d="M1 1l4 4-4 4"/></svg>
                   System details
                 </summary>
-                <div class="space-y-3 px-4 pb-4 pt-2">
+                <div class="divide-y divide-slate-100 border-t border-slate-100">
                   <template v-if="connectedContest.initial_conditions && Object.keys(connectedContest.initial_conditions).length > 0">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Initial conditions</p>
-                    <dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
-                      <div v-for="(val, key) in connectedContest.initial_conditions" :key="key" class="flex justify-between gap-2">
-                        <dt class="font-medium text-slate-600">{{ key }}</dt>
-                        <dd class="font-mono text-slate-800">{{ val }}</dd>
+                    <div class="px-4 py-3">
+                      <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Initial conditions</p>
+                      <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <div
+                          v-for="(val, key) in connectedContest.initial_conditions"
+                          :key="key"
+                          class="flex items-baseline justify-between rounded-md bg-slate-50 px-3 py-1.5"
+                        >
+                          <span class="text-xs font-medium text-slate-500">{{ key }}</span>
+                          <span class="ml-2 font-mono text-sm font-semibold text-slate-800">
+                            {{ val }}<span v-if="icUnit(connectedContest.twin_id, key)" class="ml-1 text-xs font-normal text-slate-400">{{ icUnit(connectedContest.twin_id, key) }}</span>
+                          </span>
+                        </div>
                       </div>
-                    </dl>
+                    </div>
                   </template>
                   <template v-if="(connectedContest.sensor_configs || []).length > 0">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Sensors</p>
-                    <table class="w-full text-sm">
-                      <thead><tr class="text-left text-slate-400"><th class="pb-1 pr-4 font-medium">ID</th><th class="pb-1 pr-4 font-medium">Noise std</th><th class="pb-1 font-medium">Gain</th></tr></thead>
-                      <tbody class="divide-y divide-slate-100">
-                        <tr v-for="sc in connectedContest.sensor_configs" :key="sc.sensor_id">
-                          <td class="py-1 pr-4 font-medium text-slate-700">{{ sc.sensor_id }}</td>
-                          <td class="py-1 pr-4 font-mono text-slate-600">{{ sc.noise_std ?? 0 }}</td>
-                          <td class="py-1 font-mono text-slate-600">{{ sc.gain ?? 1 }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    <div class="px-4 py-3">
+                      <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Sensors</p>
+                      <div class="space-y-2">
+                        <div
+                          v-for="sc in connectedContest.sensor_configs"
+                          :key="sc.sensor_id"
+                          class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
+                        >
+                          <div>
+                            <span class="text-sm font-semibold text-slate-700">{{ sensorName(connectedContest.twin_id, sc.sensor_id) }}</span>
+                            <span class="ml-2 rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">{{ sc.sensor_id }}</span>
+                          </div>
+                          <div class="flex items-center gap-3 text-xs text-slate-500">
+                            <span v-if="sensorUnit(connectedContest.twin_id, sc.sensor_id)" class="rounded bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">{{ sensorUnit(connectedContest.twin_id, sc.sensor_id) }}</span>
+                            <span v-if="sc.noise_std != null" class="font-mono">σ&nbsp;{{ sc.noise_std }}</span>
+                            <span v-if="sc.gain != null && sc.gain !== 1" class="font-mono">×{{ sc.gain }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </template>
                 </div>
               </details>

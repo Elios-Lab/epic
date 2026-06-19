@@ -29,6 +29,7 @@ const selectedTemplate = ref(null);
 const catalogProfile = ref(null);
 const newStep = ref(1);
 const expandedContestId = ref(null);
+const contestDetailTab = ref({});
 const inviteEmails = ref("");
 const sendingInvites = ref(false);
 const invitations = ref({});
@@ -241,6 +242,14 @@ async function toggleContestDetails(contest) {
     } finally {
       loadingLeaderboardId.value = null;
     }
+  }
+}
+
+async function openContestTab(contest, tabName) {
+  const id = contestId(contest);
+  contestDetailTab.value = { ...contestDetailTab.value, [id]: tabName };
+  if (expandedContestId.value !== id) {
+    await toggleContestDetails(contest);
   }
 }
 
@@ -726,6 +735,9 @@ onBeforeUnmount(() => {
                   <button v-if="contest.status === 'ACTIVE'" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-epic-cyan hover:text-epic-navy" @click="monitor.contest && contestId(monitor.contest) === contestId(contest) ? stopMonitor() : startMonitor(contest)">
                     {{ monitor.contest && contestId(monitor.contest) === contestId(contest) ? "Stop Monitor" : "Monitor" }}
                   </button>
+                  <button type="button" class="rounded-md border border-indigo-300 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:border-indigo-500 hover:bg-indigo-50" @click.stop="openContestTab(contest, 'participants')">
+                    Participants
+                  </button>
                   <button v-if="contest.status === 'ACTIVE'" type="button" class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700" @click="updateContestStatus(contest, 'CLOSED')">
                     Close
                   </button>
@@ -743,16 +755,31 @@ onBeforeUnmount(() => {
                   <div><dt class="font-medium text-slate-500">End</dt><dd>{{ formatDate(contest.end_date) }}</dd></div>
                 </dl>
 
-                <div v-if="expandedContestId === contestId(contest)" class="mt-5 space-y-5" @click.stop>
-                  <!-- Contest description & configuration -->
-                  <div class="rounded-md border border-slate-200 bg-white p-4">
-                    <h4 class="mb-3 font-semibold text-slate-900">Contest Details</h4>
+                <div v-if="expandedContestId === contestId(contest)" class="mt-5" @click.stop>
+                  <!-- Detail sub-tabs -->
+                  <div class="mb-4 flex gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      v-for="dt in [{id:'details',label:'Details'},{id:'leaderboard',label:'Leaderboard'},{id:'participants',label:'Participants'}]"
+                      :key="dt.id"
+                      type="button"
+                      class="flex-1 rounded px-3 py-1.5 text-sm font-semibold transition"
+                      :class="(contestDetailTab[contestId(contest)] || 'details') === dt.id ? 'bg-white text-epic-navy shadow-sm' : 'text-slate-500 hover:text-epic-navy'"
+                      @click="contestDetailTab = { ...contestDetailTab, [contestId(contest)]: dt.id }"
+                    >
+                      {{ dt.label }}
+                      <span
+                        v-if="dt.id === 'participants'"
+                        class="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-700"
+                      >{{ (registrations[contestId(contest)] || []).length }}</span>
+                    </button>
+                  </div>
+
+                  <!-- Details tab -->
+                  <div v-if="(contestDetailTab[contestId(contest)] || 'details') === 'details'" class="rounded-md border border-slate-200 bg-white p-4">
                     <template v-if="contestDetailsMap[contestId(contest)]">
                       <p v-if="contestDetailsMap[contestId(contest)].description" class="mb-3 text-sm text-slate-600">
                         {{ contestDetailsMap[contestId(contest)].description }}
                       </p>
-
-                      <!-- Twin initial conditions -->
                       <template v-if="(contestDetailsMap[contestId(contest)].initial_conditions && Object.keys(contestDetailsMap[contestId(contest)].initial_conditions).length > 0)">
                         <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Twin Configuration</p>
                         <dl class="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 sm:grid-cols-3">
@@ -762,8 +789,6 @@ onBeforeUnmount(() => {
                           </div>
                         </dl>
                       </template>
-
-                      <!-- Fault schedule -->
                       <template v-if="(contestDetailsMap[contestId(contest)].fault_schedule || []).length > 0">
                         <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Fault Schedule</p>
                         <ul class="mb-3 space-y-1 text-sm text-slate-700">
@@ -776,8 +801,6 @@ onBeforeUnmount(() => {
                           </li>
                         </ul>
                       </template>
-
-                      <!-- Sensors -->
                       <template v-if="(contestDetailsMap[contestId(contest)].sensor_configs || []).length > 0">
                         <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Sensors</p>
                         <div class="overflow-x-auto">
@@ -799,8 +822,8 @@ onBeforeUnmount(() => {
                     <p v-else class="text-sm text-slate-400">Loading details...</p>
                   </div>
 
-                  <!-- Leaderboard -->
-                  <div class="rounded-md border border-slate-200 bg-white p-4">
+                  <!-- Leaderboard tab -->
+                  <div v-if="contestDetailTab[contestId(contest)] === 'leaderboard'" class="rounded-md border border-slate-200 bg-white p-4">
                     <div class="mb-3 flex items-center justify-between">
                       <h4 class="font-semibold text-slate-900">Leaderboard</h4>
                       <span v-if="loadingLeaderboardId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
@@ -820,45 +843,59 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
 
-                  <!-- Participants -->
-                  <div class="rounded-md border border-slate-200 bg-white p-4">
-                    <div class="mb-3 flex items-center justify-between">
+                  <!-- Participants tab -->
+                  <div v-if="contestDetailTab[contestId(contest)] === 'participants'" class="rounded-md border border-slate-200 bg-white p-4">
+                    <div class="mb-4 flex items-center justify-between">
                       <h4 class="font-semibold text-slate-900">Participants</h4>
                       <span v-if="loadingParticipantsId === contestId(contest)" class="text-sm text-slate-500">Loading...</span>
                     </div>
-                    <form class="mb-4" @submit.prevent="sendInvitations(contest)">
-                      <label class="block">
-                        <span class="text-sm font-medium text-slate-700">Invite participants by email</span>
-                        <textarea v-model="inviteEmails" rows="2" placeholder="anna@example.com, marco@example.com - separate with commas, spaces, or new lines" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
-                      </label>
-                      <button type="submit" :disabled="sendingInvites" class="mt-2 rounded-md bg-epic-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-epic-deep disabled:opacity-60">
-                        {{ sendingInvites ? "Sending..." : "Send invitations" }}
-                      </button>
-                    </form>
 
-                    <h5 class="mb-2 text-sm font-semibold text-slate-700">Invited</h5>
-                    <table class="mb-4 min-w-full divide-y divide-slate-200 text-sm">
-                      <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Email</th><th class="py-2 pr-4 font-semibold">Status</th></tr></thead>
+                    <!-- Invite form -->
+                    <div class="mb-5 rounded-md border border-indigo-100 bg-indigo-50 p-4">
+                      <p class="mb-2 text-sm font-semibold text-indigo-800">Invite by email</p>
+                      <form @submit.prevent="sendInvitations(contest)">
+                        <textarea v-model="inviteEmails" rows="2" placeholder="anna@example.com, marco@example.com — separate with commas, spaces, or new lines" class="w-full rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-epic-cyan focus:ring-4 focus:ring-cyan-100"></textarea>
+                        <button type="submit" :disabled="sendingInvites" class="mt-2 rounded-md bg-indigo-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-800 disabled:opacity-60">
+                          {{ sendingInvites ? "Sending…" : "Send invitations" }}
+                        </button>
+                      </form>
+                    </div>
+
+                    <!-- Invitations list -->
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Invitations sent</p>
+                    <table class="mb-5 min-w-full divide-y divide-slate-200 text-sm">
+                      <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Email</th><th class="py-2 font-semibold">Status</th></tr></thead>
                       <tbody class="divide-y divide-slate-200">
                         <tr v-for="invitation in invitations[contestId(contest)] || []" :key="invitation.id">
                           <td class="py-2 pr-4">{{ invitation.email }}</td>
-                          <td class="py-2 pr-4"><span :class="invitation.used ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800' : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800'">{{ invitation.used ? "Accepted" : "Pending" }}</span></td>
+                          <td class="py-2">
+                            <span :class="invitation.used ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'" class="rounded-full px-2 py-0.5 text-xs font-semibold">
+                              {{ invitation.used ? "Accepted" : "Pending" }}
+                            </span>
+                          </td>
                         </tr>
-                        <tr v-if="(invitations[contestId(contest)] || []).length === 0"><td colspan="2" class="py-3 text-slate-500">No invitations sent yet.</td></tr>
+                        <tr v-if="(invitations[contestId(contest)] || []).length === 0">
+                          <td colspan="2" class="py-3 text-slate-400">No invitations sent yet.</td>
+                        </tr>
                       </tbody>
                     </table>
 
-                    <h5 class="mb-2 text-sm font-semibold text-slate-700">Registered</h5>
+                    <!-- Registered participants -->
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Registered participants</p>
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Username</th><th class="py-2 pr-4 font-semibold">Email</th><th class="py-2 pr-4 font-semibold">Status</th><th class="py-2 pr-4 font-semibold"></th></tr></thead>
+                      <thead><tr class="text-left text-slate-500"><th class="py-2 pr-4 font-semibold">Username</th><th class="py-2 pr-4 font-semibold">Email</th><th class="py-2 pr-4 font-semibold">Status</th><th class="py-2 font-semibold"></th></tr></thead>
                       <tbody class="divide-y divide-slate-200">
                         <tr v-for="registration in registrations[contestId(contest)] || []" :key="registration.registration_id">
-                          <td class="py-2 pr-4">{{ registration.username }}</td>
-                          <td class="py-2 pr-4">{{ registration.email }}</td>
+                          <td class="py-2 pr-4 font-medium">{{ registration.username }}</td>
+                          <td class="py-2 pr-4 text-slate-500">{{ registration.email }}</td>
                           <td class="py-2 pr-4">{{ registration.status }}</td>
-                          <td class="py-2 pr-4 text-right"><button v-if="registration.status === 'REGISTERED'" type="button" class="text-xs font-semibold text-red-600 hover:text-red-800" @click="removeParticipant(contest, registration)">Remove</button></td>
+                          <td class="py-2 text-right">
+                            <button v-if="registration.status === 'REGISTERED'" type="button" class="text-xs font-semibold text-red-600 hover:text-red-800" @click="removeParticipant(contest, registration)">Remove</button>
+                          </td>
                         </tr>
-                        <tr v-if="(registrations[contestId(contest)] || []).length === 0"><td colspan="4" class="py-3 text-slate-500">No registered participants yet.</td></tr>
+                        <tr v-if="(registrations[contestId(contest)] || []).length === 0">
+                          <td colspan="4" class="py-3 text-slate-400">No registered participants yet.</td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
